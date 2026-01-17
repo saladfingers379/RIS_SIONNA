@@ -1,0 +1,31 @@
+[project]
+name = "ris_sionna"
+version = "0.1.0"
+description = "Beginner-friendly Sionna RT baseline (28 GHz) with CLI, outputs, and optional dashboard"
+readme = "README.md"
+requires-python = ">=3.10,<3.13"
+license = "MIT"
+
+# Core runtime dependencies
+# Note: sionna brings in TensorFlow and Sionna RT dependencies per official docs.
+dependencies = [
+  "sionna==1.2.1",
+  "numpy==1.26.4",
+  "matplotlib==3.10.8",
+  "pyyaml==6.0.3",
+  "rich==14.2.0",
+]
+
+[project.optional-dependencies]
+# Visualization-only dashboard
+# Streamlit is optional to keep base CLI lightweight.
+dashboard = [
+  "streamlit==1.53.0",
+]
+
+[build-system]
+requires = ["setuptools>=77.0.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app"]
