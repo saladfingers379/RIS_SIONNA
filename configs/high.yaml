@@ -5,31 +5,45 @@ project:
 runtime:
   prefer_gpu: true
   force_cpu: false
+  tensorflow_import: auto  # auto | force | skip
+  disable_pythreejs: true
   mitsuba_variant: auto  # auto | cuda_ad_rgb | llvm_ad_mono_polarized | llvm_ad_spectral_polarized | llvm_ad_rgb | scalar_spectral | scalar_rgb
 
 simulation:
   frequency_hz: 28.0e9
-  max_depth: 5
-  max_num_paths_per_src: 1000000
-  samples_per_src: 1000000
+  max_depth: 6
+  max_num_paths_per_src: 2000000
+  samples_per_src: 2000000
   los: true
   specular_reflection: true
   diffuse_reflection: true
-  refraction: true
+  refraction: false
   diffraction: false
 
 scene:
   type: builtin
   builtin: etoile
   file: null
+  mesh: null
+  proxy_enabled: false
+  export_mesh: true
+  proxy:
+    ground:
+      size: [200.0, 200.0]
+      elevation: 0.0
+    boxes:
+      - center: [35.0, 40.0, 5.0]
+        size: [20.0, 20.0, 10.0]
+      - center: [10.0, 20.0, 4.0]
+        size: [12.0, 16.0, 8.0]
   tx:
     name: tx
-    position: [8.5, 21.0, 27.0]
-    look_at: [45.0, 90.0, 1.5]
+    position: [-30.0, -20.0, 28.0]
+    look_at: [40.0, 35.0, 1.5]
     power_dbm: 44.0
   rx:
     name: rx
-    position: [35.0, 40.0, 1.5]
+    position: [70.0, 55.0, 1.5]
   camera:
     position: [0.0, 80.0, 500.0]
     orientation: [0.0, 1.5708, -1.5708]
@@ -63,6 +77,16 @@ radio_map:
   diffuse_reflection: true
   refraction: true
   diffraction: false
+
+render:
+  enabled: true
+  samples: 128
+  resolution: [1200, 900]
+
+visualization:
+  ray_paths:
+    enabled: true
+    max_paths: 3000
 
 quality:
   preset: high

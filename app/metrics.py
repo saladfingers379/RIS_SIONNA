@@ -44,3 +44,48 @@ def compute_path_metrics(paths, tx_power_dbm: float) -> Dict[str, Any]:
         pass
 
     return metrics
+
+
+def extract_path_data(paths) -> Dict[str, Any]:
+    """Extract per-path arrays for plotting and advanced metrics."""
+    a_real, a_imag = paths.a
+    a = _to_numpy(a_real) + 1j * _to_numpy(a_imag)
+    power = np.abs(a) ** 2
+    # Sum over rx/tx antennas to get power per path
+    path_power = power.sum(axis=(1, 3))  # [num_rx, num_tx, num_paths]
+
+    valid = _to_numpy(paths.valid).astype(bool)
+    tau = _to_numpy(paths.tau)
+    theta_r = _to_numpy(paths.theta_r)
+    phi_r = _to_numpy(paths.phi_r)
+
+    mask = valid
+    if mask.ndim == 3:
+        weights = path_power * mask
+        delays = tau[mask]
+        aoa_el = theta_r[mask]
+        aoa_az = phi_r[mask]
+        weights = weights[mask]
+    else:
+        delays = np.array([])
+        aoa_el = np.array([])
+        aoa_az = np.array([])
+        weights = np.array([])
+
+    metrics: Dict[str, Any] = {}
+    if delays.size > 0 and np.any(weights > 0):
+        wsum = weights.sum()
+        mean_delay = float(np.sum(weights * delays) / wsum)
+        rms_delay = float(np.sqrt(np.sum(weights * (delays - mean_delay) ** 2) / wsum))
+        metrics["mean_delay_s"] = mean_delay
+        metrics["rms_delay_spread_s"] = rms_delay
+        metrics["aoa_azimuth_mean_deg"] = float(np.degrees(np.sum(weights * aoa_az) / wsum))
+        metrics["aoa_elevation_mean_deg"] = float(np.degrees(np.sum(weights * aoa_el) / wsum))
+
+    return {
+        "delays_s": delays,
+        "aoa_azimuth_rad": aoa_az,
+        "aoa_elevation_rad": aoa_el,
+        "weights": weights,
+        "metrics": metrics,
+    }

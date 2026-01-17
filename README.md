@@ -39,6 +39,11 @@ python -m app run --config configs/default.yaml
 pip install -e ".[dashboard]"
 python -m app dashboard
 ```
+Dashboard features:
+- Latest-run selector (most recent first)
+- Coverage map metric picker
+- 3D view of RF ray paths (if `ray_paths.csv` is available)
+- Scene render + downloads
 
 ## Quick Start (WSL2 + Docker + RTX 4070 Ti)
 1) Install NVIDIA Container Toolkit and validate `--gpus all` works (see docs below).
@@ -68,10 +73,16 @@ Each run saves to `outputs/<timestamp>/`:
 - `summary.json` (metrics + environment + versions)
 - `data/radio_map.npz` (path gain + derived metrics + cell centers)
 - `data/radio_map.csv` (x, y, z, path_gain_db)
+- `data/paths.csv` (delay + power + AoA per path)
+- `data/ray_paths.csv` and `data/ray_paths.npz` (ray segments for 3D view)
 - `plots/radio_map_path_gain_db.png/svg`
 - `plots/radio_map_rx_power_dbm.png/svg`
 - `plots/radio_map_path_loss_db.png/svg`
 - `plots/scene.png` (rendered scene view)
+- `plots/path_delay_hist.png/svg`
+- `plots/aoa_azimuth_hist.png/svg`
+- `plots/aoa_elevation_hist.png/svg`
+- `plots/ray_paths_3d.png/svg`
 
 ## Simulation Assumptions
 - Carrier frequency: 28 GHz
@@ -95,6 +106,15 @@ Each run saves to `outputs/<timestamp>/`:
 Scene sources:
 - Built-in: `scene.type: builtin` with `scene.builtin: etoile` (default)
 - External: `scene.type: file` with `scene.file: path/to/scene.xml` (Mitsuba 3 format)
+ - 3D Viewer mesh: `scene.mesh: path/to/scene.glb|gltf|obj` (optional)
+ - Proxy geometry: `scene.proxy` (ground + boxes) for quick 3D previews
+ - Dashboard mesh overrides: drop `.glb/.gltf/.obj` into `scenes/` and pick it in the sidebar
+ - Built-in mesh export: `scene.export_mesh: true` exports PLY meshes for the 3D viewer
+
+Visualization controls:
+- `render.enabled`, `render.samples`, `render.resolution` control the optical scene render.
+- `visualization.ray_paths.max_paths` controls how many RF paths are exported for 3D view.
+ - Viewer output saved to `outputs/<timestamp>/viewer/index.html`
 
 All configs include a placeholder:
 ```yaml
@@ -120,6 +140,7 @@ Sionna / Sionna RT:
 Mitsuba / Dr.Jit:
 - Mitsuba 3 docs (v3.6.0): https://mitsuba.readthedocs.io/en/latest/
 - Mitsuba variants (v3.6.0): https://mitsuba.readthedocs.io/en/latest/src/key_topics/variants.html
+- Mitsuba scene format (v3.6.0): https://mitsuba.readthedocs.io/en/latest/src/key_topics/scene_format.html
 - Dr.Jit docs (no explicit doc version, used PyPI v1.2.0 for package pinning): https://drjit.readthedocs.io/en/latest/
 
 TensorFlow:

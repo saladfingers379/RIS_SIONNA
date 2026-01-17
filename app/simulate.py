@@ -9,11 +9,17 @@ import numpy as np
 
 from .config import load_config
 from .io import create_output_dir, save_json, save_yaml
-from .metrics import compute_path_metrics
-from .plots import plot_radio_map
-from .scene import build_scene
+from .metrics import compute_path_metrics, extract_path_data
+from .plots import plot_radio_map, plot_histogram, plot_rays_3d
+from .viewer import generate_viewer
+from .scene import build_scene, export_scene_meshes
 from .utils.progress import progress_steps
-from .utils.system import configure_tensorflow_memory_growth, select_mitsuba_variant, collect_environment_info
+from .utils.system import (
+    configure_tensorflow_memory_growth,
+    select_mitsuba_variant,
+    collect_environment_info,
+    disable_pythreejs_import,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -41,43 +47,72 @@ def run_simulation(config_path: str) -> Path:
         prefer_gpu=prefer_gpu,
         forced_variant=str(runtime_cfg.get("mitsuba_variant", "auto")),
     )
-    tf_info = configure_tensorflow_memory_growth()
+    if runtime_cfg.get("disable_pythreejs", True):
+        disable_pythreejs_import("simulate")
+    tf_info = configure_tensorflow_memory_growth(
+        mode=str(runtime_cfg.get("tensorflow_import", "auto"))
+    )
 
     timings: Dict[str, float] = {}
 
-    steps = ["Build scene", "Render scene", "Ray trace paths", "Radio map", "Plots"]
+    need_export = bool(cfg.scene.get("export_mesh", True))
+    steps = ["Build scene"]
+    if need_export:
+        steps.append("Export meshes")
+    steps.extend(["Render scene", "Ray trace paths", "Radio map", "Plots"])
     with progress_steps("Simulation", len(steps)) as (progress, task_id):
         t0 = time.time()
         progress.update(task_id, description=steps[0])
         scene = build_scene(cfg.data)
         timings["scene_build_s"] = time.time() - t0
+        scene_cfg = cfg.scene
         progress.advance(task_id)
 
-        # Render a static scene view
-        progress.update(task_id, description=steps[1])
-        try:
-            from sionna.rt import Camera
+        if need_export:
+            progress.update(task_id, description="Export meshes")
+            scene_id = (
+                f"builtin-{scene_cfg.get('builtin', 'unknown')}"
+                if scene_cfg.get("type") == "builtin"
+                else f"file-{scene_cfg.get('file', 'scene')}"
+            )
+            try:
+                export_scene_meshes(
+                    scene,
+                    output_dir,
+                    scene_id=scene_id,
+                    cache_root=Path(cfg.output.get("base_dir", "outputs")) / "_cache",
+                )
+            except Exception as exc:  # pragma: no cover
+                logger.warning("Mesh export failed: %s", exc)
+            progress.advance(task_id)
 
-            cam_cfg = cfg.scene.get("camera", {})
-            cam = Camera(
-                position=np.array(cam_cfg.get("position", [0.0, 80.0, 500.0])),
-                orientation=np.array(cam_cfg.get("orientation", [0.0, 1.5708, -1.5708])),
-            )
-            scene.render_to_file(
-                camera=cam,
-                filename=str(output_dir / "plots" / "scene.png"),
-                num_samples=64,
-                resolution=(800, 600),
-            )
-        except Exception as exc:  # pragma: no cover - optional rendering path
-            logger.warning("Scene render failed: %s", exc)
+        # Render a static scene view (optical)
+        progress.update(task_id, description="Render scene")
+        render_cfg = cfg.data.get("render", {})
+        if render_cfg.get("enabled", True):
+            try:
+                from sionna.rt import Camera
+
+                cam_cfg = cfg.scene.get("camera", {})
+                cam = Camera(
+                    position=np.array(cam_cfg.get("position", [0.0, 80.0, 500.0])),
+                    orientation=np.array(cam_cfg.get("orientation", [0.0, 1.5708, -1.5708])),
+                )
+                scene.render_to_file(
+                    camera=cam,
+                    filename=str(output_dir / "plots" / "scene.png"),
+                    num_samples=int(render_cfg.get("samples", 64)),
+                    resolution=tuple(render_cfg.get("resolution", [800, 600])),
+                )
+            except Exception as exc:  # pragma: no cover - optional rendering path
+                logger.warning("Scene render failed: %s", exc)
         progress.advance(task_id)
 
         from sionna.rt import PathSolver, RadioMapSolver
 
         sim_cfg = cfg.simulation
         t0 = time.time()
-        progress.update(task_id, description=steps[2])
+        progress.update(task_id, description="Ray trace paths")
         path_solver = PathSolver()
         paths = path_solver(
             scene,
@@ -95,12 +130,33 @@ def run_simulation(config_path: str) -> Path:
 
         tx_device = next(iter(scene.transmitters.values()))
         metrics = compute_path_metrics(paths, tx_power_dbm=tx_device.power_dbm)
+        path_data = extract_path_data(paths)
+        metrics.update(path_data.get("metrics", {}))
+        if path_data["delays_s"].size > 0:
+            aoa_az_deg = np.degrees(path_data["aoa_azimuth_rad"])
+            aoa_el_deg = np.degrees(path_data["aoa_elevation_rad"])
+            path_rows = np.column_stack(
+                [
+                    np.arange(path_data["delays_s"].size),
+                    path_data["delays_s"],
+                    path_data["weights"],
+                    aoa_az_deg,
+                    aoa_el_deg,
+                ]
+            )
+            np.savetxt(
+                output_dir / "data" / "paths.csv",
+                path_rows,
+                delimiter=",",
+                header="path_id,delay_s,power_linear,aoa_azimuth_deg,aoa_elevation_deg",
+                comments="",
+            )
 
         radio_map_cfg = cfg.radio_map
         radio_map = None
         if radio_map_cfg.get("enabled", False):
             t0 = time.time()
-            progress.update(task_id, description=steps[3])
+            progress.update(task_id, description="Radio map")
             rm_solver = RadioMapSolver()
             radio_map = rm_solver(
                 scene,
@@ -118,13 +174,13 @@ def run_simulation(config_path: str) -> Path:
             )
             timings["radio_map_s"] = time.time() - t0
         else:
-            progress.update(task_id, description=f"{steps[3]} (skipped)")
+            progress.update(task_id, description="Radio map (skipped)")
         progress.advance(task_id)
 
         plots_dir = output_dir / "plots"
         data_dir = output_dir / "data"
         if radio_map is not None:
-            progress.update(task_id, description=steps[4])
+            progress.update(task_id, description="Plots")
             path_gain = _to_numpy(radio_map.path_gain)
             cell_centers = _to_numpy(radio_map.cell_centers)
             path_gain_db = 10.0 * np.log10(path_gain + 1e-12)
@@ -175,8 +231,87 @@ def run_simulation(config_path: str) -> Path:
                 filename_prefix="radio_map_path_loss_db",
             )
         else:
-            progress.update(task_id, description=f"{steps[4]} (skipped)")
+            progress.update(task_id, description="Plots (skipped)")
+        if path_data["delays_s"].size > 0:
+            plot_histogram(
+                path_data["delays_s"],
+                path_data["weights"],
+                plots_dir,
+                title="Path Delay Distribution",
+                xlabel="Delay [s]",
+                filename_prefix="path_delay_hist",
+            )
+            plot_histogram(
+                np.degrees(path_data["aoa_azimuth_rad"]),
+                path_data["weights"],
+                plots_dir,
+                title="AoA Azimuth Distribution",
+                xlabel="Azimuth [deg]",
+                filename_prefix="aoa_azimuth_hist",
+            )
+            plot_histogram(
+                np.degrees(path_data["aoa_elevation_rad"]),
+                path_data["weights"],
+                plots_dir,
+                title="AoA Elevation Distribution",
+                xlabel="Elevation [deg]",
+                filename_prefix="aoa_elevation_hist",
+            )
         progress.advance(task_id)
+
+    # Export ray-path segments for 3D visualization
+    vis_cfg = cfg.data.get("visualization", {}).get("ray_paths", {})
+    if vis_cfg.get("enabled", True):
+        try:
+            verts = _to_numpy(paths.vertices)
+            interactions = _to_numpy(paths.interactions)
+            valid = _to_numpy(paths.valid).astype(bool)
+            src = _to_numpy(paths.sources).reshape(3)
+            tgt = _to_numpy(paths.targets).reshape(3)
+            max_paths = int(vis_cfg.get("max_paths", 200))
+
+            segments = []
+            path_id = 0
+            num_vertices = verts.shape[0]
+            num_paths = verts.shape[3]
+            for p in range(num_paths):
+                if not valid[0, 0, p]:
+                    continue
+                pts = [src]
+                inter = interactions[:, 0, 0, p]
+                v = verts[:, 0, 0, p, :]
+                for i in range(num_vertices):
+                    if inter[i] != 0:
+                        pts.append(v[i])
+                pts.append(tgt)
+                if len(pts) < 2:
+                    continue
+                for i in range(len(pts) - 1):
+                    segments.append([path_id, *pts[i], *pts[i + 1]])
+                path_id += 1
+                if path_id >= max_paths:
+                    break
+
+            if segments:
+                segments_arr = np.array(segments)
+                np.savetxt(
+                    data_dir / "ray_paths.csv",
+                    segments_arr,
+                    delimiter=",",
+                    header="path_id,x0,y0,z0,x1,y1,z1",
+                    comments="",
+                )
+                np.savez_compressed(data_dir / "ray_paths.npz", segments=segments_arr)
+                plot_rays_3d(
+                    segments_arr,
+                    tx_pos=src,
+                    rx_pos=tgt,
+                    output_dir=output_dir / "plots",
+                )
+                metrics["ray_paths_exported"] = int(path_id)
+                metrics["ray_segments_exported"] = int(len(segments))
+        except Exception as exc:  # pragma: no cover
+            logger.warning("Ray path export failed: %s", exc)
 
     summary = {
         "metrics": metrics,
@@ -189,6 +324,10 @@ def run_simulation(config_path: str) -> Path:
     }
 
     save_json(output_dir / "summary.json", summary)
+    try:
+        generate_viewer(output_dir, cfg.data)
+    except Exception as exc:  # pragma: no cover
+        logger.warning("Viewer generation failed: %s", exc)
     logger.info("Run complete: %s", output_dir)
 
     return output_dir

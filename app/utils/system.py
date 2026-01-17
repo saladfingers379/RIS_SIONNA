@@ -14,6 +14,51 @@ def _safe_version(pkg: str) -> Optional[str]:
         return None
 
 
+def disable_pythreejs_import(reason: str = "cli") -> None:
+    """Stub out pythreejs to avoid slow imports when previews are unused."""
+    import sys
+    import types
+
+    if "pythreejs" in sys.modules:
+        return
+    stub = types.ModuleType("pythreejs")
+    stub.__dict__["__ris_sionna_stub__"] = reason
+
+    class _Dummy:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __call__(self, *args, **kwargs):
+            return None
+
+    for name in [
+        "PerspectiveCamera",
+        "OrthographicCamera",
+        "Mesh",
+        "BufferGeometry",
+        "MeshLambertMaterial",
+        "MeshBasicMaterial",
+        "LineBasicMaterial",
+        "LineSegments",
+        "Scene",
+        "DirectionalLight",
+        "AmbientLight",
+        "Vector3",
+        "SpriteMaterial",
+        "Sprite",
+        "Group",
+        "AxesHelper",
+        "GridHelper",
+    ]:
+        stub.__dict__[name] = _Dummy
+
+    def __getattr__(name: str):
+        return _Dummy
+
+    stub.__getattr__ = __getattr__  # type: ignore[attr-defined]
+    sys.modules["pythreejs"] = stub
+
+
 def select_mitsuba_variant(prefer_gpu: bool, forced_variant: str = "auto") -> str:
     import mitsuba as mi
 
@@ -46,13 +91,38 @@ def select_mitsuba_variant(prefer_gpu: bool, forced_variant: str = "auto") -> st
     return mi.variant()
 
 
-def configure_tensorflow_memory_growth() -> Dict[str, Any]:
-    try:
-        import tensorflow as tf
-    except Exception as exc:  # pragma: no cover - optional runtime behavior
-        return {"tensorflow_import_error": str(exc)}
+def configure_tensorflow_memory_growth(
+    timeout_s: float = 5.0,
+    mode: str = "auto",
+) -> Dict[str, Any]:
+    """Attempt to configure TF GPU memory growth with a timeout to avoid hangs."""
+    import concurrent.futures
 
     info: Dict[str, Any] = {}
+    if mode not in {"auto", "force", "skip"}:
+        info["tensorflow_import_error"] = f"Unknown tensorflow_import mode: {mode}"
+        return info
+    if mode == "skip":
+        info["tensorflow_import_skipped"] = True
+        return info
+    if mode == "auto" and platform.system() == "Darwin":
+        info["tensorflow_import_skipped"] = True
+        info["tensorflow_import_reason"] = "darwin"
+        return info
+
+    def _load_tf():
+        import tensorflow as tf  # pylint: disable=import-error
+        return tf
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(_load_tf)
+        try:
+            tf = future.result(timeout=timeout_s)
+        except Exception as exc:  # pragma: no cover - optional runtime behavior
+            info["tensorflow_import_error"] = str(exc)
+            info["tensorflow_import_timeout_s"] = timeout_s
+            return info
+
     gpus = tf.config.list_physical_devices("GPU")
     info["tf_gpus"] = [g.name for g in gpus]
     if gpus:
@@ -90,12 +160,15 @@ def collect_environment_info() -> Dict[str, Any]:
     except Exception as exc:  # pragma: no cover
         info["mitsuba_error"] = str(exc)
 
-    try:
-        import tensorflow as tf
-        info["tensorflow_gpus"] = [g.name for g in tf.config.list_physical_devices("GPU")]
-        info["tensorflow_build"] = tf.sysconfig.get_build_info()
-    except Exception as exc:  # pragma: no cover
-        info["tensorflow_error"] = str(exc)
+    if platform.system() == "Darwin":
+        info["tensorflow_error"] = "Skipped TensorFlow import on macOS to avoid startup hangs."
+    else:
+        try:
+            import tensorflow as tf
+            info["tensorflow_gpus"] = [g.name for g in tf.config.list_physical_devices("GPU")]
+            info["tensorflow_build"] = tf.sysconfig.get_build_info()
+        except Exception as exc:  # pragma: no cover
+            info["tensorflow_error"] = str(exc)
 
     info["docker_gpu_env"] = {
         "NVIDIA_VISIBLE_DEVICES": os.getenv("NVIDIA_VISIBLE_DEVICES"),

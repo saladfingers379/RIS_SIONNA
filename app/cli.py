@@ -1,5 +1,7 @@
 import argparse
 import logging
+import os
+import socket
 import subprocess
 import sys
 from pathlib import Path
@@ -12,6 +14,15 @@ from .utils.system import print_environment_info
 
 logger = logging.getLogger(__name__)
 
+def _pick_dashboard_port(preferred: int = 8501) -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            sock.bind(("127.0.0.1", preferred))
+            return preferred
+        except OSError:
+            sock.bind(("127.0.0.1", 0))
+            return sock.getsockname()[1]
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(prog="python -m app", description="RIS_SIONNA CLI")
@@ -79,7 +90,31 @@ def main() -> None:
         except Exception:
             raise SystemExit("Streamlit not installed. Install with: pip install .[dashboard]")
 
-        subprocess.run([sys.executable, "-m", "streamlit", "run", "app/dashboard_app.py"], check=True)
+        port = _pick_dashboard_port(8501)
+        logger.info("Starting dashboard at http://127.0.0.1:%s (press Ctrl+C to stop)", port)
+        env = dict(**dict(os.environ))
+        env.setdefault("STREAMLIT_BROWSER_GATHER_USAGE_STATS", "false")
+        subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "streamlit",
+                "run",
+                "app/dashboard_app.py",
+                "--server.headless",
+                "true",
+                "--server.fileWatcherType",
+                "none",
+                "--server.address",
+                "127.0.0.1",
+                "--server.port",
+                str(port),
+                "--browser.gatherUsageStats",
+                "false",
+            ],
+            check=True,
+            env=env,
+        )
         return
 
 

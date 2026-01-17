@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
+import shutil
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 
@@ -17,6 +20,9 @@ class SceneObjectSpec:
 
 def build_scene(cfg: Dict[str, Any]):
     import numpy as np
+    from .utils.system import disable_pythreejs_import
+
+    disable_pythreejs_import("build_scene")
     import sionna.rt as rt
 
     scene_cfg = cfg.get("scene", {})
@@ -88,3 +94,38 @@ def build_scene(cfg: Dict[str, Any]):
         pass
 
     return scene
+
+
+def _safe_scene_id(scene_id: str) -> str:
+    return re.sub(r"[^A-Za-z0-9_.-]+", "_", scene_id).strip("_") or "scene"
+
+
+def export_scene_meshes(scene, output_dir: Path, scene_id: str, cache_root: Optional[Path] = None) -> None:
+    """Export Mitsuba meshes to PLY files, with caching for faster re-runs."""
+    mesh_dir = output_dir / "scene_mesh"
+    mesh_dir.mkdir(parents=True, exist_ok=True)
+
+    cache_root = cache_root or output_dir.parent / "_cache"
+    cache_dir = cache_root / _safe_scene_id(scene_id)
+    cache_dir.mkdir(parents=True, exist_ok=True)
+
+    cached_meshes = list(cache_dir.glob("*.ply"))
+    if cached_meshes:
+        for src in cached_meshes:
+            dst = mesh_dir / src.name
+            if src.resolve() != dst.resolve():
+                shutil.copyfile(src, dst)
+        return
+
+    mi_scene = scene.mi_scene
+    for idx, mesh in enumerate(mi_scene.shapes()):
+        try:
+            path = cache_dir / f"mesh_{idx:03d}.ply"
+            mesh.write_ply(str(path))
+        except Exception:
+            continue
+
+    for src in cache_dir.glob("*.ply"):
+        dst = mesh_dir / src.name
+        if src.resolve() != dst.resolve():
+            shutil.copyfile(src, dst)

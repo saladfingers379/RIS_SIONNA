@@ -1,2 +1,11 @@
 [theme]
 base = "light"
+
+[browser]
+gatherUsageStats = false
+
+[server]
+headless = true
+fileWatcherType = "none"
+address = "127.0.0.1"
+port = 8501
