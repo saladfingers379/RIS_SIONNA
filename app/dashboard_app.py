@@ -1,8 +1,8 @@
 from pathlib import Path
 import json
-import time
 import socket
 import threading
+import time
 from functools import partial
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 
@@ -20,7 +20,10 @@ if not output_root.exists():
     st.info("No outputs directory found yet. Run a simulation first.")
     st.stop()
 
-runs = sorted([p for p in output_root.iterdir() if p.is_dir()], reverse=True)
+runs = sorted(
+    [p for p in output_root.iterdir() if p.is_dir() and not p.name.startswith("_")],
+    reverse=True,
+)
 if not runs:
     st.info("No runs found. Run a simulation first.")
     st.stop()
@@ -29,8 +32,8 @@ run_labels = [p.name for p in runs]
 with st.sidebar:
     st.header("Runs")
     selected = st.selectbox("Most recent first", run_labels, index=0)
-run_dir = output_root / selected
 
+run_dir = output_root / selected
 summary_path = run_dir / "summary.json"
 config_path = run_dir / "config.yaml"
 plots_dir = run_dir / "plots"
@@ -49,11 +52,9 @@ with st.sidebar:
     mesh_choices = ["Use run config"] + [p.name for p in mesh_files]
     mesh_choice = st.selectbox("Mesh override", mesh_choices, index=0)
     proxy_default = st.checkbox("Show proxy geometry by default", value=bool(scene_cfg.get("proxy_enabled", True)))
-    auto_regen = st.checkbox("Auto-regenerate viewer", value=False)
     regen_clicked = st.button("Regenerate viewer now")
 
-viewer_key = f"{selected}:{mesh_choice}:{proxy_default}"
-last_key = st.session_state.get("viewer_key")
+
 def _find_free_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.bind(("127.0.0.1", 0))
@@ -69,20 +70,17 @@ def _start_viewer_server(root_dir: Path) -> int:
     return port
 
 
-should_regen = regen_clicked or (auto_regen and viewer_key != last_key)
-if should_regen:
+if regen_clicked:
     updated_scene = dict(scene_cfg)
     if mesh_choice != "Use run config":
         updated_scene["mesh"] = str(mesh_dir / mesh_choice)
     updated_scene["proxy_enabled"] = proxy_default
     updated_config = dict(config_data)
     updated_config["scene"] = updated_scene
-    with st.spinner("Generating viewer..."):
-        try:
-            generate_viewer(run_dir, updated_config)
-            st.session_state["viewer_key"] = viewer_key
-        except Exception as exc:
-            st.sidebar.warning(f"Viewer update failed: {exc}")
+    try:
+        generate_viewer(run_dir, updated_config)
+    except Exception as exc:
+        st.sidebar.warning(f"Viewer update failed: {exc}")
 
 viewer_html = run_dir / "viewer" / "index.html"
 viewer_root = viewer_html.parent if viewer_html.exists() else None
@@ -99,6 +97,7 @@ if viewer_root is not None:
     if st.session_state.get("viewer_port"):
         viewer_url = f"http://127.0.0.1:{st.session_state['viewer_port']}/index.html"
 
+
 def _load_json_with_retry(path: Path, attempts: int = 3, delay_s: float = 0.2):
     for _ in range(attempts):
         try:
@@ -107,7 +106,7 @@ def _load_json_with_retry(path: Path, attempts: int = 3, delay_s: float = 0.2):
             time.sleep(delay_s)
     return None
 
-tabs = st.tabs(["Summary", "Config", "Metrics", "Maps", "3D View", "Scene", "Downloads"])
+
 metric_options = {
     "Path gain [dB]": "radio_map_path_gain_db.png",
     "Rx power [dBm]": "radio_map_rx_power_dbm.png",
@@ -119,13 +118,15 @@ with st.sidebar:
 plot_png = plots_dir / metric_options[metric_label]
 legacy_png = plots_dir / "radio_map.png"
 
+tabs = st.tabs(["Summary", "Config", "Metrics", "Maps", "3D View", "Scene", "Downloads"])
+
 with tabs[0]:
     if summary_path.exists():
         summary = _load_json_with_retry(summary_path)
         if summary is None:
             st.warning("summary.json not readable yet. Try refreshing.")
         else:
-            st.json(summary)
+            st.json(summary, expanded=False)
     else:
         st.warning("summary.json not found")
 

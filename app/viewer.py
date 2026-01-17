@@ -173,7 +173,7 @@ def build_viewer_html(data: Dict[str, Any]) -> str:
 </head>
 <body>
 <div id=\"c\"></div>
-<div id=\"hud\">Tx: red · Rx: blue · Rays: orange</div>
+<div id=\"hud\">Tx: red · Rx: blue · Rays: orange · <span id=\"coords\">x: -- y: -- z: --</span></div>
 <div id=\"controls\">
   <label>Ray color:
     <select id=\"colorMode\">
@@ -218,6 +218,15 @@ def build_viewer_html(data: Dict[str, Any]) -> str:
   scene.add(fill);
 
   // Keep the scene clean; rely on actual geometry only.
+  const pickables = [];
+  const raycaster = new THREE.Raycaster();
+  const mouse = new THREE.Vector2();
+  const groundPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+  const coordsEl = document.getElementById("coords");
+
+  function registerPickable(obj) {{
+    if (obj) pickables.push(obj);
+  }}
 
   function addProxy(proxy) {{
     if (!proxy) return null;
@@ -246,6 +255,9 @@ def build_viewer_html(data: Dict[str, Any]) -> str:
       proxyGroup.add(line);
     }});
     scene.add(proxyGroup);
+    proxyGroup.traverse((child) => {{
+      if (child.isMesh) registerPickable(child);
+    }});
     return proxyGroup;
   }}
 
@@ -347,6 +359,7 @@ def build_viewer_html(data: Dict[str, Any]) -> str:
         const mat = new THREE.MeshStandardMaterial({{ color: 0x9aa8b1, transparent: true, opacity: 0.55 }});
         const mesh = new THREE.Mesh(geom, mat);
         scene.add(mesh);
+        registerPickable(mesh);
       }});
     }});
   }}
@@ -357,12 +370,22 @@ def build_viewer_html(data: Dict[str, Any]) -> str:
       const mod = await import('./vendor/GLTFLoader.js');
       GLTFLoader = mod.GLTFLoader;
       const loader = new GLTFLoader();
-      loader.load(data.mesh, (gltf) => scene.add(gltf.scene));
+      loader.load(data.mesh, (gltf) => {{
+        scene.add(gltf.scene);
+        gltf.scene.traverse((child) => {{
+          if (child.isMesh) registerPickable(child);
+        }});
+      }});
     }} else if (ext === 'obj') {{
       const mod = await import('./vendor/OBJLoader.js');
       OBJLoader = mod.OBJLoader;
       const loader = new OBJLoader();
-      loader.load(data.mesh, (obj) => scene.add(obj));
+      loader.load(data.mesh, (obj) => {{
+        scene.add(obj);
+        obj.traverse((child) => {{
+          if (child.isMesh) registerPickable(child);
+        }});
+      }});
     }}
   }} else {{
     await loadPlyMeshes();
@@ -430,6 +453,27 @@ def build_viewer_html(data: Dict[str, Any]) -> str:
     renderer.render(scene, camera);
   }}
   animate();
+
+  function updateCoords(event) {{
+    const rect = renderer.domElement.getBoundingClientRect();
+    mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    raycaster.setFromCamera(mouse, camera);
+    let point = null;
+    if (pickables.length) {{
+      const hits = raycaster.intersectObjects(pickables, true);
+      if (hits.length > 0) point = hits[0].point;
+    }}
+    if (!point) {{
+      point = new THREE.Vector3();
+      raycaster.ray.intersectPlane(groundPlane, point);
+    }}
+    if (point) {{
+      coordsEl.textContent = `x: ${{point.x.toFixed(2)}} y: ${{point.y.toFixed(2)}} z: ${{point.z.toFixed(2)}}`;
+    }}
+  }}
+
+  renderer.domElement.addEventListener('mousemove', updateCoords);
 
   window.addEventListener('resize', () => {{
     camera.aspect = window.innerWidth / window.innerHeight;
