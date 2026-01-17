@@ -44,6 +44,11 @@ Dashboard features:
 - Coverage map metric picker
 - 3D view of RF ray paths (if `ray_paths.csv` is available)
 - Scene render + downloads
+ - 3D viewer shows live cursor coordinates in the HUD
+
+Notes:
+- Dashboard is visualization-only; run simulations from the CLI.
+- If the 3D view is blank, click "Regenerate viewer now" in the sidebar.
 
 ## Quick Start (WSL2 + Docker + RTX 4070 Ti)
 1) Install NVIDIA Container Toolkit and validate `--gpus all` works (see docs below).
@@ -87,7 +92,7 @@ Each run saves to `outputs/<timestamp>/`:
 ## Simulation Assumptions
 - Carrier frequency: 28 GHz
 - Default scene: built-in `etoile` (Sionna RT)
-- Tx height: 27 m, Rx height: 1.5 m (see `configs/default.yaml`)
+- Tx height: 28 m, Rx height: 1.5 m (see `configs/default.yaml`)
 - Camera render: configurable via `scene.camera` in YAML
 
 ## Dependencies (Pinned + Justified)
@@ -121,6 +126,9 @@ All configs include a placeholder:
 ris:
   enabled: false
 ```
+
+## Project Notes
+For operational notes, known quirks, and handoff context, see `PROJECT_CONTEXT.md`.
 
 ## Future RIS Extension (Not Implemented)
 - Add a SceneObjectSpec implementation for RIS panels.
