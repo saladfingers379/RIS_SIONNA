@@ -51,10 +51,14 @@ const ui = {
   toggleMarkers: document.getElementById("toggleMarkers"),
   toggleRays: document.getElementById("toggleRays"),
   toggleHeatmap: document.getElementById("toggleHeatmap"),
+  toggleGuides: document.getElementById("toggleGuides"),
   meshRotation: document.getElementById("meshRotation"),
   meshRotationLabel: document.getElementById("meshRotationLabel"),
   heatmapRotation: document.getElementById("heatmapRotation"),
   heatmapRotationLabel: document.getElementById("heatmapRotationLabel"),
+  heatmapScale: document.getElementById("heatmapScale"),
+  heatmapScaleMin: document.getElementById("heatmapScaleMin"),
+  heatmapScaleMax: document.getElementById("heatmapScaleMax"),
   heatmapMin: document.getElementById("heatmapMin"),
   heatmapMax: document.getElementById("heatmapMax"),
   heatmapMinLabel: document.getElementById("heatmapMinLabel"),
@@ -65,6 +69,7 @@ const ui = {
   pathOrderFilter: document.getElementById("pathOrderFilter"),
   pathTableBody: document.getElementById("pathTableBody"),
   pathStats: document.getElementById("pathStats"),
+  randomizeMarkers: document.getElementById("randomizeMarkers"),
 };
 
 let renderer;
@@ -75,6 +80,7 @@ let geometryGroup;
 let markerGroup;
 let rayGroup;
 let heatmapGroup;
+let alignmentGroup;
 let highlightLine;
 let dragging = null;
 let debugHeatmapMesh = null;
@@ -95,9 +101,15 @@ function initViewer() {
   renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setSize(container.clientWidth, container.clientHeight);
   container.appendChild(renderer.domElement);
+  renderer.domElement.addEventListener("contextmenu", (event) => event.preventDefault());
 
   controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
+  controls.enablePan = true;
+  controls.screenSpacePanning = true;
+  controls.panSpeed = 0.9;
+  controls.keyPanSpeed = 18.0;
+  controls.listenToKeyEvents(window);
 
   const hemi = new THREE.HemisphereLight(0xffffff, 0x64748b, 0.8);
   scene.add(hemi);
@@ -109,7 +121,9 @@ function initViewer() {
   markerGroup = new THREE.Group();
   rayGroup = new THREE.Group();
   heatmapGroup = new THREE.Group();
-  scene.add(geometryGroup, markerGroup, rayGroup, heatmapGroup);
+  alignmentGroup = new THREE.Group();
+  alignmentGroup.visible = false;
+  scene.add(geometryGroup, markerGroup, rayGroup, heatmapGroup, alignmentGroup);
 
   window.__simDebug = {
     scene,
@@ -183,6 +197,65 @@ function setInputValue(input, value) {
   } else {
     input.value = value;
   }
+}
+
+function isTextInput(target) {
+  if (!target) return false;
+  const tag = target.tagName ? target.tagName.toLowerCase() : "";
+  return tag === "input" || tag === "textarea" || tag === "select" || target.isContentEditable;
+}
+
+function nudgeCamera(direction, boost) {
+  const distance = controls.target.distanceTo(camera.position);
+  const step = Math.max(1, distance * 0.02) * (boost ? 2 : 1);
+  const up = new THREE.Vector3(0, 0, 1);
+  const forward = new THREE.Vector3();
+  camera.getWorldDirection(forward);
+  forward.z = 0;
+  if (forward.lengthSq() < 1e-6) {
+    forward.set(0, 1, 0);
+  }
+  forward.normalize();
+  const right = new THREE.Vector3().crossVectors(forward, up).normalize();
+  const delta = new THREE.Vector3();
+  if (direction === "forward") delta.copy(forward).multiplyScalar(step);
+  if (direction === "back") delta.copy(forward).multiplyScalar(-step);
+  if (direction === "left") delta.copy(right).multiplyScalar(-step);
+  if (direction === "right") delta.copy(right).multiplyScalar(step);
+  if (direction === "up") delta.copy(up).multiplyScalar(step);
+  if (direction === "down") delta.copy(up).multiplyScalar(-step);
+  camera.position.add(delta);
+  controls.target.add(delta);
+}
+
+function bindKeyboardNavigation() {
+  window.addEventListener("keydown", (event) => {
+    if (event.repeat || isTextInput(event.target)) return;
+    const boost = event.shiftKey;
+    switch (event.code) {
+      case "KeyW":
+        nudgeCamera("forward", boost);
+        break;
+      case "KeyS":
+        nudgeCamera("back", boost);
+        break;
+      case "KeyA":
+        nudgeCamera("left", boost);
+        break;
+      case "KeyD":
+        nudgeCamera("right", boost);
+        break;
+      case "KeyQ":
+        nudgeCamera("down", boost);
+        break;
+      case "KeyE":
+        nudgeCamera("up", boost);
+        break;
+      default:
+        return;
+    }
+    event.preventDefault();
+  });
 }
 
 function getSelectedConfig() {
@@ -354,6 +427,7 @@ function renderRunStats() {
 
 function updateHeatmapControls() {
   if (!state.heatmap || !state.heatmap.values) {
+    updateHeatmapScaleVisibility(false);
     return;
   }
   const values = state.heatmap.values.flat();
@@ -371,6 +445,22 @@ function updateHeatmapControls() {
   ui.heatmapMaxLabel.textContent = `${maxVal}`;
   ui.heatmapMinInput.value = String(minVal);
   ui.heatmapMaxInput.value = String(maxVal);
+  updateHeatmapScaleLabels();
+  updateHeatmapScaleVisibility();
+}
+
+function updateHeatmapScaleLabels() {
+  if (!ui.heatmapScaleMin || !ui.heatmapScaleMax) return;
+  ui.heatmapScaleMin.textContent = ui.heatmapMin.value || "--";
+  ui.heatmapScaleMax.textContent = ui.heatmapMax.value || "--";
+}
+
+function updateHeatmapScaleVisibility(force) {
+  if (!ui.heatmapScale) return;
+  const visible = force !== undefined
+    ? force
+    : Boolean(ui.toggleHeatmap.checked && state.heatmap && state.heatmap.values);
+  ui.heatmapScale.classList.toggle("is-hidden", !visible);
 }
 
 function rebuildScene() {
@@ -378,11 +468,14 @@ function rebuildScene() {
   markerGroup.clear();
   rayGroup.clear();
   heatmapGroup.clear();
+  alignmentGroup.clear();
   highlightLine = null;
 
   addProxyGeometry();
   loadMeshes();
   addMarkers();
+  addAlignmentMarkers();
+  alignmentGroup.visible = ui.toggleGuides.checked;
   addRays();
   addHeatmap();
   fitCamera();
@@ -436,8 +529,8 @@ async function loadMeshes() {
   }
   if (state.manifest.mesh_files && state.manifest.mesh_files.length) {
     const loader = new PLYLoader();
-    // Get rotation from UI slider (degrees)
-    const meshRotationDeg = parseFloat(ui.meshRotation?.value || 60);
+    // Get rotation from UI slider (degrees); default stays 0 to match ray paths.
+    const meshRotationDeg = parseFloat(ui.meshRotation?.value || 0);
     state.manifest.mesh_files.forEach((name) => {
       loader.load(`/runs/${state.runId}/viewer/${name}`, (geom) => {
         // Apply Z-axis rotation to align mesh with radio map coordinates
@@ -463,9 +556,6 @@ function addMarkers() {
   tx.position.set(...state.markers.tx);
   rx.position.set(...state.markers.rx);
   markerGroup.add(tx, rx);
-
-  // Add alignment debug markers
-  addAlignmentMarkers();
 }
 
 function addAlignmentMarkers() {
@@ -490,7 +580,7 @@ function addAlignmentMarkers() {
 
   const xAxis = new THREE.Line(xAxisGeo, xAxisMat);
   const yAxis = new THREE.Line(yAxisGeo, yAxisMat);
-  markerGroup.add(xAxis, yAxis);
+  alignmentGroup.add(xAxis, yAxis);
 
   // Add spheres at key positions for visual reference
   const sphereGeo = new THREE.SphereGeometry(markerSize, 12, 12);
@@ -499,25 +589,25 @@ function addAlignmentMarkers() {
   const originMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 0.3 });
   const origin = new THREE.Mesh(sphereGeo, originMat);
   origin.position.set(0, 0, markerZ);
-  markerGroup.add(origin);
+  alignmentGroup.add(origin);
 
   // +X marker (yellow) at (100, 0)
   const xMarkerMat = new THREE.MeshStandardMaterial({ color: 0xffff00, emissive: 0xffff00, emissiveIntensity: 0.3 });
   const xMarker = new THREE.Mesh(sphereGeo, xMarkerMat);
   xMarker.position.set(axisLength, 0, markerZ);
-  markerGroup.add(xMarker);
+  alignmentGroup.add(xMarker);
 
   // +Y marker (magenta) at (0, 100)
   const yMarkerMat = new THREE.MeshStandardMaterial({ color: 0xff00ff, emissive: 0xff00ff, emissiveIntensity: 0.3 });
   const yMarker = new THREE.Mesh(sphereGeo, yMarkerMat);
   yMarker.position.set(0, axisLength, markerZ);
-  markerGroup.add(yMarker);
+  alignmentGroup.add(yMarker);
 
   // Diagonal marker (cyan) at (100, 100) - helps see rotation
   const diagMat = new THREE.MeshStandardMaterial({ color: 0x00ffff, emissive: 0x00ffff, emissiveIntensity: 0.3 });
   const diagMarker = new THREE.Mesh(sphereGeo, diagMat);
   diagMarker.position.set(axisLength, axisLength, markerZ);
-  markerGroup.add(diagMarker);
+  alignmentGroup.add(diagMarker);
 
   // Add corner markers for heatmap bounds if available
   if (state.heatmap && state.heatmap.cell_centers) {
@@ -545,7 +635,7 @@ function addAlignmentMarkers() {
     corners.forEach(([x, y, z], i) => {
       const marker = new THREE.Mesh(cornerGeo, cornerMat);
       marker.position.set(x, y, z);
-      markerGroup.add(marker);
+      alignmentGroup.add(marker);
     });
 
     // Add text label hints at corners using small colored spheres
@@ -553,8 +643,74 @@ function addAlignmentMarkers() {
     const blMat = new THREE.MeshStandardMaterial({ color: 0x88ff00, emissive: 0x88ff00, emissiveIntensity: 0.5 });
     const blMarker = new THREE.Mesh(new THREE.SphereGeometry(markerSize * 1.2, 12, 12), blMat);
     blMarker.position.set(xMin, yMin, hmZ + 3);
-    markerGroup.add(blMarker);
+    alignmentGroup.add(blMarker);
   }
+}
+
+function pointInsideBox(point, box) {
+  const size = box.size || [0, 0, 0];
+  const center = box.center || [0, 0, 0];
+  const min = [center[0] - size[0] / 2, center[1] - size[1] / 2, center[2] - size[2] / 2];
+  const max = [center[0] + size[0] / 2, center[1] + size[1] / 2, center[2] + size[2] / 2];
+  return (
+    point[0] >= min[0] && point[0] <= max[0] &&
+    point[1] >= min[1] && point[1] <= max[1] &&
+    point[2] >= min[2] && point[2] <= max[2]
+  );
+}
+
+function getSceneBounds2D() {
+  if (state.heatmap && state.heatmap.cell_centers) {
+    const centers = state.heatmap.cell_centers;
+    const xs = centers.flatMap((row) => row.map((c) => c[0]));
+    const ys = centers.flatMap((row) => row.map((c) => c[1]));
+    if (xs.length && ys.length) {
+      return {
+        xMin: Math.min(...xs),
+        xMax: Math.max(...xs),
+        yMin: Math.min(...ys),
+        yMax: Math.max(...ys),
+      };
+    }
+  }
+  const meshBox = new THREE.Box3().setFromObject(geometryGroup);
+  if (!meshBox.isEmpty()) {
+    return {
+      xMin: meshBox.min.x,
+      xMax: meshBox.max.x,
+      yMin: meshBox.min.y,
+      yMax: meshBox.max.y,
+    };
+  }
+  return { xMin: -80, xMax: 80, yMin: -80, yMax: 80 };
+}
+
+function findRandomPoint(bounds, z) {
+  const proxyBoxes = (state.manifest && state.manifest.proxy && state.manifest.proxy.boxes) || [];
+  const tries = 250;
+  for (let i = 0; i < tries; i++) {
+    const x = bounds.xMin + Math.random() * (bounds.xMax - bounds.xMin);
+    const y = bounds.yMin + Math.random() * (bounds.yMax - bounds.yMin);
+    const candidate = [x, y, z];
+    if (!proxyBoxes.some((box) => pointInsideBox(candidate, box))) {
+      return candidate;
+    }
+  }
+  return [
+    (bounds.xMin + bounds.xMax) / 2,
+    (bounds.yMin + bounds.yMax) / 2,
+    z,
+  ];
+}
+
+function randomizeMarkers() {
+  const bounds = getSceneBounds2D();
+  const txZ = state.markers.tx[2] ?? 1.5;
+  const rxZ = state.markers.rx[2] ?? 1.5;
+  state.markers.tx = findRandomPoint(bounds, txZ);
+  state.markers.rx = findRandomPoint(bounds, rxZ);
+  updateInputs();
+  rebuildScene();
 }
 
 function addRays() {
@@ -963,6 +1119,10 @@ function bindUI() {
   });
   ui.toggleHeatmap.addEventListener("change", () => {
     heatmapGroup.visible = ui.toggleHeatmap.checked;
+    updateHeatmapScaleVisibility();
+  });
+  ui.toggleGuides.addEventListener("change", () => {
+    alignmentGroup.visible = ui.toggleGuides.checked;
   });
   ui.heatmapRotation.addEventListener("input", () => {
     ui.heatmapRotationLabel.textContent = `${ui.heatmapRotation.value}`;
@@ -972,32 +1132,38 @@ function bindUI() {
   ui.heatmapMin.addEventListener("input", () => {
     ui.heatmapMinLabel.textContent = `${ui.heatmapMin.value}`;
     ui.heatmapMinInput.value = ui.heatmapMin.value;
+    updateHeatmapScaleLabels();
     heatmapGroup.clear();
     addHeatmap();
   });
   ui.heatmapMax.addEventListener("input", () => {
     ui.heatmapMaxLabel.textContent = `${ui.heatmapMax.value}`;
     ui.heatmapMaxInput.value = ui.heatmapMax.value;
+    updateHeatmapScaleLabels();
     heatmapGroup.clear();
     addHeatmap();
   });
   ui.heatmapMinInput.addEventListener("change", () => {
     ui.heatmapMin.value = ui.heatmapMinInput.value;
     ui.heatmapMinLabel.textContent = `${ui.heatmapMin.value}`;
+    updateHeatmapScaleLabels();
     heatmapGroup.clear();
     addHeatmap();
   });
   ui.heatmapMaxInput.addEventListener("change", () => {
     ui.heatmapMax.value = ui.heatmapMaxInput.value;
     ui.heatmapMaxLabel.textContent = `${ui.heatmapMax.value}`;
+    updateHeatmapScaleLabels();
     heatmapGroup.clear();
     addHeatmap();
   });
+  ui.randomizeMarkers.addEventListener("click", randomizeMarkers);
   ui.pathTypeFilter.addEventListener("change", renderPathTable);
   ui.pathOrderFilter.addEventListener("input", renderPathTable);
 }
 
 initViewer();
+bindKeyboardNavigation();
 bindUI();
 fetchConfigs().then(fetchRuns);
 setInterval(refreshJobs, 3000);

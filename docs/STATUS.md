@@ -7,14 +7,15 @@
   - `viewer/scene_manifest.json`, `viewer/markers.json`, `viewer/paths.json`, `viewer/heatmap.json`.
 - Path table CSV now includes order/type/path length/power/interaction list (`app/metrics.py`, `app/simulate.py`).
 - Procedural scenes: registry + street canyon preset + material library (`app/scene.py`, `configs/procedural.yaml`).
-- UI: run selector, scene source selector, job buttons, path table, stats, glossary, heatmap dB sliders.
+- UI: run selector, scene source selector, job buttons, path table, stats, glossary, heatmap controls.
+- Viewer UX: collapsible left-panel sections, top heatmap scale bar, keyboard navigation (WASD/QE) + right-drag pan.
+- Alignment aids: guides toggle (off by default) and heatmap/mesh rotation defaults set to 0.
+- Marker tools: randomize Tx/Rx button (avoids proxy boxes when available).
 - Perf trace captured in `docs/trace_viewer.json`, summary in `docs/perf.md`.
 
 ## Known issues (needs work)
-- Heatmap alignment still incorrect for rotated scenes (Arc de Triomphe scene shows rotated mismatch).
-  - Current logic applies `radio_map.orientation` in the viewer, but the heatmap plane still doesn’t match mesh rotation.
-  - May need full transform from radio map coordinates → world (or use scene transform / Mitsuba world to align).
-- UI clunky; missing features still expected (per user feedback).
+- UI still needs polish; more responsive layouts + better defaults needed.
+- Randomized Tx/Rx avoids proxy boxes only; if a scene has no proxy geometry, points may still land inside mesh volume.
 - New runs sometimes don’t load; UI now auto-loads newest completed run, but needs more validation.
 
 ## How heatmap is generated
@@ -24,7 +25,7 @@
   - Includes `grid_shape`, `values`, `cell_centers`, `center`, `size`, `cell_size`, `orientation`.
 - `app/sim_web/app.js` builds a textured plane from `values` and uses:
   - Plane size from cell centers (fallback to size/center).
-  - Rotation from `heatmap.orientation` (currently insufficient for correct alignment).
+  - Rotation from `heatmap.orientation` + UI override (defaults to 0).
 
 ## UI scene selection
 - Scene source dropdown uses `/api/run/<id>` to fetch config/summary.
@@ -38,6 +39,6 @@
 - Configs: `configs/*.yaml`
 
 ## Suggested next steps
-- Fix heatmap alignment with proper world transform (likely use cell center positions to build the plane geometry directly, or bake a mesh in world coords).
-- Add more UI controls + responsiveness polish.
+- If alignment issues reappear, consider baking a heatmap mesh in world coords using cell centers.
+- Improve randomization by using mesh intersection tests when proxies are absent.
 - Extend stats: reflections/diffractions counts already in UI, add full solver settings + timings.
