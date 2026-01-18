@@ -10,7 +10,7 @@ from .io import find_latest_output_dir
 from .plots import plot_radio_map_from_npz
 from .simulate import run_simulation
 from .utils.logging import setup_logging
-from .utils.system import print_environment_info
+from .utils.system import print_diagnose_info
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +85,7 @@ def main() -> None:
         return
 
     if args.command == "diagnose":
-        print_environment_info()
+        print_diagnose_info()
         return
 
     if args.command == "dashboard":

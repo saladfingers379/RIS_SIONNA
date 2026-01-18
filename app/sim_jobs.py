@@ -90,6 +90,34 @@ def _job_overrides(kind: str) -> Dict[str, Any]:
             "radio_map": {"enabled": True},
             "visualization": {"ray_paths": {"max_paths": 200}},
         }
+    if kind == "benchmark":
+        return {
+            "benchmark": {
+                "enabled": True,
+                "radio_map": {
+                    "samples_per_tx": 4000000,
+                    "max_depth": 6,
+                    "batch_size": 512,
+                    "los": True,
+                    "specular_reflection": True,
+                    "diffuse_reflection": True,
+                    "refraction": True,
+                    "diffraction": False,
+                },
+                "radio_map_levels": [
+                    {"name": "rm_256", "grid_shape": [256, 256], "cell_size": [1.0, 1.0]},
+                    {"name": "rm_512", "grid_shape": [512, 512], "cell_size": [1.0, 1.0]},
+                ],
+            },
+            "radio_map": {
+                "enabled": True,
+                "auto_size": False,
+                "center": [0.0, 0.0, 1.5],
+                "cell_size": [1.0, 1.0],
+                "size": [256.0, 256.0],
+                "batch_size": 512,
+            },
+        }
     return {}
 
 
@@ -164,6 +192,8 @@ class JobManager:
             raise FileNotFoundError(f"Config not found: {config_path}")
 
         cfg = _load_yaml(config_path)
+        if kind == "benchmark" and not preset:
+            cfg.setdefault("quality", {})["preset"] = "benchmark"
         if preset:
             cfg.setdefault("quality", {})["preset"] = preset
         cfg = apply_quality_preset(cfg)

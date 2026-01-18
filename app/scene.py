@@ -90,7 +90,7 @@ def _write_procedural_scene_xml(path: Path, spec: Dict[str, Any]) -> None:
       <rotate x=\"1\" angle=\"-90\"/>
       <translate x=\"0\" y=\"0\" z=\"{ground_elev}\"/>
     </transform>
-    <bsdf type=\"diffuse\">
+    <bsdf type=\"diffuse\" id=\"mat-ground\">
       <rgb name=\"reflectance\" value=\"0.55, 0.55, 0.55\"/>
     </bsdf>
   </shape>
@@ -106,7 +106,7 @@ def _write_procedural_scene_xml(path: Path, spec: Dict[str, Any]) -> None:
       <scale x=\"{size[0]}\" y=\"{size[1]}\" z=\"{size[2]}\"/>
       <translate x=\"{center[0]}\" y=\"{center[1]}\" z=\"{center[2]}\"/>
     </transform>
-    <bsdf type=\"diffuse\">
+    <bsdf type=\"diffuse\" id=\"mat-box-{idx}\">
       <rgb name=\"reflectance\" value=\"0.62, 0.62, 0.65\"/>
     </bsdf>
   </shape>

@@ -1,10 +1,13 @@
 import importlib.metadata
+import logging
 import json
 import os
 import platform
 import subprocess
 import sys
-from typing import Any, Dict, Optional
+import threading
+import time
+from typing import Any, Dict, Optional, Tuple
 
 
 def _safe_version(pkg: str) -> Optional[str]:
@@ -59,10 +62,35 @@ def disable_pythreejs_import(reason: str = "cli") -> None:
     sys.modules["pythreejs"] = stub
 
 
+def _is_wsl() -> bool:
+    return "microsoft" in platform.release().lower() or os.path.exists("/dev/dxg")
+
+
+def ensure_wsl_cuda_driver_path() -> Dict[str, Any]:
+    """Ensure WSL uses the shim CUDA driver library for CUDA initialization."""
+    info: Dict[str, Any] = {"applied": False}
+    if not _is_wsl():
+        info["reason"] = "not_wsl"
+        return info
+    wsl_lib = "/usr/lib/wsl/lib"
+    if not os.path.isdir(wsl_lib):
+        info["reason"] = "wsl_lib_missing"
+        return info
+    ld_path = os.environ.get("LD_LIBRARY_PATH", "")
+    if wsl_lib not in ld_path.split(":"):
+        os.environ["LD_LIBRARY_PATH"] = f"{wsl_lib}:{ld_path}" if ld_path else wsl_lib
+        info["applied"] = True
+        info["note"] = "LD_LIBRARY_PATH updated at runtime; restart recommended"
+    info["ld_library_path"] = os.environ.get("LD_LIBRARY_PATH", "")
+    return info
+
+
 def select_mitsuba_variant(prefer_gpu: bool, forced_variant: str = "auto") -> str:
+    ensure_wsl_cuda_driver_path()
     import mitsuba as mi
 
     variants = list(mi.variants())
+    logger = logging.getLogger(__name__)
     if forced_variant and forced_variant != "auto":
         if forced_variant not in variants:
             raise ValueError(f"Requested Mitsuba variant '{forced_variant}' not in {variants}")
@@ -70,8 +98,11 @@ def select_mitsuba_variant(prefer_gpu: bool, forced_variant: str = "auto") -> st
         return mi.variant()
 
     if prefer_gpu and "cuda_ad_rgb" in variants:
-        mi.set_variant("cuda_ad_rgb")
-        return mi.variant()
+        try:
+            mi.set_variant("cuda_ad_rgb")
+            return mi.variant()
+        except Exception as exc:  # pragma: no cover - runtime GPU variance
+            logger.warning("CUDA variant selection failed, falling back to CPU: %s", exc)
 
     # Prefer spectral variants on CPU to avoid RGB spectrum shape mismatches.
     for candidate in [
@@ -137,6 +168,7 @@ def configure_tensorflow_memory_growth(
 
 def collect_environment_info() -> Dict[str, Any]:
     info: Dict[str, Any] = {}
+    info["wsl_cuda_path"] = ensure_wsl_cuda_driver_path()
     info["platform"] = platform.platform()
     info["python_version"] = platform.python_version()
     info["in_docker"] = os.path.exists("/.dockerenv")
@@ -221,3 +253,237 @@ def get_gpu_memory_mb() -> Optional[int]:
         return int(float(first))
     except ValueError:
         return None
+
+
+def _run_nvidia_smi_query(fields: str) -> Optional[str]:
+    try:
+        result = subprocess.run(
+            ["nvidia-smi", f"--query-gpu={fields}", "--format=csv,noheader,nounits"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except FileNotFoundError:
+        return None
+    output = result.stdout.strip()
+    return output or None
+
+
+def get_gpu_utilization_sample() -> Optional[Dict[str, float]]:
+    output = _run_nvidia_smi_query("utilization.gpu,memory.used,memory.total")
+    if not output:
+        return None
+    first = output.splitlines()[0]
+    parts = [p.strip() for p in first.split(",")]
+    if len(parts) < 3:
+        return None
+    try:
+        return {
+            "utilization_pct": float(parts[0]),
+            "memory_used_mb": float(parts[1]),
+            "memory_total_mb": float(parts[2]),
+        }
+    except ValueError:
+        return None
+
+
+class GpuMonitor:
+    def __init__(self, interval_s: float = 0.5) -> None:
+        self.interval_s = interval_s
+        self.samples: list[Tuple[float, Dict[str, float]]] = []
+        self._stop = threading.Event()
+        self._thread: Optional[threading.Thread] = None
+
+    def start(self) -> None:
+        if self._thread is not None:
+            return
+        self._thread = threading.Thread(target=self._loop, daemon=True)
+        self._thread.start()
+
+    def _loop(self) -> None:
+        while not self._stop.is_set():
+            sample = get_gpu_utilization_sample()
+            if sample:
+                self.samples.append((time.time(), sample))
+            time.sleep(self.interval_s)
+
+    def stop(self) -> None:
+        self._stop.set()
+        if self._thread is not None:
+            self._thread.join(timeout=2.0)
+
+    def summary(self) -> Dict[str, Any]:
+        if not self.samples:
+            return {"samples": 0}
+        utilizations = [s[1]["utilization_pct"] for s in self.samples if "utilization_pct" in s[1]]
+        mem_used = [s[1]["memory_used_mb"] for s in self.samples if "memory_used_mb" in s[1]]
+        mem_total = [s[1]["memory_total_mb"] for s in self.samples if "memory_total_mb" in s[1]]
+        return {
+            "samples": len(self.samples),
+            "max_utilization_pct": max(utilizations) if utilizations else None,
+            "max_memory_used_mb": max(mem_used) if mem_used else None,
+            "memory_total_mb": max(mem_total) if mem_total else None,
+            "start_time": self.samples[0][0],
+            "end_time": self.samples[-1][0],
+        }
+
+
+def _backend_verdict(variant: Optional[str]) -> str:
+    if not variant:
+        return "unknown"
+    if "cuda" in variant:
+        return "cuda/optix"
+    if "llvm" in variant or "scalar" in variant:
+        return "cpu/llvm"
+    return "unknown"
+
+
+def gpu_smoke_test(prefer_gpu: bool = True, forced_variant: str = "auto") -> Dict[str, Any]:
+    result: Dict[str, Any] = {
+        "prefer_gpu": prefer_gpu,
+        "forced_variant": forced_variant,
+    }
+    result["wsl_cuda_path"] = ensure_wsl_cuda_driver_path()
+    try:
+        import mitsuba as mi
+    except Exception as exc:
+        result["error"] = f"mitsuba import failed: {exc}"
+        return result
+
+    variants = list(mi.variants())
+    result["available_variants"] = variants
+    selected = None
+    if prefer_gpu and "cuda_ad_rgb" in variants and forced_variant == "auto":
+        try:
+            mi.set_variant("cuda_ad_rgb")
+            selected = mi.variant()
+        except Exception as exc:
+            result["variant_error"] = str(exc)
+    if selected is None:
+        try:
+            selected = select_mitsuba_variant(prefer_gpu=False, forced_variant=forced_variant)
+        except Exception as exc:
+            result["error"] = f"mitsuba variant selection failed: {exc}"
+            return result
+    result["selected_variant"] = selected
+    result["backend"] = _backend_verdict(selected)
+
+    try:
+        import numpy as np
+        import sionna.rt as rt  # pylint: disable=import-error
+    except Exception as exc:
+        result["error"] = f"sionna-rt import failed: {exc}"
+        return result
+
+    try:
+        scene = rt.load_scene()
+        scene.tx_array = rt.PlanarArray(num_rows=1, num_cols=1, pattern="iso", polarization="V")
+        scene.rx_array = rt.PlanarArray(num_rows=1, num_cols=1, pattern="iso", polarization="V")
+        scene.add(rt.Transmitter(name="tx", position=np.array([0.0, 0.0, 3.0])))
+        scene.add(rt.Receiver(name="rx", position=np.array([10.0, 0.0, 1.5])))
+        solver = rt.PathSolver()
+        t0 = time.time()
+        paths = solver(
+            scene,
+            max_depth=1,
+            samples_per_src=512,
+            max_num_paths_per_src=512,
+            los=True,
+            specular_reflection=False,
+            diffuse_reflection=False,
+            refraction=False,
+            diffraction=False,
+        )
+        result["duration_s"] = time.time() - t0
+        try:
+            valid = paths.valid
+            result["valid_paths"] = int(valid.numpy().sum())
+        except Exception:
+            result["valid_paths"] = None
+        result["ok"] = True
+    except Exception as exc:
+        result["error"] = f"smoke test failed: {exc}"
+    return result
+
+
+def diagnose_environment(
+    prefer_gpu: bool = True,
+    forced_variant: str = "auto",
+    tensorflow_mode: str = "auto",
+    run_smoke: bool = True,
+) -> Dict[str, Any]:
+    info = collect_environment_info()
+    info["diagnose"] = {}
+
+    rt_diag: Dict[str, Any] = {}
+    rt_diag["wsl_cuda_path"] = ensure_wsl_cuda_driver_path()
+    try:
+        import mitsuba as mi
+        variants = list(mi.variants())
+        rt_diag["mitsuba_variants"] = variants
+        selected = None
+        if prefer_gpu and "cuda_ad_rgb" in variants and forced_variant == "auto":
+            try:
+                mi.set_variant("cuda_ad_rgb")
+                selected = mi.variant()
+            except Exception as exc:
+                rt_diag["variant_error"] = str(exc)
+        if selected is None:
+            try:
+                selected = select_mitsuba_variant(prefer_gpu=False, forced_variant=forced_variant)
+            except Exception as exc:
+                rt_diag["variant_error"] = str(exc)
+                selected = None
+        rt_diag["selected_variant"] = selected
+        rt_diag["backend"] = _backend_verdict(selected)
+    except Exception as exc:
+        rt_diag["mitsuba_error"] = str(exc)
+
+    if tensorflow_mode != "skip":
+        tf_info = configure_tensorflow_memory_growth(mode=tensorflow_mode)
+        rt_diag["tensorflow"] = tf_info
+
+    if run_smoke:
+        rt_diag["gpu_smoke_test"] = gpu_smoke_test(prefer_gpu=prefer_gpu, forced_variant=forced_variant)
+
+    verdict = "unknown"
+    actions = []
+    if rt_diag.get("backend") == "cuda/optix":
+        verdict = "✅ RT backend is CUDA/OptiX"
+    elif rt_diag.get("backend") == "cpu/llvm":
+        verdict = "⚠️ RT backend is CPU/LLVM"
+        actions = [
+            "Verify NVIDIA driver + CUDA runtime (nvidia-smi must work).",
+            "Ensure Mitsuba CUDA variants are available and selectable.",
+            "Re-run `python -m app diagnose` after fixing CUDA availability.",
+        ]
+        wsl_info = rt_diag.get("wsl_cuda_path") or {}
+        if wsl_info.get("note"):
+            actions.insert(0, "Set `LD_LIBRARY_PATH=/usr/lib/wsl/lib:$LD_LIBRARY_PATH` before launching Python on WSL.")
+    smoke_err = (rt_diag.get("gpu_smoke_test") or {}).get("error", "")
+    if smoke_err and "OptiX" in smoke_err:
+        actions.insert(0, "OptiX init failed; update NVIDIA driver to a supported range (Dr.Jit/Mitsuba may reject CUDA 12.7 drivers).")
+
+    info["diagnose"].update(
+        {
+            "runtime": rt_diag,
+            "verdict": verdict,
+            "actions": actions,
+        }
+    )
+    return info
+
+
+def print_diagnose_info(
+    prefer_gpu: bool = True,
+    forced_variant: str = "auto",
+    tensorflow_mode: str = "auto",
+    run_smoke: bool = True,
+) -> None:
+    info = diagnose_environment(
+        prefer_gpu=prefer_gpu,
+        forced_variant=forced_variant,
+        tensorflow_mode=tensorflow_mode,
+        run_smoke=run_smoke,
+    )
+    print(json.dumps(info, indent=2))

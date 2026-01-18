@@ -94,6 +94,32 @@ docker run --rm -it --gpus all -v "$PWD":/workspace -w /workspace python:3.10-sl
 Makefile shortcuts:
 - `make diagnose`, `make run`, `make plot`, `make dashboard`, `make sim`
 
+## GPU Diagnostics
+Use `diagnose` to confirm the RT backend and run a small smoke test:
+```bash
+python -m app diagnose
+```
+Look for:
+- `diagnose.runtime.selected_variant` containing `cuda`
+- `diagnose.verdict` showing `RT backend is CUDA/OptiX`
+- `diagnose.runtime.gpu_smoke_test` timing + backend
+
+WSL note (important):
+- Ensure the WSL CUDA shim is first in `LD_LIBRARY_PATH` before launching Python:
+  ```bash
+  export LD_LIBRARY_PATH=/usr/lib/wsl/lib:$LD_LIBRARY_PATH
+  python -m app diagnose
+  ```
+- If OptiX init fails, update the NVIDIA driver to a supported range (see `docs/TROUBLESHOOTING.md`).
+
+## GPU Benchmark (High Compute)
+Run the repeatable benchmark preset:
+```bash
+python -m app run --config configs/benchmark_gpu.yaml
+```
+This runs two radio maps (256x256 then 512x512) with batching and writes GPU usage samples
+into `summary.json` under `runtime.gpu_monitor`.
+
 UI smoke test (requires Playwright):
 ```bash
 python tests/test_ui_smoke.py
@@ -102,6 +128,7 @@ python tests/test_ui_smoke.py
 ## Outputs
 Each run saves to `outputs/<timestamp>/`:
 - `config.yaml` (snapshot)
+- `run.log` (timestamped runtime log)
 - `progress.json` (live progress for UI polling)
 - `summary.json` (metrics + environment + versions)
 - `data/radio_map.npz` (path gain + derived metrics + cell centers)
@@ -145,6 +172,7 @@ Viewer artifact format (`outputs/<run_id>/viewer/`):
 - `configs/preview.yaml` (CPU-friendly)
 - `configs/default.yaml` (preview-safe default)
 - `configs/high.yaml` (GPU-friendly)
+- `configs/benchmark_gpu.yaml` (GPU stress benchmark: 256/512 radio maps)
 - `configs/procedural.yaml` (street-canyon procedural scene)
 
 Scene sources:
@@ -171,10 +199,24 @@ ris:
 ## Project Notes
 For operational notes, known quirks, and handoff context, see `PROJECT_CONTEXT.md`.
 Performance trace notes for the simulator viewer: `docs/perf.md`.
+GPU troubleshooting and backend checks: `docs/TROUBLESHOOTING.md`.
+
+## Digital Twin Roadmap
+Current:
+- Sionna RT scenes + configs + per-run outputs for repeatable studies
+- Procedural street-canyon scene for realism baselines
+
+Next:
+- Structured scene ingestion for repeatable scenario packs (no GIS ingestion yet)
+- Consistent asset naming + metadata for multi-run comparisons
+
+Future:
+- RIS panel integration behind `ris.enabled`
+- Optimization loops and experiment sweeps for RIS placement/control
 
 ## Current Status (WIP)
-- Heatmap alignment is still incorrect for rotated scenes; needs rotation/transform fix.
-- Simulator UI is clunky and missing features, but progress is steady.
+- Heatmap alignment fixed for rotated scenes; validation ongoing on larger meshes.
+- Simulator UI is still evolving, but progress is steady.
 
 ## Future RIS Extension (Not Implemented)
 - Add a SceneObjectSpec implementation for RIS panels.
@@ -182,16 +224,18 @@ Performance trace notes for the simulator viewer: `docs/perf.md`.
 
 ## Documentation References (URLs + Versions)
 Sionna / Sionna RT:
+- Sionna RT install guide (Context7, main README): https://github.com/nvlabs/sionna-rt/blob/main/README.md
 - Sionna RT Scene API (Context7, main docs): https://github.com/nvlabs/sionna-rt/blob/main/doc/source/api/scene.rst
 - Sionna RT PathSolver API (Context7, main docs): https://github.com/nvlabs/sionna-rt/blob/main/doc/source/api/paths_solvers.rst
 - Sionna RT Paths API (Context7, main docs): https://github.com/nvlabs/sionna-rt/blob/main/doc/source/api/paths.rst
 - Sionna RT RadioMapSolver API (Context7, main docs): https://github.com/nvlabs/sionna-rt/blob/main/doc/source/api/radio_map_solvers.rst
 - Sionna RT Radio Maps API (Context7, main docs): https://github.com/nvlabs/sionna-rt/blob/main/doc/source/api/radio_maps.rst
 - Sionna RT SceneObject API (Context7, main docs): https://github.com/nvlabs/sionna-rt/blob/main/doc/source/api/scene_object.rst
+- Sionna RT compatibility + Mitsuba variants (Context7): https://nvlabs.github.io/sionna/rt/developer/dev_compat_frameworks
 
 Mitsuba / Dr.Jit:
 - Mitsuba 3 scene format (Context7): https://github.com/mitsuba-renderer/mitsuba3/blob/master/docs/src/key_topics/scene_format.rst
-- Mitsuba 3 variants (Context7): https://github.com/mitsuba-renderer/mitsuba3/blob/master/docs/src/key_topics/variants.rst
+- Mitsuba 3 variants (Context7): https://mitsuba.readthedocs.io/en/stable/src/key_topics/variants.html#choosing-variants
 - Dr.Jit docs (Context7): https://github.com/mitsuba-renderer/drjit/blob/master/docs/what.rst
 
 TensorFlow:

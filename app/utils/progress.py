@@ -1,12 +1,18 @@
 from contextlib import contextmanager
 
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeElapsedColumn
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeElapsedColumn, TimeRemainingColumn
 
 
 @contextmanager
 def progress_steps(label: str, total_steps: int):
     """Simple stage-based progress with clear step labels."""
-    columns = [SpinnerColumn(), TextColumn("{task.description}"), BarColumn(), TimeElapsedColumn()]
+    columns = [
+        SpinnerColumn(),
+        TextColumn("{task.description}"),
+        BarColumn(),
+        TimeElapsedColumn(),
+        TimeRemainingColumn(),
+    ]
     with Progress(*columns, transient=False) as progress:
         task_id = progress.add_task(label, total=total_steps)
         yield progress, task_id

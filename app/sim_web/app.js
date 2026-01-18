@@ -1026,6 +1026,9 @@ async function submitJob(kind) {
     preset: ui.qualityPreset.value,
     base_config: ui.baseConfig.value,
   };
+  if (kind === "benchmark") {
+    payload.preset = "benchmark";
+  }
   const radio = {};
   radio.enabled = ui.radioMapEnabled.checked;
   radio.auto_size = ui.radioMapAuto.checked;
