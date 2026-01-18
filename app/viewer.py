@@ -1,13 +1,14 @@
 from __future__ import annotations
 
+import csv
 import json
 import shutil
-import urllib.request
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import numpy as np
 
+from .web_assets import ensure_three_vendor
 
 def _load_ray_segments(ray_csv: Path) -> List[List[float]]:
     if not ray_csv.exists():
@@ -23,6 +24,20 @@ def _load_ray_segments(ray_csv: Path) -> List[List[float]]:
 def _load_path_metrics(paths_csv: Path) -> Dict[str, Any]:
     if not paths_csv.exists():
         return {}
+    with paths_csv.open("r", encoding="utf-8", newline="") as f:
+        reader = csv.DictReader(f)
+        rows = list(reader)
+    if not rows:
+        return {}
+
+    # Support both legacy and extended formats.
+    if "power_linear" in rows[0] and "delay_s" in rows[0]:
+        return {
+            "path_id": [int(r.get("path_id", 0)) for r in rows],
+            "delay_s": [float(r.get("delay_s", 0.0)) for r in rows],
+            "power_linear": [float(r.get("power_linear", 0.0)) for r in rows],
+        }
+
     data = np.loadtxt(paths_csv, delimiter=",", skiprows=1)
     if data.size == 0:
         return {}
@@ -37,6 +52,45 @@ def _load_path_metrics(paths_csv: Path) -> Dict[str, Any]:
     }
 
 
+def _load_path_table(paths_csv: Path) -> List[Dict[str, Any]]:
+    if not paths_csv.exists():
+        return []
+    with paths_csv.open("r", encoding="utf-8", newline="") as f:
+        reader = csv.DictReader(f)
+        rows = list(reader)
+    if not rows:
+        return []
+    if "order" not in rows[0]:
+        return []
+    table = []
+    for row in rows:
+        interactions = row.get("interactions", "")
+        table.append(
+            {
+                "path_id": int(row.get("path_id", 0)),
+                "order": int(row.get("order", 0)),
+                "type": row.get("type", "unknown"),
+                "path_length_m": float(row.get("path_length_m", 0.0)),
+                "delay_s": float(row.get("delay_s", 0.0)),
+                "power_linear": float(row.get("power_linear", 0.0)),
+                "power_db": float(row.get("power_db", 0.0)),
+                "interactions": [s for s in interactions.split(";") if s],
+            }
+        )
+    return table
+
+
+def _segments_to_polylines(segments: List[List[float]]) -> Dict[int, List[List[float]]]:
+    polylines: Dict[int, List[List[float]]] = {}
+    for row in segments:
+        path_id = int(row[0])
+        x0, y0, z0, x1, y1, z1 = row[1:]
+        if path_id not in polylines:
+            polylines[path_id] = [[x0, y0, z0]]
+        polylines[path_id].append([x1, y1, z1])
+    return polylines
+
+
 def _default_proxy() -> Dict[str, Any]:
     return {
         "ground": {"size": [200.0, 200.0], "elevation": 0.0},
@@ -48,43 +102,7 @@ def _default_proxy() -> Dict[str, Any]:
 
 
 def _ensure_vendor(viewer_dir: Path) -> None:
-    vendor_dir = viewer_dir / "vendor"
-    vendor_dir.mkdir(parents=True, exist_ok=True)
-    assets = {
-        "three.module.js": "https://unpkg.com/three@0.161.0/build/three.module.js",
-        "OrbitControls.js": "https://unpkg.com/three@0.161.0/examples/jsm/controls/OrbitControls.js",
-        "GLTFLoader.js": "https://unpkg.com/three@0.161.0/examples/jsm/loaders/GLTFLoader.js",
-        "OBJLoader.js": "https://unpkg.com/three@0.161.0/examples/jsm/loaders/OBJLoader.js",
-        "BufferGeometryUtils.js": "https://unpkg.com/three@0.161.0/examples/jsm/utils/BufferGeometryUtils.js",
-        "PLYLoader.js": "https://unpkg.com/three@0.161.0/examples/jsm/loaders/PLYLoader.js",
-    }
-    for name, url in assets.items():
-        path = vendor_dir / name
-        if path.exists():
-            continue
-        with urllib.request.urlopen(url, timeout=30) as resp:
-            content = resp.read()
-        # Rewrite module specifiers to local three.module.js for offline use.
-        if name != "three.module.js":
-            text = content.decode("utf-8")
-            text = text.replace("from 'three';", "from './three.module.js';")
-            text = text.replace('from \"three\";', 'from \"./three.module.js\";')
-            text = text.replace("from 'three'", "from './three.module.js'")
-            text = text.replace('from \"three\"', 'from \"./three.module.js\"')
-            text = text.replace(
-                "three/examples/jsm/utils/BufferGeometryUtils.js",
-                "./BufferGeometryUtils.js",
-            )
-            text = text.replace(
-                "three/addons/utils/BufferGeometryUtils.js",
-                "./BufferGeometryUtils.js",
-            )
-            text = text.replace(
-                "three/examples/jsm/loaders/PLYLoader.js",
-                "./PLYLoader.js",
-            )
-            content = text.encode("utf-8")
-        path.write_bytes(content)
+    ensure_three_vendor(viewer_dir)
 
 
 def generate_viewer(output_dir: Path, config: Dict[str, Any]) -> Optional[Path]:
@@ -97,6 +115,7 @@ def generate_viewer(output_dir: Path, config: Dict[str, Any]) -> Optional[Path]:
 
     paths_csv = output_dir / "data" / "paths.csv"
     path_metrics = _load_path_metrics(paths_csv)
+    path_table = _load_path_table(paths_csv)
 
     scene_cfg = config.get("scene", {})
     tx = scene_cfg.get("tx", {}).get("position", [0.0, 0.0, 0.0])
@@ -149,6 +168,68 @@ def generate_viewer(output_dir: Path, config: Dict[str, Any]) -> Optional[Path]:
         "proxy": proxy,
         "overlays": overlays,
     }
+
+    polylines = _segments_to_polylines(segments)
+    path_rows = []
+    by_id = {row["path_id"]: row for row in path_table}
+    for path_id, points in polylines.items():
+        meta = by_id.get(path_id, {})
+        path_rows.append(
+            {
+                "path_id": path_id,
+                "points": points,
+                "order": meta.get("order", 0),
+                "type": meta.get("type", "unknown"),
+                "path_length_m": meta.get("path_length_m"),
+                "delay_s": meta.get("delay_s"),
+                "power_db": meta.get("power_db"),
+                "power_linear": meta.get("power_linear"),
+                "interactions": meta.get("interactions", []),
+            }
+        )
+
+    markers = {"tx": tx, "rx": rx}
+    (viewer_dir / "markers.json").write_text(json.dumps(markers, indent=2), encoding="utf-8")
+    (viewer_dir / "paths.json").write_text(json.dumps(path_rows, indent=2), encoding="utf-8")
+
+    scene_manifest = {
+        "mesh": mesh_dst.name if mesh_dst else None,
+        "mesh_files": mesh_files,
+        "proxy": proxy,
+    }
+    (viewer_dir / "scene_manifest.json").write_text(
+        json.dumps(scene_manifest, indent=2), encoding="utf-8"
+    )
+
+    heatmap_src = output_dir / "data" / "radio_map.npz"
+    if heatmap_src.exists():
+        try:
+            with np.load(heatmap_src) as hm:
+                rx_power_dbm = hm.get("rx_power_dbm")
+                path_gain_db = hm.get("path_gain_db")
+                cell_centers = hm.get("cell_centers")
+            metric_name = "rx_power_dbm" if rx_power_dbm is not None else "path_gain_db"
+            values = rx_power_dbm if rx_power_dbm is not None else path_gain_db
+            if values is not None and cell_centers is not None:
+                radio_cfg = config.get("radio_map", {})
+                heatmap = {
+                    "metric": metric_name,
+                    "grid_shape": list(values.shape[1:]),
+                    "values": values[0].tolist(),
+                    "cell_centers": cell_centers.tolist(),
+                    "center": radio_cfg.get("center"),
+                    "size": radio_cfg.get("size"),
+                    "cell_size": radio_cfg.get("cell_size"),
+                    "orientation": radio_cfg.get("orientation"),
+                }
+                (viewer_dir / "heatmap.json").write_text(
+                    json.dumps(heatmap, indent=2), encoding="utf-8"
+                )
+                heatmap_dst = viewer_dir / "heatmap.npz"
+                if heatmap_dst.resolve() != heatmap_src.resolve():
+                    shutil.copyfile(heatmap_src, heatmap_dst)
+        except Exception:
+            pass
 
     html = build_viewer_html(data)
     html_path = viewer_dir / "index.html"

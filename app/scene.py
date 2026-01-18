@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
+import json
 import re
 import shutil
 from pathlib import Path
@@ -18,6 +20,178 @@ class SceneObjectSpec:
     metadata: Optional[Dict[str, Any]] = None
 
 
+MATERIAL_LIBRARY = {
+    "concrete": {"itu_type": "concrete", "thickness": 0.2},
+    "glass": {"itu_type": "glass", "thickness": 0.01},
+    "metal": {"itu_type": "metal", "thickness": 0.005},
+    "wood": {"itu_type": "wood", "thickness": 0.05},
+}
+
+
+def _hash_scene_config(cfg: Dict[str, Any]) -> str:
+    payload = json.dumps(cfg, sort_keys=True).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()[:12]
+
+
+def _procedural_defaults() -> Dict[str, Any]:
+    return {
+        "ground": {"size": [160.0, 160.0], "elevation": 0.0, "material": "concrete"},
+        "boxes": [
+            {"center": [25.0, 40.0, 6.0], "size": [18.0, 18.0, 12.0], "material": "concrete"},
+            {"center": [-20.0, 15.0, 4.5], "size": [10.0, 14.0, 9.0], "material": "glass"},
+        ],
+    }
+
+
+def _street_canyon_spec(cfg: Dict[str, Any]) -> Dict[str, Any]:
+    width = float(cfg.get("width", 20.0))
+    length = float(cfg.get("length", 120.0))
+    height = float(cfg.get("height", 20.0))
+    step = float(cfg.get("step", 20.0))
+    material = cfg.get("material", "concrete")
+
+    boxes = []
+    offset = width / 2.0 + 5.0
+    z = height / 2.0
+    x_positions = list(range(int(-length / 2), int(length / 2 + 1), int(step)))
+    for x in x_positions:
+        boxes.append({"center": [x, offset, z], "size": [step * 0.8, 12.0, height], "material": material})
+        boxes.append({"center": [x, -offset, z], "size": [step * 0.8, 12.0, height], "material": material})
+    return {
+        "ground": {"size": [length + 40.0, width + 40.0], "elevation": 0.0, "material": "concrete"},
+        "boxes": boxes,
+    }
+
+
+def _build_procedural_spec(scene_cfg: Dict[str, Any]) -> Dict[str, Any]:
+    proc_cfg = scene_cfg.get("procedural", {}) if isinstance(scene_cfg, dict) else {}
+    preset = proc_cfg.get("preset")
+    if preset == "street_canyon":
+        spec = _street_canyon_spec(proc_cfg.get("street_canyon", {}))
+    else:
+        spec = _procedural_defaults()
+    if "ground" in proc_cfg:
+        spec["ground"].update(proc_cfg.get("ground", {}))
+    if "boxes" in proc_cfg:
+        spec["boxes"] = proc_cfg.get("boxes", [])
+    return spec
+
+
+def _write_procedural_scene_xml(path: Path, spec: Dict[str, Any]) -> None:
+    ground = spec.get("ground", {})
+    ground_size = ground.get("size", [160.0, 160.0])
+    ground_elev = ground.get("elevation", 0.0)
+    shapes = []
+    shapes.append(
+        f"""
+  <shape type=\"rectangle\" id=\"ground\">
+    <transform name=\"to_world\">
+      <scale x=\"{ground_size[0]}\" y=\"{ground_size[1]}\" z=\"1\"/>
+      <rotate x=\"1\" angle=\"-90\"/>
+      <translate x=\"0\" y=\"0\" z=\"{ground_elev}\"/>
+    </transform>
+    <bsdf type=\"diffuse\">
+      <rgb name=\"reflectance\" value=\"0.55, 0.55, 0.55\"/>
+    </bsdf>
+  </shape>
+"""
+    )
+    for idx, box in enumerate(spec.get("boxes", [])):
+        size = box.get("size", [10.0, 10.0, 10.0])
+        center = box.get("center", [0.0, 0.0, size[2] / 2.0])
+        shapes.append(
+            f"""
+  <shape type=\"cube\" id=\"box-{idx}\">
+    <transform name=\"to_world\">
+      <scale x=\"{size[0]}\" y=\"{size[1]}\" z=\"{size[2]}\"/>
+      <translate x=\"{center[0]}\" y=\"{center[1]}\" z=\"{center[2]}\"/>
+    </transform>
+    <bsdf type=\"diffuse\">
+      <rgb name=\"reflectance\" value=\"0.62, 0.62, 0.65\"/>
+    </bsdf>
+  </shape>
+"""
+        )
+    xml = (
+        "<scene version=\"3.0.0\">\n"
+        "  <integrator type=\"path\"/>\n"
+        + "".join(shapes)
+        + "\n</scene>\n"
+    )
+    path.write_text(xml, encoding="utf-8")
+
+
+def _apply_materials(scene, spec: Dict[str, Any]) -> None:
+    try:
+        from sionna.rt.radio_materials import ITURadioMaterial  # pylint: disable=import-error
+    except Exception:
+        return
+
+    material_cache = {}
+
+    def _get_material(name: str):
+        if name in material_cache:
+            return material_cache[name]
+        props = MATERIAL_LIBRARY.get(name, MATERIAL_LIBRARY["concrete"])
+        mat = ITURadioMaterial(name=f"itu-{name}", itu_type=props["itu_type"], thickness=props["thickness"])
+        material_cache[name] = mat
+        return mat
+
+    ground = spec.get("ground", {})
+    ground_mat = ground.get("material", "concrete")
+    try:
+        obj = scene.get("ground")
+        obj.radio_material = _get_material(ground_mat)
+    except Exception:
+        pass
+
+    for idx, box in enumerate(spec.get("boxes", [])):
+        mat_name = box.get("material", "concrete")
+        try:
+            obj = scene.get(f"box-{idx}")
+            obj.radio_material = _get_material(mat_name)
+        except Exception:
+            continue
+
+
+def _build_builtin_scene(rt, scene_cfg: Dict[str, Any]):
+    builtin = scene_cfg.get("builtin", "etoile")
+    try:
+        scene_ref = getattr(rt.scene, builtin)
+    except AttributeError as exc:
+        raise ValueError(f"Unknown builtin scene '{builtin}'") from exc
+    return rt.load_scene(scene_ref)
+
+
+def _build_file_scene(rt, scene_cfg: Dict[str, Any]):
+    filename = scene_cfg.get("file")
+    if not filename:
+        raise ValueError("scene.file must be set when scene.type is 'file'")
+    return rt.load_scene(filename)
+
+
+def _build_procedural_scene(rt, scene_cfg: Dict[str, Any], cfg: Dict[str, Any]):
+    spec = _build_procedural_spec(scene_cfg)
+    cache_root = Path(cfg.get("output", {}).get("base_dir", "outputs")) / "_cache" / "procedural"
+    cache_root.mkdir(parents=True, exist_ok=True)
+    scene_id = _hash_scene_config(spec)
+    xml_path = cache_root / f"scene_{scene_id}.xml"
+    if not xml_path.exists():
+        _write_procedural_scene_xml(xml_path, spec)
+    scene = rt.load_scene(str(xml_path))
+    _apply_materials(scene, spec)
+    scene_cfg.setdefault("proxy", spec)
+    scene_cfg.setdefault("proxy_enabled", True)
+    return scene
+
+
+SCENE_BUILDERS = {
+    "builtin": _build_builtin_scene,
+    "file": _build_file_scene,
+    "procedural": _build_procedural_scene,
+}
+
+
 def build_scene(cfg: Dict[str, Any]):
     import numpy as np
     from .utils.system import disable_pythreejs_import
@@ -27,21 +201,13 @@ def build_scene(cfg: Dict[str, Any]):
 
     scene_cfg = cfg.get("scene", {})
     scene_type = scene_cfg.get("type", "builtin")
-
-    if scene_type == "builtin":
-        builtin = scene_cfg.get("builtin", "etoile")
-        try:
-            scene_ref = getattr(rt.scene, builtin)
-        except AttributeError as exc:
-            raise ValueError(f"Unknown builtin scene '{builtin}'") from exc
-        scene = rt.load_scene(scene_ref)
-    elif scene_type == "file":
-        filename = scene_cfg.get("file")
-        if not filename:
-            raise ValueError("scene.file must be set when scene.type is 'file'")
-        scene = rt.load_scene(filename)
-    else:
+    builder = SCENE_BUILDERS.get(scene_type)
+    if not builder:
         raise ValueError(f"Unsupported scene.type '{scene_type}'")
+    if scene_type == "procedural":
+        scene = builder(rt, scene_cfg, cfg)
+    else:
+        scene = builder(rt, scene_cfg)
 
     # Frequency setup
     sim_cfg = cfg.get("simulation", {})
@@ -129,3 +295,17 @@ def export_scene_meshes(scene, output_dir: Path, scene_id: str, cache_root: Opti
         dst = mesh_dir / src.name
         if src.resolve() != dst.resolve():
             shutil.copyfile(src, dst)
+
+
+def scene_sanity_report(scene, cfg: Dict[str, Any]) -> Dict[str, Any]:
+    report: Dict[str, Any] = {"units": "meters", "axis": "x,y horizontal; z up"}
+    scene_cfg = cfg.get("scene", {})
+    report["tx_height_m"] = float(scene_cfg.get("tx", {}).get("position", [0, 0, 0])[2])
+    report["rx_height_m"] = float(scene_cfg.get("rx", {}).get("position", [0, 0, 0])[2])
+    try:
+        bbox = scene.mi_scene.bbox()
+        report["bbox_min"] = [float(bbox.min.x), float(bbox.min.y), float(bbox.min.z)]
+        report["bbox_max"] = [float(bbox.max.x), float(bbox.max.y), float(bbox.max.z)]
+    except Exception:
+        report["bbox_error"] = "bbox unavailable"
+    return report

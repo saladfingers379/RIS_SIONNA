@@ -44,6 +44,10 @@ def _parse_args() -> argparse.Namespace:
 
     subparsers.add_parser("diagnose", help="Print environment diagnostics")
     subparsers.add_parser("dashboard", help="Launch the visualization dashboard")
+    sim_p = subparsers.add_parser("sim", help="Launch the Omniverse-lite simulator")
+    sim_p.add_argument("--host", default="127.0.0.1", help="Host to bind the simulator")
+    sim_p.add_argument("--port", type=int, default=8765, help="Port for the simulator UI")
+    sim_p.add_argument("--no-browser", action="store_true", help="Do not open the browser automatically")
 
     return parser.parse_args()
 
@@ -115,6 +119,14 @@ def main() -> None:
             check=True,
             env=env,
         )
+        return
+
+    if args.command == "sim":
+        from .sim_server import serve_simulator
+        if not args.no_browser:
+            import webbrowser
+            webbrowser.open(f"http://{args.host}:{args.port}")
+        serve_simulator(host=args.host, port=int(args.port))
         return
 
 

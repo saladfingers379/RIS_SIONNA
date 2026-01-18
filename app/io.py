@@ -7,9 +7,13 @@ import yaml
 import numpy as np
 
 
-def create_output_dir(base_dir: str) -> Path:
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    root = Path(base_dir) / timestamp
+def generate_run_id() -> str:
+    return datetime.now().strftime("%Y%m%d_%H%M%S")
+
+
+def create_output_dir(base_dir: str, run_id: Optional[str] = None) -> Path:
+    run_id = run_id or generate_run_id()
+    root = Path(base_dir) / run_id
     (root / "plots").mkdir(parents=True, exist_ok=True)
     (root / "data").mkdir(parents=True, exist_ok=True)
     return root
@@ -19,7 +23,7 @@ def find_latest_output_dir(base_dir: str) -> Optional[Path]:
     root = Path(base_dir)
     if not root.exists():
         return None
-    candidates = [p for p in root.iterdir() if p.is_dir()]
+    candidates = [p for p in root.iterdir() if p.is_dir() and not p.name.startswith("_")]
     if not candidates:
         return None
     return sorted(candidates)[-1]

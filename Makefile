@@ -1,4 +1,4 @@
-.PHONY: run diagnose plot dashboard
+.PHONY: run diagnose plot dashboard sim
 
 run:
 	python -m app run --config configs/default.yaml
@@ -11,3 +11,6 @@ plot:
 
 dashboard:
 	python -m app dashboard
+
+sim:
+	python -m app sim

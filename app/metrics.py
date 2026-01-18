@@ -89,3 +89,91 @@ def extract_path_data(paths) -> Dict[str, Any]:
         "weights": weights,
         "metrics": metrics,
     }
+
+
+def _interaction_type_map() -> Dict[int, str]:
+    try:
+        from sionna.rt import InteractionType  # pylint: disable=import-error
+    except Exception:
+        return {}
+
+    mapping: Dict[int, str] = {}
+    for name in dir(InteractionType):
+        if not name.isupper():
+            continue
+        value = getattr(InteractionType, name)
+        try:
+            mapping[int(value)] = name.lower()
+        except Exception:
+            continue
+    return mapping
+
+
+def build_paths_table(paths, tx_power_dbm: float) -> Dict[str, Any]:
+    """Create a table-friendly view of path geometry and power."""
+    a_real, a_imag = paths.a
+    a = _to_numpy(a_real) + 1j * _to_numpy(a_imag)
+    power = np.abs(a) ** 2
+    path_power = power.sum(axis=(1, 3))  # [num_rx, num_tx, num_paths]
+
+    valid = _to_numpy(paths.valid).astype(bool)
+    tau = _to_numpy(paths.tau)
+    verts = _to_numpy(paths.vertices)
+    interactions = _to_numpy(paths.interactions)
+
+    try:
+        src = _to_numpy(paths.sources).reshape(3)
+        tgt = _to_numpy(paths.targets).reshape(3)
+    except Exception:
+        src = None
+        tgt = None
+
+    type_map = _interaction_type_map()
+    rows = []
+    num_paths = valid.shape[-1]
+    num_vertices = verts.shape[0]
+    for p in range(num_paths):
+        if not valid[0, 0, p]:
+            continue
+        pts = []
+        if src is not None:
+            pts.append(src)
+        inter = interactions[:, 0, 0, p]
+        v = verts[:, 0, 0, p, :]
+        interaction_names = []
+        for i in range(num_vertices):
+            if inter[i] != 0:
+                pts.append(v[i])
+                interaction_names.append(type_map.get(int(inter[i]), f"interaction_{int(inter[i])}"))
+        if tgt is not None:
+            pts.append(tgt)
+
+        order = int(np.sum(inter != 0))
+        path_type = "LOS" if order == 0 else "+".join(sorted(set(interaction_names))) or "NLOS"
+
+        length_m = 0.0
+        if len(pts) >= 2:
+            for i in range(len(pts) - 1):
+                length_m += float(np.linalg.norm(np.asarray(pts[i + 1]) - np.asarray(pts[i])))
+
+        power_linear = float(path_power[0, 0, p])
+        power_db = 10.0 * np.log10(power_linear + 1e-12)
+        delay_s = float(tau[0, 0, p])
+
+        rows.append(
+            {
+                "path_id": int(p),
+                "order": order,
+                "type": path_type,
+                "path_length_m": length_m,
+                "delay_s": delay_s,
+                "power_linear": power_linear,
+                "power_db": power_db,
+                "interactions": interaction_names,
+            }
+        )
+
+    return {
+        "rows": rows,
+        "tx_power_dbm": float(_to_numpy(tx_power_dbm).item()),
+    }

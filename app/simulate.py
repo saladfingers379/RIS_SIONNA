@@ -9,10 +9,10 @@ import numpy as np
 
 from .config import load_config
 from .io import create_output_dir, save_json, save_yaml
-from .metrics import compute_path_metrics, extract_path_data
+from .metrics import build_paths_table, compute_path_metrics, extract_path_data
 from .plots import plot_radio_map, plot_histogram, plot_rays_3d
 from .viewer import generate_viewer
-from .scene import build_scene, export_scene_meshes
+from .scene import build_scene, export_scene_meshes, scene_sanity_report
 from .utils.progress import progress_steps
 from .utils.system import (
     configure_tensorflow_memory_growth,
@@ -33,7 +33,10 @@ def _to_numpy(x):
 
 def run_simulation(config_path: str) -> Path:
     cfg = load_config(config_path)
-    output_dir = create_output_dir(cfg.output.get("base_dir", "outputs"))
+    output_dir = create_output_dir(
+        cfg.output.get("base_dir", "outputs"),
+        run_id=cfg.output.get("run_id"),
+    )
     save_yaml(output_dir / "config.yaml", cfg.data)
 
     runtime_cfg = cfg.runtime
@@ -132,25 +135,37 @@ def run_simulation(config_path: str) -> Path:
         metrics = compute_path_metrics(paths, tx_power_dbm=tx_device.power_dbm)
         path_data = extract_path_data(paths)
         metrics.update(path_data.get("metrics", {}))
-        if path_data["delays_s"].size > 0:
-            aoa_az_deg = np.degrees(path_data["aoa_azimuth_rad"])
-            aoa_el_deg = np.degrees(path_data["aoa_elevation_rad"])
-            path_rows = np.column_stack(
-                [
-                    np.arange(path_data["delays_s"].size),
-                    path_data["delays_s"],
-                    path_data["weights"],
-                    aoa_az_deg,
-                    aoa_el_deg,
-                ]
-            )
-            np.savetxt(
-                output_dir / "data" / "paths.csv",
-                path_rows,
-                delimiter=",",
-                header="path_id,delay_s,power_linear,aoa_azimuth_deg,aoa_elevation_deg",
-                comments="",
-            )
+        path_table = build_paths_table(paths, tx_power_dbm=tx_device.power_dbm)
+        if path_table["rows"]:
+            import csv
+
+            with (output_dir / "data" / "paths.csv").open("w", encoding="utf-8", newline="") as f:
+                writer = csv.writer(f)
+                writer.writerow(
+                    [
+                        "path_id",
+                        "order",
+                        "type",
+                        "path_length_m",
+                        "delay_s",
+                        "power_linear",
+                        "power_db",
+                        "interactions",
+                    ]
+                )
+                for row in path_table["rows"]:
+                    writer.writerow(
+                        [
+                            row["path_id"],
+                            row["order"],
+                            row["type"],
+                            f"{row['path_length_m']:.6f}",
+                            f"{row['delay_s']:.9e}",
+                            f"{row['power_linear']:.6e}",
+                            f"{row['power_db']:.3f}",
+                            ";".join(row["interactions"]),
+                        ]
+                    )
 
         radio_map_cfg = cfg.radio_map
         radio_map = None
@@ -158,8 +173,20 @@ def run_simulation(config_path: str) -> Path:
             t0 = time.time()
             progress.update(task_id, description="Radio map")
             rm_solver = RadioMapSolver()
-            radio_map = rm_solver(
-                scene,
+            if radio_map_cfg.get("auto_size"):
+                try:
+                    bbox = scene.mi_scene.bbox()
+                    padding = float(radio_map_cfg.get("auto_padding", 0.0))
+                    size_x = float(bbox.max.x - bbox.min.x) + padding * 2
+                    size_y = float(bbox.max.y - bbox.min.y) + padding * 2
+                    center = radio_map_cfg.get("center") or [0.0, 0.0, 0.0]
+                    center_z = center[2] if isinstance(center, list) and len(center) > 2 else 0.0
+                    center = [float(bbox.min.x + bbox.max.x) * 0.5, float(bbox.min.y + bbox.max.y) * 0.5, center_z]
+                    radio_map_cfg["size"] = [size_x, size_y]
+                    radio_map_cfg["center"] = center
+                except Exception:
+                    pass
+            radio_map_kwargs = dict(
                 center=radio_map_cfg.get("center"),
                 orientation=radio_map_cfg.get("orientation", [0.0, 0.0, 0.0]),
                 size=radio_map_cfg.get("size"),
@@ -172,6 +199,13 @@ def run_simulation(config_path: str) -> Path:
                 refraction=bool(radio_map_cfg.get("refraction", True)),
                 diffraction=bool(radio_map_cfg.get("diffraction", False)),
             )
+            if radio_map_cfg.get("batch_size"):
+                radio_map_kwargs["batch_size"] = int(radio_map_cfg.get("batch_size"))
+            try:
+                radio_map = rm_solver(scene, **radio_map_kwargs)
+            except TypeError:
+                radio_map_kwargs.pop("batch_size", None)
+                radio_map = rm_solver(scene, **radio_map_kwargs)
             timings["radio_map_s"] = time.time() - t0
         else:
             progress.update(task_id, description="Radio map (skipped)")
@@ -315,6 +349,7 @@ def run_simulation(config_path: str) -> Path:
 
     summary = {
         "metrics": metrics,
+        "scene_sanity": scene_sanity_report(scene, cfg.data),
         "runtime": {
             "mitsuba_variant": variant,
             "tensorflow": tf_info,

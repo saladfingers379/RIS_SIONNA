@@ -11,6 +11,7 @@ The architecture keeps RIS hooks in the config and scene pipeline but **does not
 - Rich progress bars + timestamped logs
 - Outputs saved per run under `outputs/<timestamp>/`
 - Optional Streamlit dashboard (visualization only)
+- New Omniverse-lite simulator UI with interactive Tx/Rx placement + jobs
 
 ## Quick Start (macOS CPU)
 ```bash
@@ -50,6 +51,25 @@ Notes:
 - Dashboard is visualization-only; run simulations from the CLI.
 - If the 3D view is blank, click "Regenerate viewer now" in the sidebar.
 
+## Omniverse-lite Simulator (NEW)
+The simulator is a lightweight, always-responsive web UI that submits jobs in the background
+and visualizes saved outputs (no heavy compute in the UI process).
+
+```bash
+python -m app sim
+```
+
+What it does:
+- Load scene geometry + viewer artifacts from `outputs/<run_id>/viewer/`
+- Move Tx/Rx interactively (drag or numeric inputs)
+- Submit background jobs: quick trace, link trace, coverage map
+- Inspect path table and highlight rays
+- Toggle geometry / rays / heatmap layers
+- Export a snapshot (PNG)
+
+Why not FastAPI/Streamlit?
+- The simulator uses only the Python stdlib HTTP server for reliability and zero extra dependencies.
+
 ## Quick Start (WSL2 + Docker + RTX 4070 Ti)
 1) Install NVIDIA Container Toolkit and validate `--gpus all` works (see docs below).
 2) From the repo root:
@@ -68,9 +88,15 @@ docker run --rm -it --gpus all -v "$PWD":/workspace -w /workspace python:3.10-sl
 - `python -m app run --config configs/default.yaml`
 - `python -m app plot --latest`
 - `python -m app dashboard`
+- `python -m app sim`
 
 Makefile shortcuts:
-- `make diagnose`, `make run`, `make plot`, `make dashboard`
+- `make diagnose`, `make run`, `make plot`, `make dashboard`, `make sim`
+
+UI smoke test (requires Playwright):
+```bash
+python tests/test_ui_smoke.py
+```
 
 ## Outputs
 Each run saves to `outputs/<timestamp>/`:
@@ -78,8 +104,12 @@ Each run saves to `outputs/<timestamp>/`:
 - `summary.json` (metrics + environment + versions)
 - `data/radio_map.npz` (path gain + derived metrics + cell centers)
 - `data/radio_map.csv` (x, y, z, path_gain_db)
-- `data/paths.csv` (delay + power + AoA per path)
+- `data/paths.csv` (order/type/length/delay/power + interactions list)
 - `data/ray_paths.csv` and `data/ray_paths.npz` (ray segments for 3D view)
+- `viewer/markers.json` (Tx/Rx positions)
+- `viewer/paths.json` (path polylines + metadata)
+- `viewer/scene_manifest.json` (geometry + proxy manifest)
+- `viewer/heatmap.json` and `viewer/heatmap.npz` (coverage overlay)
 - `plots/radio_map_path_gain_db.png/svg`
 - `plots/radio_map_rx_power_dbm.png/svg`
 - `plots/radio_map_path_loss_db.png/svg`
@@ -88,6 +118,12 @@ Each run saves to `outputs/<timestamp>/`:
 - `plots/aoa_azimuth_hist.png/svg`
 - `plots/aoa_elevation_hist.png/svg`
 - `plots/ray_paths_3d.png/svg`
+
+Viewer artifact format (`outputs/<run_id>/viewer/`):
+- `scene_manifest.json`: `{ mesh, mesh_files, proxy }`
+- `markers.json`: `{ tx: [x,y,z], rx: [x,y,z] }`
+- `paths.json`: list of `{ path_id, points, order, type, path_length_m, delay_s, power_db, interactions }`
+- `heatmap.json`: `{ metric, grid_shape, values, cell_centers }`
 
 ## Simulation Assumptions
 - Carrier frequency: 28 GHz
@@ -107,10 +143,12 @@ Each run saves to `outputs/<timestamp>/`:
 - `configs/preview.yaml` (CPU-friendly)
 - `configs/default.yaml` (preview-safe default)
 - `configs/high.yaml` (GPU-friendly)
+- `configs/procedural.yaml` (street-canyon procedural scene)
 
 Scene sources:
 - Built-in: `scene.type: builtin` with `scene.builtin: etoile` (default)
 - External: `scene.type: file` with `scene.file: path/to/scene.xml` (Mitsuba 3 format)
+- Procedural: `scene.type: procedural` with `scene.procedural` (ground + boxes + street canyon preset)
  - 3D Viewer mesh: `scene.mesh: path/to/scene.glb|gltf|obj` (optional)
  - Proxy geometry: `scene.proxy` (ground + boxes) for quick 3D previews
  - Dashboard mesh overrides: drop `.glb/.gltf/.obj` into `scenes/` and pick it in the sidebar
@@ -120,6 +158,7 @@ Visualization controls:
 - `render.enabled`, `render.samples`, `render.resolution` control the optical scene render.
 - `visualization.ray_paths.max_paths` controls how many RF paths are exported for 3D view.
  - Viewer output saved to `outputs/<timestamp>/viewer/index.html`
+- `runtime.vram_guard` auto-reduces rays/depth when GPU memory is tight.
 
 All configs include a placeholder:
 ```yaml
@@ -129,6 +168,11 @@ ris:
 
 ## Project Notes
 For operational notes, known quirks, and handoff context, see `PROJECT_CONTEXT.md`.
+Performance trace notes for the simulator viewer: `docs/perf.md`.
+
+## Current Status (WIP)
+- Heatmap alignment is still incorrect for rotated scenes; needs rotation/transform fix.
+- Simulator UI is clunky and missing features, but progress is steady.
 
 ## Future RIS Extension (Not Implemented)
 - Add a SceneObjectSpec implementation for RIS panels.
@@ -144,15 +188,17 @@ Sionna / Sionna RT:
 - Sionna RT RadioMapSolver API (v1.2.1): https://nvlabs.github.io/sionna/rt/api/radio_map_solvers.html
 - Sionna RT Radio Maps API (v1.2.1): https://nvlabs.github.io/sionna/rt/api/radio_maps.html
 - Sionna RT Radio Devices API (v1.2.1): https://nvlabs.github.io/sionna/rt/api/radio_devices.html
+- Sionna RT SceneObject API (v1.2.1): https://nvlabs.github.io/sionna/rt/api/scene_object.html
+- Sionna RT Radio Materials API (v1.2.1): https://nvlabs.github.io/sionna/rt/api/radio_materials.html
 
 Mitsuba / Dr.Jit:
-- Mitsuba 3 docs (v3.6.0): https://mitsuba.readthedocs.io/en/latest/
-- Mitsuba variants (v3.6.0): https://mitsuba.readthedocs.io/en/latest/src/key_topics/variants.html
-- Mitsuba scene format (v3.6.0): https://mitsuba.readthedocs.io/en/latest/src/key_topics/scene_format.html
-- Dr.Jit docs (no explicit doc version, used PyPI v1.2.0 for package pinning): https://drjit.readthedocs.io/en/latest/
+- Mitsuba 3 docs (v3.7.1): https://mitsuba.readthedocs.io/en/latest/
+- Mitsuba variants (v3.7.1): https://mitsuba.readthedocs.io/en/latest/src/key_topics/variants.html
+- Mitsuba scene format (v3.7.1): https://mitsuba.readthedocs.io/en/latest/src/key_topics/scene_format.html
+- Dr.Jit docs (PyPI v1.2.0): https://drjit.readthedocs.io/en/latest/
 
 TensorFlow:
-- Install TensorFlow 2 docs (no explicit doc version, used PyPI v2.20.0 for package pinning): https://www.tensorflow.org/install
+- Install TensorFlow 2 docs (PyPI v2.20.0): https://www.tensorflow.org/install
 
 WSL2 + GPU:
 - GPU accelerated ML training in WSL (ms.date 2024-11-19): https://learn.microsoft.com/en-us/windows/wsl/tutorials/gpu-compute

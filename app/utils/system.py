@@ -180,6 +180,7 @@ def collect_environment_info() -> Dict[str, Any]:
         info["nvidia_smi"] = result.stdout.strip() or result.stderr.strip()
     except FileNotFoundError:
         info["nvidia_smi"] = "nvidia-smi not found"
+    info["gpu_memory_mb"] = get_gpu_memory_mb()
 
     warnings = []
     if sys.version_info >= (3, 13):
@@ -199,3 +200,24 @@ def collect_environment_info() -> Dict[str, Any]:
 def print_environment_info() -> None:
     info = collect_environment_info()
     print(json.dumps(info, indent=2))
+
+
+def get_gpu_memory_mb() -> Optional[int]:
+    """Return total GPU memory in MB for the first GPU, if available."""
+    try:
+        result = subprocess.run(
+            ["nvidia-smi", "--query-gpu=memory.total", "--format=csv,noheader,nounits"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except FileNotFoundError:
+        return None
+    output = result.stdout.strip()
+    if not output:
+        return None
+    first = output.splitlines()[0].strip()
+    try:
+        return int(float(first))
+    except ValueError:
+        return None
