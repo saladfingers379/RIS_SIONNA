@@ -15,25 +15,57 @@ def _load_npz(path: Path) -> Dict[str, Any]:
         return {k: data[k] for k in data.files}
 
 
+def _infer_cell_size(cell_centers: np.ndarray) -> Tuple[float, float]:
+    if cell_centers.ndim < 3:
+        return 0.0, 0.0
+    xs = cell_centers[:, :, 0]
+    ys = cell_centers[:, :, 1]
+    x_diffs = np.diff(xs, axis=1).ravel()
+    y_diffs = np.diff(ys, axis=0).ravel()
+    x_nonzero = x_diffs[x_diffs != 0]
+    y_nonzero = y_diffs[y_diffs != 0]
+    x_step = np.median(np.abs(x_nonzero)) if x_nonzero.size else 0.0
+    y_step = np.median(np.abs(y_nonzero)) if y_nonzero.size else 0.0
+    return float(x_step or 0.0), float(y_step or 0.0)
+
+
+def compute_radio_map_extent(cell_centers: np.ndarray) -> Tuple[float, float, float, float]:
+    xs = cell_centers[:, :, 0]
+    ys = cell_centers[:, :, 1]
+    cell_size_x, cell_size_y = _infer_cell_size(cell_centers)
+    return (
+        float(xs.min() - cell_size_x * 0.5),
+        float(xs.max() + cell_size_x * 0.5),
+        float(ys.min() - cell_size_y * 0.5),
+        float(ys.max() + cell_size_y * 0.5),
+    )
+
+
 def plot_radio_map(
     metric_map: np.ndarray,
     cell_centers: np.ndarray,
     output_dir: Path,
     metric_label: str,
     filename_prefix: str,
+    tx_pos: np.ndarray | None = None,
+    rx_pos: np.ndarray | None = None,
 ) -> Tuple[Path, Path]:
     # metric_map: [num_tx, y, x]
     # cell_centers: [y, x, 3]
 
-    xs = cell_centers[:, :, 0]
-    ys = cell_centers[:, :, 1]
-    extent = [xs.min(), xs.max(), ys.min(), ys.max()]
+    extent = compute_radio_map_extent(cell_centers)
 
     fig, ax = plt.subplots(figsize=(7, 5))
     im = ax.imshow(metric_map[0], origin="lower", extent=extent, cmap="viridis")
     ax.set_title(f"Radio Map ({metric_label})")
     ax.set_xlabel("x [m]")
     ax.set_ylabel("y [m]")
+    if tx_pos is not None:
+        ax.scatter([tx_pos[0]], [tx_pos[1]], color="#dc322f", s=30, label="Tx")
+    if rx_pos is not None:
+        ax.scatter([rx_pos[0]], [rx_pos[1]], color="#268bd2", s=30, label="Rx")
+    if tx_pos is not None or rx_pos is not None:
+        ax.legend(loc="upper right")
     fig.colorbar(im, ax=ax, label=metric_label)
     fig.tight_layout()
 

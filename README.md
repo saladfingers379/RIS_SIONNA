@@ -63,6 +63,7 @@ What it does:
 - Load scene geometry + viewer artifacts from `outputs/<run_id>/viewer/`
 - Move Tx/Rx interactively (drag or numeric inputs)
 - Submit background jobs: quick trace, link trace, coverage map
+- Select base configs directly from `configs/` and override safe radio-map settings
 - Inspect path table and highlight rays
 - Toggle geometry / rays / heatmap layers
 - Export a snapshot (PNG)
@@ -101,6 +102,7 @@ python tests/test_ui_smoke.py
 ## Outputs
 Each run saves to `outputs/<timestamp>/`:
 - `config.yaml` (snapshot)
+- `progress.json` (live progress for UI polling)
 - `summary.json` (metrics + environment + versions)
 - `data/radio_map.npz` (path gain + derived metrics + cell centers)
 - `data/radio_map.csv` (x, y, z, path_gain_db)
@@ -180,16 +182,26 @@ Performance trace notes for the simulator viewer: `docs/perf.md`.
 
 ## Documentation References (URLs + Versions)
 Sionna / Sionna RT:
-- Sionna Installation (v1.2.1): https://nvlabs.github.io/sionna/installation.html
-- Sionna RT Overview (v1.2.1): https://nvlabs.github.io/sionna/rt/index.html
-- Sionna RT Scene API (v1.2.1): https://nvlabs.github.io/sionna/rt/api/scene.html
-- Sionna RT PathSolver API (v1.2.1): https://nvlabs.github.io/sionna/rt/api/paths_solvers.html
-- Sionna RT Paths API (v1.2.1): https://nvlabs.github.io/sionna/rt/api/paths.html
-- Sionna RT RadioMapSolver API (v1.2.1): https://nvlabs.github.io/sionna/rt/api/radio_map_solvers.html
-- Sionna RT Radio Maps API (v1.2.1): https://nvlabs.github.io/sionna/rt/api/radio_maps.html
-- Sionna RT Radio Devices API (v1.2.1): https://nvlabs.github.io/sionna/rt/api/radio_devices.html
-- Sionna RT SceneObject API (v1.2.1): https://nvlabs.github.io/sionna/rt/api/scene_object.html
-- Sionna RT Radio Materials API (v1.2.1): https://nvlabs.github.io/sionna/rt/api/radio_materials.html
+- Sionna RT Scene API (Context7, main docs): https://github.com/nvlabs/sionna-rt/blob/main/doc/source/api/scene.rst
+- Sionna RT PathSolver API (Context7, main docs): https://github.com/nvlabs/sionna-rt/blob/main/doc/source/api/paths_solvers.rst
+- Sionna RT Paths API (Context7, main docs): https://github.com/nvlabs/sionna-rt/blob/main/doc/source/api/paths.rst
+- Sionna RT RadioMapSolver API (Context7, main docs): https://github.com/nvlabs/sionna-rt/blob/main/doc/source/api/radio_map_solvers.rst
+- Sionna RT Radio Maps API (Context7, main docs): https://github.com/nvlabs/sionna-rt/blob/main/doc/source/api/radio_maps.rst
+- Sionna RT SceneObject API (Context7, main docs): https://github.com/nvlabs/sionna-rt/blob/main/doc/source/api/scene_object.rst
+
+Mitsuba / Dr.Jit:
+- Mitsuba 3 scene format (Context7): https://github.com/mitsuba-renderer/mitsuba3/blob/master/docs/src/key_topics/scene_format.rst
+- Mitsuba 3 variants (Context7): https://github.com/mitsuba-renderer/mitsuba3/blob/master/docs/src/key_topics/variants.rst
+- Dr.Jit docs (Context7): https://github.com/mitsuba-renderer/drjit/blob/master/docs/what.rst
+
+TensorFlow:
+- TensorFlow pip install (Context7): https://github.com/tensorflow/docs/blob/master/site/en/install/pip.md
+
+WSL2 + NVIDIA Container Toolkit:
+- WSL GPU compute + NVIDIA Container Toolkit (Context7): https://learn.microsoft.com/en-us/windows/wsl/tutorials/gpu-compute
+
+Version notes:
+- This repo pins `sionna==1.2.1` (see `pyproject.toml`) and follows the Sionna RT APIs linked above. If the Sionna RT API changes upstream, update both the pin and the documentation references together.
 
 Mitsuba / Dr.Jit:
 - Mitsuba 3 docs (v3.7.1): https://mitsuba.readthedocs.io/en/latest/

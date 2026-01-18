@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import time
 from pathlib import Path
 from typing import Dict
@@ -38,6 +39,7 @@ def run_simulation(config_path: str) -> Path:
         run_id=cfg.output.get("run_id"),
     )
     save_yaml(output_dir / "config.yaml", cfg.data)
+    progress_path = output_dir / "progress.json"
 
     runtime_cfg = cfg.runtime
     if runtime_cfg.get("force_cpu"):
@@ -63,16 +65,33 @@ def run_simulation(config_path: str) -> Path:
     if need_export:
         steps.append("Export meshes")
     steps.extend(["Render scene", "Ray trace paths", "Radio map", "Plots"])
+
+    def write_progress(step_index: int, status: str) -> None:
+        total = len(steps)
+        step_name = steps[step_index] if step_index < total else "Complete"
+        payload = {
+            "status": status,
+            "step_index": step_index,
+            "step_name": step_name,
+            "total_steps": total,
+            "progress": min(step_index / total, 1.0) if total else 1.0,
+            "updated_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+        }
+        save_json(progress_path, payload)
     with progress_steps("Simulation", len(steps)) as (progress, task_id):
+        step_idx = 0
+        write_progress(step_idx, "running")
         t0 = time.time()
         progress.update(task_id, description=steps[0])
         scene = build_scene(cfg.data)
         timings["scene_build_s"] = time.time() - t0
         scene_cfg = cfg.scene
         progress.advance(task_id)
+        step_idx += 1
 
         if need_export:
             progress.update(task_id, description="Export meshes")
+            write_progress(step_idx, "running")
             scene_id = (
                 f"builtin-{scene_cfg.get('builtin', 'unknown')}"
                 if scene_cfg.get("type") == "builtin"
@@ -88,9 +107,11 @@ def run_simulation(config_path: str) -> Path:
             except Exception as exc:  # pragma: no cover
                 logger.warning("Mesh export failed: %s", exc)
             progress.advance(task_id)
+            step_idx += 1
 
         # Render a static scene view (optical)
         progress.update(task_id, description="Render scene")
+        write_progress(step_idx, "running")
         render_cfg = cfg.data.get("render", {})
         if render_cfg.get("enabled", True):
             try:
@@ -110,12 +131,14 @@ def run_simulation(config_path: str) -> Path:
             except Exception as exc:  # pragma: no cover - optional rendering path
                 logger.warning("Scene render failed: %s", exc)
         progress.advance(task_id)
+        step_idx += 1
 
         from sionna.rt import PathSolver, RadioMapSolver
 
         sim_cfg = cfg.simulation
         t0 = time.time()
         progress.update(task_id, description="Ray trace paths")
+        write_progress(step_idx, "running")
         path_solver = PathSolver()
         paths = path_solver(
             scene,
@@ -130,8 +153,12 @@ def run_simulation(config_path: str) -> Path:
         )
         timings["path_tracing_s"] = time.time() - t0
         progress.advance(task_id)
+        step_idx += 1
 
         tx_device = next(iter(scene.transmitters.values()))
+        rx_device = next(iter(scene.receivers.values()), None)
+        tx_pos = _to_numpy(tx_device.position).reshape(-1)
+        rx_pos = _to_numpy(rx_device.position).reshape(-1) if rx_device is not None else None
         metrics = compute_path_metrics(paths, tx_power_dbm=tx_device.power_dbm)
         path_data = extract_path_data(paths)
         metrics.update(path_data.get("metrics", {}))
@@ -169,6 +196,7 @@ def run_simulation(config_path: str) -> Path:
 
         radio_map_cfg = cfg.radio_map
         radio_map = None
+        write_progress(step_idx, "running")
         if radio_map_cfg.get("enabled", False):
             t0 = time.time()
             progress.update(task_id, description="Radio map")
@@ -179,6 +207,14 @@ def run_simulation(config_path: str) -> Path:
                     padding = float(radio_map_cfg.get("auto_padding", 0.0))
                     size_x = float(bbox.max.x - bbox.min.x) + padding * 2
                     size_y = float(bbox.max.y - bbox.min.y) + padding * 2
+                    cell_size = radio_map_cfg.get("cell_size", [2.0, 2.0])
+                    if isinstance(cell_size, (list, tuple)) and len(cell_size) >= 2:
+                        cell_x = float(cell_size[0]) if cell_size[0] else 0.0
+                        cell_y = float(cell_size[1]) if cell_size[1] else 0.0
+                        if cell_x > 0:
+                            size_x = math.ceil(size_x / cell_x) * cell_x
+                        if cell_y > 0:
+                            size_y = math.ceil(size_y / cell_y) * cell_y
                     center = radio_map_cfg.get("center") or [0.0, 0.0, 0.0]
                     center_z = center[2] if isinstance(center, list) and len(center) > 2 else 0.0
                     center = [float(bbox.min.x + bbox.max.x) * 0.5, float(bbox.min.y + bbox.max.y) * 0.5, center_z]
@@ -210,9 +246,11 @@ def run_simulation(config_path: str) -> Path:
         else:
             progress.update(task_id, description="Radio map (skipped)")
         progress.advance(task_id)
+        step_idx += 1
 
         plots_dir = output_dir / "plots"
         data_dir = output_dir / "data"
+        write_progress(step_idx, "running")
         if radio_map is not None:
             progress.update(task_id, description="Plots")
             path_gain = _to_numpy(radio_map.path_gain)
@@ -249,6 +287,8 @@ def run_simulation(config_path: str) -> Path:
                 plots_dir,
                 metric_label="Path gain [dB]",
                 filename_prefix="radio_map_path_gain_db",
+                tx_pos=tx_pos,
+                rx_pos=rx_pos,
             )
             plot_radio_map(
                 rx_power_dbm,
@@ -256,6 +296,8 @@ def run_simulation(config_path: str) -> Path:
                 plots_dir,
                 metric_label="Rx power [dBm]",
                 filename_prefix="radio_map_rx_power_dbm",
+                tx_pos=tx_pos,
+                rx_pos=rx_pos,
             )
             plot_radio_map(
                 path_loss_db,
@@ -263,6 +305,8 @@ def run_simulation(config_path: str) -> Path:
                 plots_dir,
                 metric_label="Path loss [dB]",
                 filename_prefix="radio_map_path_loss_db",
+                tx_pos=tx_pos,
+                rx_pos=rx_pos,
             )
         else:
             progress.update(task_id, description="Plots (skipped)")
@@ -292,6 +336,7 @@ def run_simulation(config_path: str) -> Path:
                 filename_prefix="aoa_elevation_hist",
             )
         progress.advance(task_id)
+        write_progress(len(steps), "completed")
 
     # Export ray-path segments for 3D visualization
     vis_cfg = cfg.data.get("visualization", {}).get("ray_paths", {})

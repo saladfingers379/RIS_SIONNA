@@ -1,176 +1,227 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>RIS_SIONNA Omniverse-lite Simulator</title>
-    <link rel="stylesheet" href="styles.css" />
-  </head>
-  <body>
-    <div class="app">
-      <header class="topbar">
-        <div class="brand">
-          <div class="brand-mark">RIS</div>
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RIS_SIONNA Omniverse-lite Simulator</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">RIS</div>
+        <div>
+          <div class="brand-title">Omniverse-lite Simulator</div>
+          <div class="brand-sub">Sionna RT · 28 GHz · Low VRAM mode</div>
+        </div>
+      </div>
+      <div class="top-controls">
+        <select id="runSelect"></select>
+        <button id="refreshRuns">Refresh</button>
+        <button id="topDown">Top-down</button>
+        <button id="snapshot">Take Snapshot</button>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="panel left">
+        <h2>Scene Controls</h2>
+        <div class="field">
+          <label>Mesh rotation (deg) <span id="meshRotationLabel">60</span></label>
+          <input id="meshRotation" type="range" min="-180" max="180" value="60" step="1" />
+        </div>
+        <div class="field">
+          <label>Scene source (for jobs)</label>
+          <select id="sceneRunSelect"></select>
+        </div>
+        <div class="field">
+          <label>Base config</label>
+          <select id="baseConfig">
+            <option value="">Loading configs...</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label>Run stats</label>
+          <div class="run-stats" id="runStats">No run loaded.</div>
+        </div>
+
+        <div class="field-grid">
           <div>
-            <div class="brand-title">Omniverse-lite Simulator</div>
-            <div class="brand-sub">Sionna RT · 28 GHz · Low VRAM mode</div>
-          </div>
-        </div>
-        <div class="top-controls">
-          <select id="runSelect"></select>
-          <button id="refreshRuns">Refresh</button>
-          <button id="topDown">Top-down</button>
-          <button id="snapshot">Take Snapshot</button>
-        </div>
-      </header>
-
-      <main class="layout">
-        <section class="panel left">
-          <h2>Scene Controls</h2>
-          <div class="field">
-            <label>Scene source (for jobs)</label>
-            <select id="sceneRunSelect"></select>
-          </div>
-          <div class="field">
-            <label>Base config</label>
-            <select id="baseConfig">
-              <option value="configs/default.yaml">default.yaml</option>
-              <option value="configs/preview.yaml">preview.yaml</option>
-              <option value="configs/high.yaml">high.yaml</option>
-              <option value="configs/procedural.yaml">procedural.yaml</option>
-            </select>
-          </div>
-
-          <div class="field">
-            <label>Run stats</label>
-            <div class="run-stats" id="runStats">No run loaded.</div>
-          </div>
-
-          <div class="field-grid">
-            <div>
-              <label>Tx Position (x y z)</label>
-              <div class="triple">
-                <input id="txX" type="number" step="0.1" />
-                <input id="txY" type="number" step="0.1" />
-                <input id="txZ" type="number" step="0.1" />
-              </div>
+            <label>Tx Position (x y z)</label>
+            <div class="triple">
+              <input id="txX" type="number" step="0.1" />
+              <input id="txY" type="number" step="0.1" />
+              <input id="txZ" type="number" step="0.1" />
             </div>
-            <div>
-              <label>Rx Position (x y z)</label>
-              <div class="triple">
-                <input id="rxX" type="number" step="0.1" />
-                <input id="rxY" type="number" step="0.1" />
-                <input id="rxZ" type="number" step="0.1" />
-              </div>
+          </div>
+          <div>
+            <label>Rx Position (x y z)</label>
+            <div class="triple">
+              <input id="rxX" type="number" step="0.1" />
+              <input id="rxY" type="number" step="0.1" />
+              <input id="rxZ" type="number" step="0.1" />
             </div>
-            <button id="applyMarkers">Apply Markers</button>
-            <label class="toggle">
-              <input id="dragMarkers" type="checkbox" />
-              Drag markers in 3D
-            </label>
           </div>
+          <button id="applyMarkers">Apply Markers</button>
+          <label class="toggle">
+            <input id="dragMarkers" type="checkbox" />
+            Drag markers in 3D
+          </label>
+        </div>
 
-          <h2>Jobs</h2>
-          <div class="field">
-            <label>Quality preset</label>
-            <select id="qualityPreset">
-              <option value="preview">preview</option>
-              <option value="standard">standard</option>
-              <option value="high">high</option>
-            </select>
-          </div>
-          <div class="job-buttons">
-            <button data-kind="quick_trace">Quick Trace</button>
-            <button data-kind="link_trace">Link Trace</button>
-            <button data-kind="coverage_map">Coverage Map</button>
-          </div>
+        <h2>Jobs</h2>
+        <div class="field">
+          <label>Quality preset</label>
+          <select id="qualityPreset">
+            <option value="preview">preview</option>
+            <option value="standard">standard</option>
+            <option value="high">high</option>
+          </select>
+        </div>
+        <div class="job-buttons">
+          <button data-kind="quick_trace">Quick Trace</button>
+          <button data-kind="link_trace">Link Trace</button>
+          <button data-kind="coverage_map">Coverage Map</button>
+        </div>
 
-          <div class="job-status">
-            <h3>Job Status</h3>
-            <div id="jobList"></div>
-          </div>
+        <div class="job-status">
+          <h3>Job Status</h3>
+          <div id="jobList"></div>
+        </div>
 
-          <h2>Heatmap</h2>
-          <div class="field">
-            <label>Min level (dBm) <span id="heatmapMinLabel"></span></label>
-            <input id="heatmapMin" type="range" min="0" max="100" value="0" />
+        <h2>Coverage Map Overrides</h2>
+        <div class="field-grid">
+          <label class="toggle">
+            <input id="radioMapEnabled" type="checkbox" />
+            Enable coverage map
+          </label>
+          <label class="toggle">
+            <input id="radioMapAuto" type="checkbox" />
+            Auto size (scene bbox)
+          </label>
+        </div>
+        <div class="field-grid">
+          <div>
+            <label>Auto padding (m)</label>
+            <input id="radioMapPadding" type="number" step="1" />
           </div>
-          <div class="field">
-            <label>Max level (dBm) <span id="heatmapMaxLabel"></span></label>
-            <input id="heatmapMax" type="range" min="0" max="100" value="100" />
-          </div>
-          <div class="field">
-            <label>Heatmap scale (dBm)</label>
+          <div>
+            <label>Cell size (x y)</label>
             <div class="dual-inputs">
-              <input id="heatmapMinInput" type="number" step="1" />
-              <input id="heatmapMaxInput" type="number" step="1" />
+              <input id="radioMapCellX" type="number" step="0.5" />
+              <input id="radioMapCellY" type="number" step="0.5" />
             </div>
           </div>
-
-          <details class="glossary">
-            <summary>Glossary</summary>
-            <div class="glossary-item"><strong>Run selector</strong> choose which saved output to load in the viewer.</div>
-            <div class="glossary-item"><strong>Scene source</strong> pick a prior run's scene for new jobs.</div>
-            <div class="glossary-item"><strong>Refresh</strong> reloads the run list from disk.</div>
-            <div class="glossary-item"><strong>Top-down</strong> snaps camera to overhead view.</div>
-            <div class="glossary-item"><strong>Take Snapshot</strong> exports current 3D view to PNG.</div>
-            <div class="glossary-item"><strong>Apply Markers</strong> updates Tx/Rx positions used for jobs.</div>
-            <div class="glossary-item"><strong>Drag markers in 3D</strong> drag Tx/Rx dots on the ground plane.</div>
-            <div class="glossary-item"><strong>Quick Trace</strong> fast single-link solve; lowest rays/depth.</div>
-            <div class="glossary-item"><strong>Link Trace</strong> higher-quality single link; more rays/depth.</div>
-            <div class="glossary-item"><strong>Coverage Map</strong> batched grid solve; writes heatmap + CSV/NPZ.</div>
-            <div class="glossary-item"><strong>Geometry</strong> toggles the scene mesh/proxy.</div>
-            <div class="glossary-item"><strong>Tx/Rx</strong> toggles transmitter/receiver markers.</div>
-            <div class="glossary-item"><strong>Ray Paths</strong> toggles RF paths polylines.</div>
-            <div class="glossary-item"><strong>Heatmap</strong> shows Rx power (dBm) across the grid.</div>
-            <div class="glossary-item"><strong>Run stats</strong> shows key metrics from the loaded run.</div>
-            <div class="glossary-item"><strong>Min/Max level</strong> adjusts heatmap contrast range.</div>
-          </details>
-        </section>
-
-        <section class="viewer">
-          <div id="viewerCanvas"></div>
-          <div class="viewer-overlay">
-            <div class="layer-toggle">
-              <label><input id="toggleGeometry" type="checkbox" checked /> Geometry</label>
-              <label><input id="toggleMarkers" type="checkbox" checked /> Tx/Rx</label>
-              <label><input id="toggleRays" type="checkbox" checked /> Ray Paths</label>
-              <label><input id="toggleHeatmap" type="checkbox" /> Heatmap</label>
+        </div>
+        <div class="field-grid">
+          <div>
+            <label>Map size (x y)</label>
+            <div class="dual-inputs">
+              <input id="radioMapSizeX" type="number" step="1" />
+              <input id="radioMapSizeY" type="number" step="1" />
             </div>
-            <div class="viewer-meta" id="viewerMeta">Ready</div>
           </div>
-        </section>
+          <div>
+            <label>Map center (x y z)</label>
+            <div class="triple">
+              <input id="radioMapCenterX" type="number" step="0.5" />
+              <input id="radioMapCenterY" type="number" step="0.5" />
+              <input id="radioMapCenterZ" type="number" step="0.5" />
+            </div>
+          </div>
+        </div>
 
-        <section class="panel right">
-          <h2>Path Table</h2>
-          <div class="path-stats" id="pathStats"></div>
-          <div class="field">
-            <label>Filter by type</label>
-            <select id="pathTypeFilter">
-              <option value="all">all</option>
-            </select>
+        <h2>Heatmap</h2>
+        <div class="field">
+          <label>Rotation (deg) <span id="heatmapRotationLabel">0</span></label>
+          <input id="heatmapRotation" type="range" min="-180" max="180" value="0" step="1" />
+        </div>
+        <div class="field">
+          <label>Min level (dBm) <span id="heatmapMinLabel"></span></label>
+          <input id="heatmapMin" type="range" min="0" max="100" value="0" />
+        </div>
+        <div class="field">
+          <label>Max level (dBm) <span id="heatmapMaxLabel"></span></label>
+          <input id="heatmapMax" type="range" min="0" max="100" value="100" />
+        </div>
+        <div class="field">
+          <label>Heatmap scale (dBm)</label>
+          <div class="dual-inputs">
+            <input id="heatmapMinInput" type="number" step="1" />
+            <input id="heatmapMaxInput" type="number" step="1" />
           </div>
-          <div class="field">
-            <label>Max order</label>
-            <input id="pathOrderFilter" type="number" min="0" step="1" value="99" />
+        </div>
+
+        <details class="glossary">
+          <summary>Glossary</summary>
+          <div class="glossary-item"><strong>Run selector</strong> choose which saved output to load in the viewer.
           </div>
-          <div class="path-table">
-            <table>
-              <thead>
-                <tr>
-                  <th>ID</th>
-                  <th>Type</th>
-                  <th>Order</th>
-                  <th>Length (m)</th>
-                  <th>Power (dB)</th>
-                </tr>
-              </thead>
-              <tbody id="pathTableBody"></tbody>
-            </table>
+          <div class="glossary-item"><strong>Scene source</strong> pick a prior run's scene for new jobs.</div>
+          <div class="glossary-item"><strong>Refresh</strong> reloads the run list from disk.</div>
+          <div class="glossary-item"><strong>Top-down</strong> snaps camera to overhead view.</div>
+          <div class="glossary-item"><strong>Take Snapshot</strong> exports current 3D view to PNG.</div>
+          <div class="glossary-item"><strong>Apply Markers</strong> updates Tx/Rx positions used for jobs.</div>
+          <div class="glossary-item"><strong>Drag markers in 3D</strong> drag Tx/Rx dots on the ground plane.</div>
+          <div class="glossary-item"><strong>Quick Trace</strong> fast single-link solve; lowest rays/depth.</div>
+          <div class="glossary-item"><strong>Link Trace</strong> higher-quality single link; more rays/depth.</div>
+          <div class="glossary-item"><strong>Coverage Map</strong> batched grid solve; writes heatmap + CSV/NPZ.</div>
+          <div class="glossary-item"><strong>Geometry</strong> toggles the scene mesh/proxy.</div>
+          <div class="glossary-item"><strong>Tx/Rx</strong> toggles transmitter/receiver markers.</div>
+          <div class="glossary-item"><strong>Ray Paths</strong> toggles RF paths polylines.</div>
+          <div class="glossary-item"><strong>Heatmap</strong> shows Rx power (dBm) across the grid.</div>
+          <div class="glossary-item"><strong>Run stats</strong> shows key metrics from the loaded run.</div>
+          <div class="glossary-item"><strong>Min/Max level</strong> adjusts heatmap contrast range.</div>
+        </details>
+      </section>
+
+      <section class="viewer">
+        <div id="viewerCanvas"></div>
+        <div class="viewer-overlay">
+          <div class="layer-toggle">
+            <label><input id="toggleGeometry" type="checkbox" checked /> Geometry</label>
+            <label><input id="toggleMarkers" type="checkbox" checked /> Tx/Rx</label>
+            <label><input id="toggleRays" type="checkbox" checked /> Ray Paths</label>
+            <label><input id="toggleHeatmap" type="checkbox" /> Heatmap</label>
           </div>
-        </section>
-      </main>
-    </div>
-    <script type="module" src="app.js"></script>
-  </body>
+          <div class="viewer-meta" id="viewerMeta">Ready</div>
+        </div>
+      </section>
+
+      <section class="panel right">
+        <h2>Path Table</h2>
+        <div class="path-stats" id="pathStats"></div>
+        <div class="field">
+          <label>Filter by type</label>
+          <select id="pathTypeFilter">
+            <option value="all">all</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Max order</label>
+          <input id="pathOrderFilter" type="number" min="0" step="1" value="99" />
+        </div>
+        <div class="path-table">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Type</th>
+                <th>Order</th>
+                <th>Length (m)</th>
+                <th>Power (dB)</th>
+              </tr>
+            </thead>
+            <tbody id="pathTableBody"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script type="module" src="app.js?v=dev"></script>
+</body>
+
 </html>

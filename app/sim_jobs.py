@@ -174,6 +174,14 @@ class JobManager:
             cfg.setdefault("scene", {})
             _deep_update(cfg["scene"], scene_overrides)
 
+        radio_overrides = payload.get("radio_map", {})
+        if radio_overrides:
+            cfg.setdefault("radio_map", {})
+            _deep_update(cfg["radio_map"], radio_overrides)
+
+        if kind in {"quick_trace", "link_trace"}:
+            cfg.setdefault("radio_map", {})["enabled"] = False
+
         run_id = generate_run_id()
         output_dir = create_output_dir(cfg.get("output", {}).get("base_dir", "outputs"), run_id=run_id)
         cfg.setdefault("output", {})["run_id"] = run_id

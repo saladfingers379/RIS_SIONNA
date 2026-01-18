@@ -96,8 +96,42 @@ class SimRequestHandler(BaseHTTPRequestHandler):
                 )
         return {"runs": runs}
 
+    def _list_configs(self) -> Dict[str, Any]:
+        config_root: Path = self.server.config_root
+        configs = []
+        if config_root.exists():
+            for cfg_path in sorted(config_root.glob("*.yaml")):
+                cfg_data = None
+                try:
+                    import yaml
+
+                    cfg_data = yaml.safe_load(cfg_path.read_text())
+                except Exception:
+                    cfg_data = None
+                configs.append(
+                    {
+                        "name": cfg_path.name,
+                        "path": str(cfg_path.as_posix()),
+                        "data": cfg_data,
+                    }
+                )
+        return {"configs": configs}
+
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
+        if parsed.path.startswith("/api/configs"):
+            return _json_response(self, self._list_configs())
+        if parsed.path.startswith("/api/progress/"):
+            run_id = parsed.path.split("/", 3)[3]
+            run_dir = self.server.output_root / run_id
+            progress_path = run_dir / "progress.json"
+            if not progress_path.exists():
+                return _json_response(self, {"error": "progress not found"}, status=404)
+            try:
+                payload = json.loads(progress_path.read_text())
+            except Exception:
+                payload = {"error": "progress unreadable"}
+            return _json_response(self, payload)
         if parsed.path.startswith("/api/runs"):
             return _json_response(self, self._list_runs())
         if parsed.path.startswith("/api/run/"):
@@ -160,9 +194,12 @@ class SimRequestHandler(BaseHTTPRequestHandler):
 
 
 class SimServer(ThreadingHTTPServer):
-    def __init__(self, host: str, port: int, static_root: Path, output_root: Path) -> None:
+    def __init__(
+        self, host: str, port: int, static_root: Path, output_root: Path, config_root: Path
+    ) -> None:
         self.static_root = static_root
         self.output_root = output_root
+        self.config_root = config_root
         self.job_manager = JobManager(output_root)
         super().__init__((host, port), SimRequestHandler)
 
@@ -171,7 +208,14 @@ def serve_simulator(host: str = "127.0.0.1", port: int = 8765) -> None:
     static_root = Path(__file__).parent / "sim_web"
     ensure_three_vendor(static_root)
     output_root = Path("outputs")
-    server = SimServer(host, port, static_root=static_root, output_root=output_root)
+    config_root = Path("configs")
+    server = SimServer(
+        host,
+        port,
+        static_root=static_root,
+        output_root=output_root,
+        config_root=config_root,
+    )
     print(f"RIS_SIONNA simulator running at http://{host}:{port}")
     try:
         server.serve_forever()
