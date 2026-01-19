@@ -39,7 +39,7 @@ scene:
       material: concrete
     boxes: []
   mesh: null
-  proxy_enabled: true
+  proxy_enabled: false
   export_mesh: true
   tx:
     name: tx

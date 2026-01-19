@@ -31,7 +31,7 @@ scene:
   builtin: etoile
   file: null
   mesh: null
-  proxy_enabled: true
+  proxy_enabled: false
   export_mesh: true
   tx:
     name: tx

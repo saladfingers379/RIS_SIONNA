@@ -204,8 +204,6 @@ def _build_procedural_scene(rt, scene_cfg: Dict[str, Any], cfg: Dict[str, Any]):
         _write_procedural_scene_xml(xml_path, spec)
     scene = rt.load_scene(str(xml_path))
     _apply_materials(scene, spec)
-    scene_cfg.setdefault("proxy", spec)
-    scene_cfg.setdefault("proxy_enabled", True)
     return scene
 
 
