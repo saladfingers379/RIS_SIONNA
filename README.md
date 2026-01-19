@@ -71,17 +71,14 @@ What it does:
 Why not FastAPI/Streamlit?
 - The simulator uses only the Python stdlib HTTP server for reliability and zero extra dependencies.
 
-## Quick Start (WSL2 + Docker + RTX 4070 Ti)
-1) Install NVIDIA Container Toolkit and validate `--gpus all` works (see docs below).
-2) From the repo root:
+## Quick Start (Ubuntu 24.04 + NVIDIA GPU)
 ```bash
-docker run --rm -it --gpus all -v "$PWD":/workspace -w /workspace python:3.10-slim \
-  bash -lc "pip install -U pip && pip install -e . && python -m app diagnose"
-```
-If you see GPUs listed in `diagnose`, run:
-```bash
-docker run --rm -it --gpus all -v "$PWD":/workspace -w /workspace python:3.10-slim \
-  bash -lc "pip install -U pip && pip install -e . && python -m app run --config configs/high.yaml"
+python3.12 -m venv .venv
+source .venv/bin/activate
+pip install -U pip
+pip install -e .
+python -m app diagnose
+python -m app run --config configs/high.yaml
 ```
 
 ## Commands
@@ -94,6 +91,15 @@ docker run --rm -it --gpus all -v "$PWD":/workspace -w /workspace python:3.10-sl
 Makefile shortcuts:
 - `make diagnose`, `make run`, `make plot`, `make dashboard`, `make sim`
 
+## GPU Requirements (Ubuntu 24.04)
+- NVIDIA driver installed and `nvidia-smi` works.
+- Mitsuba 3 CUDA variants (for example `cuda_ad_rgb`) are present and selectable.
+  Source: https://github.com/mitsuba-renderer/mitsuba3/blob/master/docs/src/key_topics/variants.rst
+- Dr.Jit auto backend uses CUDA when a compatible GPU is detected (otherwise LLVM/CPU).
+  Source: https://github.com/mitsuba-renderer/drjit/blob/master/docs/type_ref.rst
+- Sionna RT relies on Mitsuba/Dr.Jit types and integration.
+  Source: https://github.com/nvlabs/sionna-rt/blob/main/doc/source/developer/dev_compat_frameworks.rst
+
 ## GPU Diagnostics
 Use `diagnose` to confirm the RT backend and run a small smoke test:
 ```bash
@@ -103,14 +109,9 @@ Look for:
 - `diagnose.runtime.selected_variant` containing `cuda`
 - `diagnose.verdict` showing `RT backend is CUDA/OptiX`
 - `diagnose.runtime.gpu_smoke_test` timing + backend
+- `diagnose.runtime.optix` showing `libnvoptix.so.1` + `optixQueryFunctionTable`
 
-WSL note (important):
-- Ensure the WSL CUDA shim is first in `LD_LIBRARY_PATH` before launching Python:
-  ```bash
-  export LD_LIBRARY_PATH=/usr/lib/wsl/lib:$LD_LIBRARY_PATH
-  python -m app diagnose
-  ```
-- If OptiX init fails, update the NVIDIA driver to a supported range (see `docs/TROUBLESHOOTING.md`).
+Each diagnose run also writes `outputs/<run_id>/summary.json`.
 
 ## GPU Benchmark (High Compute)
 Run the repeatable benchmark preset:
@@ -231,18 +232,15 @@ Sionna / Sionna RT:
 - Sionna RT RadioMapSolver API (Context7, main docs): https://github.com/nvlabs/sionna-rt/blob/main/doc/source/api/radio_map_solvers.rst
 - Sionna RT Radio Maps API (Context7, main docs): https://github.com/nvlabs/sionna-rt/blob/main/doc/source/api/radio_maps.rst
 - Sionna RT SceneObject API (Context7, main docs): https://github.com/nvlabs/sionna-rt/blob/main/doc/source/api/scene_object.rst
-- Sionna RT compatibility + Mitsuba variants (Context7): https://nvlabs.github.io/sionna/rt/developer/dev_compat_frameworks
+- Sionna RT compatibility + Mitsuba variants (Context7): https://github.com/nvlabs/sionna-rt/blob/main/doc/source/developer/dev_compat_frameworks.rst
 
 Mitsuba / Dr.Jit:
 - Mitsuba 3 scene format (Context7): https://github.com/mitsuba-renderer/mitsuba3/blob/master/docs/src/key_topics/scene_format.rst
-- Mitsuba 3 variants (Context7): https://mitsuba.readthedocs.io/en/stable/src/key_topics/variants.html#choosing-variants
-- Dr.Jit docs (Context7): https://github.com/mitsuba-renderer/drjit/blob/master/docs/what.rst
+- Mitsuba 3 variants (Context7): https://github.com/mitsuba-renderer/mitsuba3/blob/master/docs/src/key_topics/variants.rst
+- Dr.Jit auto backend (Context7): https://github.com/mitsuba-renderer/drjit/blob/master/docs/type_ref.rst
 
 TensorFlow:
 - TensorFlow pip install (Context7): https://github.com/tensorflow/docs/blob/master/site/en/install/pip.md
-
-WSL2 + NVIDIA Container Toolkit:
-- WSL GPU compute + NVIDIA Container Toolkit (Context7): https://learn.microsoft.com/en-us/windows/wsl/tutorials/gpu-compute
 
 Version notes:
 - This repo pins `sionna==1.2.1` (see `pyproject.toml`) and follows the Sionna RT APIs linked above. If the Sionna RT API changes upstream, update both the pin and the documentation references together.
@@ -255,13 +253,6 @@ Mitsuba / Dr.Jit:
 
 TensorFlow:
 - Install TensorFlow 2 docs (PyPI v2.20.0): https://www.tensorflow.org/install
-
-WSL2 + GPU:
-- GPU accelerated ML training in WSL (ms.date 2024-11-19): https://learn.microsoft.com/en-us/windows/wsl/tutorials/gpu-compute
-
-NVIDIA Container Toolkit / Docker GPU:
-- Install guide (Last-Modified 2025-12-02): https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html
-- Sample workload / `--gpus all` (Last-Modified 2025-12-02): https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/sample-workload.html
 
 ### Notes on doc-version mismatches
 - TensorFlow and Dr.Jit docs do not publish explicit version numbers on the landing pages.
