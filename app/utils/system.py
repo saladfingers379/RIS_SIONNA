@@ -1,8 +1,10 @@
+import ctypes
 import importlib.metadata
 import logging
 import json
 import os
 import platform
+import re
 import subprocess
 import sys
 import threading
@@ -62,31 +64,7 @@ def disable_pythreejs_import(reason: str = "cli") -> None:
     sys.modules["pythreejs"] = stub
 
 
-def _is_wsl() -> bool:
-    return "microsoft" in platform.release().lower() or os.path.exists("/dev/dxg")
-
-
-def ensure_wsl_cuda_driver_path() -> Dict[str, Any]:
-    """Ensure WSL uses the shim CUDA driver library for CUDA initialization."""
-    info: Dict[str, Any] = {"applied": False}
-    if not _is_wsl():
-        info["reason"] = "not_wsl"
-        return info
-    wsl_lib = "/usr/lib/wsl/lib"
-    if not os.path.isdir(wsl_lib):
-        info["reason"] = "wsl_lib_missing"
-        return info
-    ld_path = os.environ.get("LD_LIBRARY_PATH", "")
-    if wsl_lib not in ld_path.split(":"):
-        os.environ["LD_LIBRARY_PATH"] = f"{wsl_lib}:{ld_path}" if ld_path else wsl_lib
-        info["applied"] = True
-        info["note"] = "LD_LIBRARY_PATH updated at runtime; restart recommended"
-    info["ld_library_path"] = os.environ.get("LD_LIBRARY_PATH", "")
-    return info
-
-
 def select_mitsuba_variant(prefer_gpu: bool, forced_variant: str = "auto") -> str:
-    ensure_wsl_cuda_driver_path()
     import mitsuba as mi
 
     variants = list(mi.variants())
@@ -168,7 +146,6 @@ def configure_tensorflow_memory_growth(
 
 def collect_environment_info() -> Dict[str, Any]:
     info: Dict[str, Any] = {}
-    info["wsl_cuda_path"] = ensure_wsl_cuda_driver_path()
     info["platform"] = platform.platform()
     info["python_version"] = platform.python_version()
     info["in_docker"] = os.path.exists("/.dockerenv")
@@ -181,6 +158,11 @@ def collect_environment_info() -> Dict[str, Any]:
         "mitsuba": _safe_version("mitsuba"),
         "numpy": _safe_version("numpy"),
     }
+
+    raw_smi = _nvidia_smi_output()
+    info["nvidia_smi"] = raw_smi
+    info["nvidia"] = _parse_nvidia_smi_versions(raw_smi)
+    info["optix"] = check_optix_runtime()
 
     try:
         import mitsuba as mi
@@ -207,11 +189,6 @@ def collect_environment_info() -> Dict[str, Any]:
         "NVIDIA_DRIVER_CAPABILITIES": os.getenv("NVIDIA_DRIVER_CAPABILITIES"),
     }
 
-    try:
-        result = subprocess.run(["nvidia-smi", "-L"], capture_output=True, text=True, check=False)
-        info["nvidia_smi"] = result.stdout.strip() or result.stderr.strip()
-    except FileNotFoundError:
-        info["nvidia_smi"] = "nvidia-smi not found"
     info["gpu_memory_mb"] = get_gpu_memory_mb()
 
     warnings = []
@@ -287,6 +264,48 @@ def get_gpu_utilization_sample() -> Optional[Dict[str, float]]:
         return None
 
 
+def _nvidia_smi_output() -> Optional[str]:
+    try:
+        result = subprocess.run(["nvidia-smi"], capture_output=True, text=True, check=False)
+    except FileNotFoundError:
+        return None
+    return result.stdout.strip() or result.stderr.strip() or None
+
+
+def _parse_nvidia_smi_versions(raw: Optional[str]) -> Dict[str, Optional[str]]:
+    versions = {"driver_version": None, "cuda_version": None}
+    if not raw:
+        return versions
+    driver_match = re.search(r"Driver Version:\s*([0-9.]+)", raw)
+    cuda_match = re.search(r"CUDA Version:\s*([0-9.]+)", raw)
+    if driver_match:
+        versions["driver_version"] = driver_match.group(1)
+    if cuda_match:
+        versions["cuda_version"] = cuda_match.group(1)
+    return versions
+
+
+def check_optix_runtime() -> Dict[str, Any]:
+    info: Dict[str, Any] = {
+        "library": "libnvoptix.so.1",
+        "available": False,
+        "has_optixQueryFunctionTable": None,
+        "error": None,
+    }
+    try:
+        lib = ctypes.CDLL("libnvoptix.so.1")
+        info["available"] = True
+    except OSError as exc:
+        info["error"] = str(exc)
+        return info
+    try:
+        getattr(lib, "optixQueryFunctionTable")
+        info["has_optixQueryFunctionTable"] = True
+    except AttributeError:
+        info["has_optixQueryFunctionTable"] = False
+    return info
+
+
 class GpuMonitor:
     def __init__(self, interval_s: float = 0.5) -> None:
         self.interval_s = interval_s
@@ -343,7 +362,6 @@ def gpu_smoke_test(prefer_gpu: bool = True, forced_variant: str = "auto") -> Dic
         "prefer_gpu": prefer_gpu,
         "forced_variant": forced_variant,
     }
-    result["wsl_cuda_path"] = ensure_wsl_cuda_driver_path()
     try:
         import mitsuba as mi
     except Exception as exc:
@@ -416,11 +434,20 @@ def diagnose_environment(
     info["diagnose"] = {}
 
     rt_diag: Dict[str, Any] = {}
-    rt_diag["wsl_cuda_path"] = ensure_wsl_cuda_driver_path()
+    raw_smi = _nvidia_smi_output()
+    versions = _parse_nvidia_smi_versions(raw_smi)
+    rt_diag["nvidia_smi_raw"] = raw_smi
+    rt_diag["nvidia_smi_available"] = raw_smi is not None
+    rt_diag["nvidia_driver_version"] = versions["driver_version"]
+    rt_diag["cuda_version"] = versions["cuda_version"]
+    rt_diag["optix"] = check_optix_runtime()
+    rt_diag["gpu_utilization_sample"] = get_gpu_utilization_sample()
     try:
         import mitsuba as mi
         variants = list(mi.variants())
         rt_diag["mitsuba_variants"] = variants
+        rt_diag["mitsuba_cuda_variants"] = [v for v in variants if "cuda" in v]
+        rt_diag["mitsuba_has_cuda_variant"] = "cuda_ad_rgb" in variants
         selected = None
         if prefer_gpu and "cuda_ad_rgb" in variants and forced_variant == "auto":
             try:
@@ -446,20 +473,16 @@ def diagnose_environment(
     if run_smoke:
         rt_diag["gpu_smoke_test"] = gpu_smoke_test(prefer_gpu=prefer_gpu, forced_variant=forced_variant)
 
-    verdict = "unknown"
     actions = []
     if rt_diag.get("backend") == "cuda/optix":
         verdict = "✅ RT backend is CUDA/OptiX"
-    elif rt_diag.get("backend") == "cpu/llvm":
+    else:
         verdict = "⚠️ RT backend is CPU/LLVM"
         actions = [
             "Verify NVIDIA driver + CUDA runtime (nvidia-smi must work).",
             "Ensure Mitsuba CUDA variants are available and selectable.",
             "Re-run `python -m app diagnose` after fixing CUDA availability.",
         ]
-        wsl_info = rt_diag.get("wsl_cuda_path") or {}
-        if wsl_info.get("note"):
-            actions.insert(0, "Set `LD_LIBRARY_PATH=/usr/lib/wsl/lib:$LD_LIBRARY_PATH` before launching Python on WSL.")
     smoke_err = (rt_diag.get("gpu_smoke_test") or {}).get("error", "")
     if smoke_err and "OptiX" in smoke_err:
         actions.insert(0, "OptiX init failed; update NVIDIA driver to a supported range (Dr.Jit/Mitsuba may reject CUDA 12.7 drivers).")
@@ -486,4 +509,11 @@ def print_diagnose_info(
         tensorflow_mode=tensorflow_mode,
         run_smoke=run_smoke,
     )
+    from ..io import create_output_dir, save_json
+
+    output_dir = create_output_dir("outputs")
+    info["diagnose"]["output_dir"] = str(output_dir)
+    save_json(output_dir / "summary.json", info)
     print(json.dumps(info, indent=2))
+    verdict = info.get("diagnose", {}).get("verdict", "unknown")
+    print(verdict)

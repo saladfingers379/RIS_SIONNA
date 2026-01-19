@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import math
 import time
@@ -50,6 +52,7 @@ def run_simulation(config_path: str) -> Path:
         run_id=cfg.output.get("run_id"),
     )
     save_yaml(output_dir / "config.yaml", cfg.data)
+    config_hash = hashlib.sha256(json.dumps(cfg.data, sort_keys=True).encode("utf-8")).hexdigest()
     log_path = output_dir / "run.log"
     file_handler = logging.FileHandler(log_path, encoding="utf-8")
     file_handler.setFormatter(logging.Formatter("%(asctime)s | %(levelname)s | %(message)s"))
@@ -115,6 +118,7 @@ def run_simulation(config_path: str) -> Path:
         }
         save_json(progress_path, payload)
 
+    run_start = time.time()
     try:
         with progress_steps("Simulation", len(steps)) as (progress, task_id):
             step_idx = 0
@@ -527,6 +531,7 @@ def run_simulation(config_path: str) -> Path:
             except Exception as exc:  # pragma: no cover
                 logger.warning("Ray path export failed: %s", exc)
 
+        timings["total_s"] = time.time() - run_start
         summary = {
             "metrics": metrics,
             "scene_sanity": scene_sanity_report(scene, cfg.data),
@@ -537,6 +542,10 @@ def run_simulation(config_path: str) -> Path:
                 "timings_s": timings,
             },
             "environment": collect_environment_info(),
+            "config": {
+                "hash_sha256": config_hash,
+                "path": str(output_dir / "config.yaml"),
+            },
         }
         if gpu_monitor is not None:
             summary["runtime"]["gpu_monitor"] = gpu_monitor.summary()
