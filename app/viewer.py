@@ -254,7 +254,9 @@ def build_viewer_html(data: Dict[str, Any]) -> str:
     </select>
   </label>
   <br/>
-  <label><input type=\"checkbox\" id=\"showProxy\" checked /> Show proxy geometry</label>
+  <label><input type=\"checkbox\" id=\"showProxy\" /> Show proxy geometry</label>
+  <br/>
+  <label><input type=\"checkbox\" id=\"showMesh\" checked /> Show scene mesh</label>
   <br/>
 </div>
 <script type=\"module\">
@@ -294,6 +296,8 @@ def build_viewer_html(data: Dict[str, Any]) -> str:
   const mouse = new THREE.Vector2();
   const groundPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
   const coordsEl = document.getElementById("coords");
+  const meshGroup = new THREE.Group();
+  scene.add(meshGroup);
 
   function registerPickable(obj) {{
     if (obj) pickables.push(obj);
@@ -411,14 +415,16 @@ def build_viewer_html(data: Dict[str, Any]) -> str:
   addMarker(data.rx, 0x268bd2);
   addLabel(data.tx, "Tx", 0xdc322f);
   addLabel(data.rx, "Rx", 0x268bd2);
+  const proxyToggle = document.getElementById("showProxy");
+  const meshToggle = document.getElementById("showMesh");
+  proxyToggle.checked = false;
   if (!proxyGroup) {{
-    const proxyToggle = document.getElementById("showProxy");
-    proxyToggle.checked = false;
     proxyToggle.disabled = true;
     proxyToggle.parentElement.style.display = "none";
   }}
 
 
+  let meshLoaded = false;
   async function loadPlyMeshes() {{
     if (!data.mesh_files || data.mesh_files.length === 0) return;
     const mod = await import('./vendor/PLYLoader.js');
@@ -429,37 +435,41 @@ def build_viewer_html(data: Dict[str, Any]) -> str:
         geom.computeVertexNormals();
         const mat = new THREE.MeshStandardMaterial({{ color: 0x9aa8b1, transparent: true, opacity: 0.55 }});
         const mesh = new THREE.Mesh(geom, mat);
-        scene.add(mesh);
+        meshGroup.add(mesh);
         registerPickable(mesh);
       }});
     }});
   }}
 
-  if (data.mesh) {{
-    const ext = data.mesh.split('.').pop().toLowerCase();
-    if (ext === 'gltf' || ext === 'glb') {{
-      const mod = await import('./vendor/GLTFLoader.js');
-      GLTFLoader = mod.GLTFLoader;
-      const loader = new GLTFLoader();
-      loader.load(data.mesh, (gltf) => {{
-        scene.add(gltf.scene);
-        gltf.scene.traverse((child) => {{
-          if (child.isMesh) registerPickable(child);
+  async function ensureMeshesLoaded() {{
+    if (meshLoaded) return;
+    meshLoaded = true;
+    if (data.mesh) {{
+      const ext = data.mesh.split('.').pop().toLowerCase();
+      if (ext === 'gltf' || ext === 'glb') {{
+        const mod = await import('./vendor/GLTFLoader.js');
+        GLTFLoader = mod.GLTFLoader;
+        const loader = new GLTFLoader();
+        loader.load(data.mesh, (gltf) => {{
+          meshGroup.add(gltf.scene);
+          gltf.scene.traverse((child) => {{
+            if (child.isMesh) registerPickable(child);
+          }});
         }});
-      }});
-    }} else if (ext === 'obj') {{
-      const mod = await import('./vendor/OBJLoader.js');
-      OBJLoader = mod.OBJLoader;
-      const loader = new OBJLoader();
-      loader.load(data.mesh, (obj) => {{
-        scene.add(obj);
-        obj.traverse((child) => {{
-          if (child.isMesh) registerPickable(child);
+      }} else if (ext === 'obj') {{
+        const mod = await import('./vendor/OBJLoader.js');
+        OBJLoader = mod.OBJLoader;
+        const loader = new OBJLoader();
+        loader.load(data.mesh, (obj) => {{
+          meshGroup.add(obj);
+          obj.traverse((child) => {{
+            if (child.isMesh) registerPickable(child);
+          }});
         }});
-      }});
+      }}
+    }} else {{
+      await loadPlyMeshes();
     }}
-  }} else {{
-    await loadPlyMeshes();
   }}
 
   function setCameraToBounds() {{
@@ -514,6 +524,21 @@ def build_viewer_html(data: Dict[str, Any]) -> str:
   document.getElementById("showProxy").addEventListener("change", (e) => {{
     if (proxyGroup) proxyGroup.visible = e.target.checked;
   }});
+  document.getElementById("showMesh").addEventListener("change", async (e) => {{
+    meshGroup.visible = e.target.checked;
+    if (e.target.checked) {{
+      await ensureMeshesLoaded();
+    }}
+  }});
+  meshGroup.visible = meshToggle.checked;
+  if (meshToggle.checked) {{
+    await ensureMeshesLoaded();
+  }}
+  if (!data.mesh && (!data.mesh_files || data.mesh_files.length === 0)) {{
+    meshToggle.checked = false;
+    meshToggle.disabled = true;
+    meshToggle.parentElement.style.display = "none";
+  }}
   setCameraToBounds();
   controls.update();
   applyRayColors("uniform");

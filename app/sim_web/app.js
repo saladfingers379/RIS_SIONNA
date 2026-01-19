@@ -125,6 +125,9 @@ function initViewer() {
   alignmentGroup.visible = false;
   scene.add(geometryGroup, markerGroup, rayGroup, heatmapGroup, alignmentGroup);
 
+  ui.toggleGeometry.checked = true;
+  ui.toggleGuides.checked = false;
+
   window.__simDebug = {
     scene,
     camera,
@@ -472,12 +475,19 @@ function rebuildScene() {
   highlightLine = null;
 
   addProxyGeometry();
-  loadMeshes();
+  if (ui.toggleGeometry.checked) {
+    loadMeshes();
+  }
   addMarkers();
   addAlignmentMarkers();
-  alignmentGroup.visible = ui.toggleGuides.checked;
   addRays();
   addHeatmap();
+  geometryGroup.visible = ui.toggleGeometry.checked;
+  markerGroup.visible = ui.toggleMarkers.checked;
+  rayGroup.visible = ui.toggleRays.checked;
+  heatmapGroup.visible = ui.toggleHeatmap.checked;
+  alignmentGroup.visible = ui.toggleGuides.checked;
+  updateHeatmapScaleVisibility();
   fitCamera();
 }
 
@@ -1113,6 +1123,11 @@ function bindUI() {
   });
   ui.toggleGeometry.addEventListener("change", () => {
     geometryGroup.visible = ui.toggleGeometry.checked;
+    if (ui.toggleGeometry.checked) {
+      loadMeshes();
+    } else {
+      geometryGroup.clear();
+    }
   });
   ui.toggleMarkers.addEventListener("change", () => {
     markerGroup.visible = ui.toggleMarkers.checked;
