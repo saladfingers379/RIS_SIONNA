@@ -55,7 +55,7 @@ Assumptions:
 ## 3. PRIMARY OBJECTIVES (ORDERED)
 
 1. **Prove GPU usage** for Sionna RT (CUDA/OptiX, not CPU/LLVM)
-2. Add a **repeatable high-compute benchmark mode**
+2. Provide **repeatable high-compute profiles** (GPU low/medium/high)
 3. Preserve **accuracy and Sionna-correct APIs**
 4. Maintain good UX (progress bars, logs, responsive UI)
 5. Keep a clean path toward **Omniverse-like digital-twin workflows**
@@ -141,16 +141,16 @@ Add a minimal RT task that:
 - reports backend and timing
 
 Purpose:
-- sanity proof, not benchmarking
+- sanity proof, not full stress testing
 
 ---
 
-### Phase D — High-compute benchmark mode
+### Phase D — High-compute profiles
 
 Add or confirm:
-- `configs/benchmark_gpu.yaml`
+- `configs/high.yaml` (GPU high)
 
-Benchmark requirements:
+High-compute requirements:
 - stress GPU (large grids, batching)
 - show progress and ETA
 - record wall time
@@ -188,7 +188,7 @@ Do **not** implement GIS ingestion yet.
 - Do NOT implement RIS yet
 - Do NOT revisit heatmap alignment unless broken
 - Do NOT add CUDA hacks or `LD_PRELOAD`
-- Do NOT accept CPU fallback for benchmarks
+- Do NOT accept CPU fallback for high-compute GPU profiles
 
 ---
 
@@ -197,4 +197,4 @@ Do **not** implement GIS ingestion yet.
 1. Audit backend selection with filesystem MCP
 2. Validate CUDA + OptiX on native Linux
 3. Implement bulletproof diagnostics
-4. Then proceed to benchmarks and UX polish
+4. Then proceed to high-compute profiles and UX polish

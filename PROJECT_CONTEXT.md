@@ -13,16 +13,15 @@ Build a trustworthy, reproducible Sionna / Sionna RT simulation tool (RIS later)
 - We are continuing the Omniverse replication and development direction.
 - Immediate focus:
   1) verify GPU acceleration is actually being used for heavy workloads
-  2) test higher-compute-cost modes (bigger maps / more complex scenes) with good progress + logs
+  2) test higher-compute profiles (GPU low/medium/high) with good progress + logs
   3) keep accuracy and Sionna correctness as the highest priority
 
 ## Environment
 Primary dev:
-- Windows + WSL2 (Ubuntu) + RTX 4070 Ti (~12 GB VRAM) + 64 GB RAM.
-- Docker allowed and preferred on WSL2 when it improves reproducibility (but do not force if repo is native-first).
+- Native Ubuntu 24.04 + RTX 4070 Ti (~12 GB VRAM) + 64 GB RAM.
 
 Secondary dev:
-- macOS (M4 Air) CPU-only: must remain able to run “preview” mode, but not the focus right now.
+- macOS (M4 Air) CPU-only: must remain able to run “preview” mode.
 
 ## Documentation freshness requirement (non-negotiable)
 - Use Context7 MCP for up-to-date docs when touching Sionna/Sionna RT/Mitsuba/Dr.Jit/TensorFlow/WSL GPU setup.
@@ -43,7 +42,7 @@ Baseline:
 - Coverage/radio map supported with batching.
 
 High-compute testing (now required):
-- Provide a benchmark/high-quality preset for GPU stress tests (larger grid + controlled complexity).
+- Use GPU high profile (larger grid + controlled complexity).
 - Measure and record runtime + backend + key settings and write them into summary.json.
 
 ## GPU requirement (must be proven, not assumed)
@@ -54,16 +53,15 @@ High-compute testing (now required):
   - a final verdict line:
     - ✅ RT backend is CUDA/OptiX
     - ⚠️ RT backend is CPU/LLVM (with actionable fix hints)
-- During benchmarks, provide observable evidence of GPU usage (backend selection + utilization sampling best-effort).
+- During heavy runs, provide observable evidence of GPU usage (backend selection + utilization sampling best-effort).
 
 ## Experiments must be configurable
 - No hard-coded “tests” as the primary interface.
 - Experiments are defined via YAML configs in `configs/` with presets:
   - `preview.yaml` (CPU-friendly)
-  - `default.yaml` (standard)
-  - `high.yaml` (heavier)
-  - `benchmark_gpu.yaml` (stress test)
-- UI must allow selecting a config and adjusting safe parameters (quality preset, map bounds/resolution, batching).
+  - `default.yaml` (GPU low/medium baseline)
+  - `high.yaml` (GPU high)
+- UI must allow selecting a run profile and adjusting safe parameters (map bounds/resolution, sampling).
 
 ## UX requirements
 - Always show progress bars for heavy steps (scene build, tracing, map sampling, plotting).
@@ -83,7 +81,7 @@ High-compute testing (now required):
 ## Commands must be kept accurate
 - `python -m app diagnose`
 - `python -m app run --config configs/default.yaml`
-- `python -m app run --config configs/benchmark_gpu.yaml` (or equivalent benchmark flag)
+- `python -m app run --config configs/high.yaml`
 - `python -m app plot --latest`
 - `python -m app dashboard` (if present)
 - `make run`, `make diagnose`, etc., if a Makefile exists (keep aligned)

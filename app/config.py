@@ -75,17 +75,6 @@ QUALITY_PRESETS = {
             "max_depth": 5,
         },
     },
-    "benchmark": {
-        "simulation": {
-            "max_depth": 6,
-            "max_num_paths_per_src": 2000000,
-            "samples_per_src": 2000000,
-        },
-        "radio_map": {
-            "samples_per_tx": 4000000,
-            "max_depth": 6,
-        },
-    },
 }
 
 

@@ -11,7 +11,7 @@ The architecture keeps RIS hooks in the config and scene pipeline but **does not
 - Rich progress bars + timestamped logs
 - Outputs saved per run under `outputs/<timestamp>/`
 - Optional Streamlit dashboard (visualization only)
-- New Omniverse-lite simulator UI with interactive Tx/Rx placement + jobs
+- New Omniverse-lite simulator UI with interactive Tx/Rx placement + runs
 
 ## Quick Start (macOS CPU)
 ```bash
@@ -19,7 +19,7 @@ python3.12 -m venv .venv
 source .venv/bin/activate
 pip install -U pip
 pip install -e .
-python -m app run --config configs/default.yaml
+python -m app run --config configs/preview.yaml
 ```
 Note: Sionna 1.2.1 requires NumPy <2.0, so use Python 3.10–3.12 for smooth installs.
 
@@ -117,11 +117,6 @@ Look for:
 
 Each diagnose run also writes `outputs/<run_id>/summary.json`.
 
-## GPU Benchmark (High Compute)
-Run the repeatable benchmark preset:
-```bash
-python -m app run --config configs/benchmark_gpu.yaml
-```
 This runs two radio maps (256x256 then 512x512) with batching and writes GPU usage samples
 into `summary.json` under `runtime.gpu_monitor`.
 
@@ -177,7 +172,6 @@ Viewer artifact format (`outputs/<run_id>/viewer/`):
 - `configs/preview.yaml` (CPU-friendly)
 - `configs/default.yaml` (preview-safe default)
 - `configs/high.yaml` (GPU-friendly)
-- `configs/benchmark_gpu.yaml` (GPU stress benchmark: 256/512 radio maps)
 - `configs/procedural.yaml` (street-canyon procedural scene)
 
 Scene sources:

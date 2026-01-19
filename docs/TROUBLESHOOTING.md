@@ -18,9 +18,9 @@ If you see `RT backend is CPU/LLVM`:
 4) Re-run `python -m app diagnose` and check `diagnose.runtime.mitsuba_variants`.
 
 ## GPU Visible but No Utilization
-- Run the benchmark preset to create a sustained GPU load:
+- Run a high compute profile from the sim UI or CLI:
   ```bash
-  python -m app run --config configs/benchmark_gpu.yaml
+  python -m app run --config configs/high.yaml
   ```
 - Check `summary.json` for `runtime.gpu_monitor.max_utilization_pct`.
 

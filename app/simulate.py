@@ -88,20 +88,12 @@ def run_simulation(config_path: str) -> Path:
         gpu_monitor.start()
 
     need_export = bool(cfg.scene.get("export_mesh", True))
-    benchmark_cfg = cfg.data.get("benchmark", {})
-    benchmark_levels = benchmark_cfg.get("radio_map_levels", []) if isinstance(benchmark_cfg, dict) else []
-    benchmark_enabled = bool(benchmark_cfg.get("enabled")) and bool(benchmark_levels)
     steps = ["Build scene"]
     if need_export:
         steps.append("Export meshes")
     steps.append("Render scene")
     steps.append("Ray trace paths")
-    if benchmark_enabled:
-        for level in benchmark_levels:
-            label = level.get("name") or f"{level.get('grid_shape', ['?', '?'])[0]}x{level.get('grid_shape', ['?', '?'])[1]}"
-            steps.append(f"Radio map ({label})")
-    else:
-        steps.append("Radio map")
+    steps.append("Radio map")
     steps.append("Plots")
 
     plots_dir = output_dir / "plots"
@@ -394,39 +386,7 @@ def run_simulation(config_path: str) -> Path:
                         }
 
                     write_progress(step_idx, "running")
-                    if benchmark_enabled:
-                        rm_solver = RadioMapSolver()
-                        benchmark_overrides = benchmark_cfg.get("radio_map", {}) if isinstance(benchmark_cfg, dict) else {}
-                        for idx, level in enumerate(benchmark_levels):
-                            level_name = level.get("name") or f"level_{idx+1}"
-                            grid_shape = level.get("grid_shape")
-                            cell_size = level.get("cell_size", radio_map_cfg.get("cell_size", [2.0, 2.0]))
-                            overrides = dict(benchmark_overrides)
-                            if grid_shape and isinstance(grid_shape, (list, tuple)) and len(grid_shape) >= 2:
-                                overrides["size"] = [
-                                    float(grid_shape[1]) * float(cell_size[0]),
-                                    float(grid_shape[0]) * float(cell_size[1]),
-                                ]
-                                overrides["cell_size"] = list(cell_size)
-                            elif level.get("size"):
-                                overrides["size"] = level.get("size")
-                                overrides["cell_size"] = list(cell_size)
-                            if level.get("center"):
-                                overrides["center"] = level.get("center")
-                            if level.get("orientation"):
-                                overrides["orientation"] = level.get("orientation")
-                            suffix = level.get("name", f"level_{idx+1}")
-                            summary = _compute_radio_map(
-                                rm_solver,
-                                label=level_name,
-                                overrides=overrides,
-                                suffix=suffix,
-                                write_default=(idx == len(benchmark_levels) - 1),
-                            )
-                            radio_map_summaries.append(summary)
-                            progress.advance(task_id)
-                            step_idx += 1
-                    elif radio_map_cfg.get("enabled", False):
+                    if radio_map_cfg.get("enabled", False):
                         rm_solver = RadioMapSolver()
                         summary = _compute_radio_map(
                             rm_solver,
