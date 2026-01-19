@@ -77,10 +77,26 @@ def _build_procedural_spec(scene_cfg: Dict[str, Any]) -> Dict[str, Any]:
     return spec
 
 
+def _material_props(name: str) -> Dict[str, Any]:
+    props = MATERIAL_LIBRARY.get(name, MATERIAL_LIBRARY["concrete"])
+    return {"itu_type": props["itu_type"], "thickness": props["thickness"]}
+
+
+def _itu_bsdf_xml(mat_name: str, bsdf_id: str) -> str:
+    props = _material_props(mat_name)
+    return (
+        f"  <bsdf type=\"itu-radio-material\" id=\"{bsdf_id}\">\n"
+        f"    <string name=\"type\" value=\"{props['itu_type']}\"/>\n"
+        f"    <float name=\"thickness\" value=\"{props['thickness']}\"/>\n"
+        "  </bsdf>\n"
+    )
+
+
 def _write_procedural_scene_xml(path: Path, spec: Dict[str, Any]) -> None:
     ground = spec.get("ground", {})
     ground_size = ground.get("size", [160.0, 160.0])
     ground_elev = ground.get("elevation", 0.0)
+    ground_mat = ground.get("material", "concrete")
     shapes = []
     shapes.append(
         f"""
@@ -90,15 +106,14 @@ def _write_procedural_scene_xml(path: Path, spec: Dict[str, Any]) -> None:
       <rotate x=\"1\" angle=\"-90\"/>
       <translate x=\"0\" y=\"0\" z=\"{ground_elev}\"/>
     </transform>
-    <bsdf type=\"diffuse\" id=\"mat-ground\">
-      <rgb name=\"reflectance\" value=\"0.55, 0.55, 0.55\"/>
-    </bsdf>
+{_itu_bsdf_xml(ground_mat, "mat-ground")}
   </shape>
 """
     )
     for idx, box in enumerate(spec.get("boxes", [])):
         size = box.get("size", [10.0, 10.0, 10.0])
         center = box.get("center", [0.0, 0.0, size[2] / 2.0])
+        mat_name = box.get("material", "concrete")
         shapes.append(
             f"""
   <shape type=\"cube\" id=\"box-{idx}\">
@@ -106,9 +121,7 @@ def _write_procedural_scene_xml(path: Path, spec: Dict[str, Any]) -> None:
       <scale x=\"{size[0]}\" y=\"{size[1]}\" z=\"{size[2]}\"/>
       <translate x=\"{center[0]}\" y=\"{center[1]}\" z=\"{center[2]}\"/>
     </transform>
-    <bsdf type=\"diffuse\" id=\"mat-box-{idx}\">
-      <rgb name=\"reflectance\" value=\"0.62, 0.62, 0.65\"/>
-    </bsdf>
+{_itu_bsdf_xml(mat_name, f\"mat-box-{idx}\")}
   </shape>
 """
         )

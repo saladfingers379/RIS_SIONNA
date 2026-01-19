@@ -439,8 +439,11 @@ def diagnose_environment(
     rt_diag["nvidia_smi_raw"] = raw_smi
     rt_diag["nvidia_smi_available"] = raw_smi is not None
     rt_diag["nvidia_driver_version"] = versions["driver_version"]
+    rt_diag["driver_version"] = versions["driver_version"]
     rt_diag["cuda_version"] = versions["cuda_version"]
-    rt_diag["optix"] = check_optix_runtime()
+    optix_info = check_optix_runtime()
+    rt_diag["optix"] = optix_info
+    rt_diag["optix_symbol_ok"] = optix_info.get("has_optixQueryFunctionTable")
     rt_diag["gpu_utilization_sample"] = get_gpu_utilization_sample()
     try:
         import mitsuba as mi
@@ -503,12 +506,18 @@ def print_diagnose_info(
     tensorflow_mode: str = "auto",
     run_smoke: bool = True,
 ) -> None:
+    start_time = time.time()
     info = diagnose_environment(
         prefer_gpu=prefer_gpu,
         forced_variant=forced_variant,
         tensorflow_mode=tensorflow_mode,
         run_smoke=run_smoke,
     )
+    wall_time_s = time.time() - start_time
+    info.setdefault("diagnose", {})
+    info["diagnose"]["wall_time_s"] = wall_time_s
+    info["diagnose"].setdefault("runtime", {})
+    info["diagnose"]["runtime"]["wall_time_s"] = wall_time_s
     from ..io import create_output_dir, save_json
 
     output_dir = create_output_dir("outputs")
