@@ -203,7 +203,8 @@ function initViewer() {
 
   renderer.domElement.addEventListener("mousedown", onMouseDown);
   renderer.domElement.addEventListener("mousemove", onMouseMove);
-  renderer.domElement.addEventListener("mouseup", () => (dragging = null));
+  renderer.domElement.addEventListener("mouseup", endDrag);
+  renderer.domElement.addEventListener("mouseleave", endDrag);
 
   window.addEventListener("resize", () => {
     camera.aspect = container.clientWidth / container.clientHeight;
@@ -341,7 +342,6 @@ function applyRadioMapDefaults(config) {
     setInputValue(ui.radioMapCenterY, null);
     setInputValue(ui.radioMapCenterZ, null);
   }
-  }
 }
 
 function applyCustomDefaults(config) {
@@ -351,6 +351,12 @@ function applyCustomDefaults(config) {
   setInputValue(ui.customMaxPathsPerSrc, sim.max_num_paths_per_src);
   const radio = (config && config.data && config.data.radio_map) || {};
   setInputValue(ui.customSamplesPerTx, radio.samples_per_tx);
+  const runtime = (config && config.data && config.data.runtime) || {};
+  if (runtime.force_cpu) {
+    ui.customBackend.value = "cpu";
+  } else if (runtime.prefer_gpu) {
+    ui.customBackend.value = "gpu";
+  }
 }
 
 function updateCustomVisibility() {
@@ -1017,6 +1023,7 @@ function onMouseDown(event) {
   const hits = raycaster.intersectObjects(markerGroup.children, true);
   if (hits.length) {
     dragging = hits[0].object;
+    controls.enabled = false;
   }
 }
 
@@ -1035,6 +1042,13 @@ function onMouseMove(event) {
     state.markers.rx = [point.x, point.y, point.z];
   }
   updateInputs();
+}
+
+function endDrag() {
+  if (dragging) {
+    dragging = null;
+  }
+  controls.enabled = true;
 }
 
 function getMouse(event) {

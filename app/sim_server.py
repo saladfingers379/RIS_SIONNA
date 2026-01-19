@@ -42,7 +42,10 @@ class SimRequestHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", ctype)
         if path.suffix in {".js", ".css", ".png", ".jpg", ".jpeg", ".svg", ".glb"}:
-            self.send_header("Cache-Control", "public, max-age=86400")
+            if "vendor" in path.parts:
+                self.send_header("Cache-Control", "public, max-age=86400")
+            else:
+                self.send_header("Cache-Control", "no-store")
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
         self.wfile.write(data)

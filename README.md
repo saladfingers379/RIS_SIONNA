@@ -62,14 +62,18 @@ python -m app sim
 What it does:
 - Load scene geometry + viewer artifacts from `outputs/<run_id>/viewer/`
 - Move Tx/Rx interactively (drag or numeric inputs)
-- Submit background jobs: quick trace, link trace, coverage map
-- Select base configs directly from `configs/` and override safe radio-map settings
+- Run simulations via profiles (CPU only, GPU low/medium/high, custom)
+- Custom overrides for key radio-map and solver settings
 - Inspect path table and highlight rays
 - Toggle geometry / rays / heatmap layers
 - Export a snapshot (PNG)
 
 Why not FastAPI/Streamlit?
 - The simulator uses only the Python stdlib HTTP server for reliability and zero extra dependencies.
+
+Simulator profiles and radio maps:
+- Radio map settings map directly to Sionna RT `RadioMapSolver` parameters (cell size + samples per TX).
+  Source: https://nvlabs.github.io/sionna/rt/api/radio_map_solvers
 
 ## Quick Start (Ubuntu 24.04 + NVIDIA GPU)
 ```bash

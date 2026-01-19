@@ -49,6 +49,78 @@
                 <option value="custom">Custom</option>
               </select>
             </div>
+            <details class="panel-section" id="customOverridesSection">
+              <summary>Custom Overrides</summary>
+              <div class="panel-section-body">
+                <div class="help-text">No hard limits; higher values increase runtime and VRAM usage. Suggested maxima target RTX 4070 Ti 12GB.</div>
+                <div class="field">
+                  <label>Backend</label>
+                  <select id="customBackend">
+                    <option value="cpu">CPU only</option>
+                    <option value="gpu">Prefer GPU</option>
+                  </select>
+                  <div class="help-text">CPU mode is safest on laptops. GPU mode uses CUDA/OptiX when available.</div>
+                </div>
+                <div class="field-grid">
+                  <div>
+                    <label>Max depth</label>
+                    <input id="customMaxDepth" type="number" step="1" min="1" />
+                    <div class="help-text">Suggested max: 6 (higher is expensive and rarely adds value).</div>
+                  </div>
+                  <div>
+                    <label>Samples per src</label>
+                    <input id="customSamplesPerSrc" type="number" step="1000" min="1000" />
+                    <div class="help-text">Suggested max: 2,000,000 (GPU benchmark ceiling).</div>
+                  </div>
+                  <div>
+                    <label>Max paths per src</label>
+                    <input id="customMaxPathsPerSrc" type="number" step="1000" min="1000" />
+                    <div class="help-text">Suggested max: 2,000,000 (GPU benchmark ceiling).</div>
+                  </div>
+                </div>
+                <div class="field-grid">
+                  <label class="toggle">
+                    <input id="radioMapAuto" type="checkbox" />
+                    Auto size (scene bbox)
+                  </label>
+                </div>
+                <div class="field-grid">
+                  <div>
+                    <label>Auto padding (m)</label>
+                    <input id="radioMapPadding" type="number" step="1" />
+                  </div>
+                  <div>
+                    <label>Cell size (x y)</label>
+                    <div class="dual-inputs">
+                      <input id="radioMapCellX" type="number" step="0.5" />
+                      <input id="radioMapCellY" type="number" step="0.5" />
+                    </div>
+                  </div>
+                  <div>
+                    <label>Samples per Tx</label>
+                    <input id="customSamplesPerTx" type="number" step="10000" min="1000" />
+                    <div class="help-text">Suggested max: 4,000,000 (GPU benchmark ceiling).</div>
+                  </div>
+                </div>
+                <div class="field-grid">
+                  <div>
+                    <label>Map size (x y)</label>
+                    <div class="dual-inputs">
+                      <input id="radioMapSizeX" type="number" step="1" />
+                      <input id="radioMapSizeY" type="number" step="1" />
+                    </div>
+                  </div>
+                  <div>
+                    <label>Map center (x y z)</label>
+                    <div class="triple">
+                      <input id="radioMapCenterX" type="number" step="0.5" />
+                      <input id="radioMapCenterY" type="number" step="0.5" />
+                      <input id="radioMapCenterZ" type="number" step="0.5" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </details>
 
             <div class="field">
               <label>Run stats</label>
@@ -92,73 +164,6 @@
             <div class="job-status">
               <h3>Job Status</h3>
               <div id="jobList"></div>
-            </div>
-          </div>
-        </details>
-
-        <details class="panel-section" id="customOverridesSection">
-          <summary>Custom Overrides</summary>
-          <div class="panel-section-body">
-            <div class="field">
-              <label>Backend</label>
-              <select id="customBackend">
-                <option value="cpu">CPU only</option>
-                <option value="gpu">Prefer GPU</option>
-              </select>
-            </div>
-            <div class="field-grid">
-              <div>
-                <label>Max depth</label>
-                <input id="customMaxDepth" type="number" step="1" min="1" />
-              </div>
-              <div>
-                <label>Samples per src</label>
-                <input id="customSamplesPerSrc" type="number" step="1000" min="1000" />
-              </div>
-              <div>
-                <label>Max paths per src</label>
-                <input id="customMaxPathsPerSrc" type="number" step="1000" min="1000" />
-              </div>
-            </div>
-            <div class="field-grid">
-              <label class="toggle">
-                <input id="radioMapAuto" type="checkbox" />
-                Auto size (scene bbox)
-              </label>
-            </div>
-            <div class="field-grid">
-              <div>
-                <label>Auto padding (m)</label>
-                <input id="radioMapPadding" type="number" step="1" />
-              </div>
-              <div>
-                <label>Cell size (x y)</label>
-                <div class="dual-inputs">
-                  <input id="radioMapCellX" type="number" step="0.5" />
-                  <input id="radioMapCellY" type="number" step="0.5" />
-                </div>
-              </div>
-              <div>
-                <label>Samples per Tx</label>
-                <input id="customSamplesPerTx" type="number" step="10000" min="1000" />
-              </div>
-            </div>
-            <div class="field-grid">
-              <div>
-                <label>Map size (x y)</label>
-                <div class="dual-inputs">
-                  <input id="radioMapSizeX" type="number" step="1" />
-                  <input id="radioMapSizeY" type="number" step="1" />
-                </div>
-              </div>
-              <div>
-                <label>Map center (x y z)</label>
-                <div class="triple">
-                  <input id="radioMapCenterX" type="number" step="0.5" />
-                  <input id="radioMapCenterY" type="number" step="0.5" />
-                  <input id="radioMapCenterZ" type="number" step="0.5" />
-                </div>
-              </div>
             </div>
           </div>
         </details>
