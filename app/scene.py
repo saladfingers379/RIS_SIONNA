@@ -121,7 +121,7 @@ def _write_procedural_scene_xml(path: Path, spec: Dict[str, Any]) -> None:
       <scale x=\"{size[0]}\" y=\"{size[1]}\" z=\"{size[2]}\"/>
       <translate x=\"{center[0]}\" y=\"{center[1]}\" z=\"{center[2]}\"/>
     </transform>
-{_itu_bsdf_xml(mat_name, f\"mat-box-{idx}\")}
+{_itu_bsdf_xml(mat_name, f"mat-box-{idx}")}
   </shape>
 """
         )
@@ -189,7 +189,15 @@ def _build_procedural_scene(rt, scene_cfg: Dict[str, Any], cfg: Dict[str, Any]):
     cache_root.mkdir(parents=True, exist_ok=True)
     scene_id = _hash_scene_config(spec)
     xml_path = cache_root / f"scene_{scene_id}.xml"
-    if not xml_path.exists():
+    rewrite = not xml_path.exists()
+    if not rewrite:
+        try:
+            xml_text = xml_path.read_text(encoding="utf-8")
+            if "itu-radio-material" not in xml_text:
+                rewrite = True
+        except Exception:
+            rewrite = True
+    if rewrite:
         _write_procedural_scene_xml(xml_path, spec)
     scene = rt.load_scene(str(xml_path))
     _apply_materials(scene, spec)

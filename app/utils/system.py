@@ -19,6 +19,19 @@ def _safe_version(pkg: str) -> Optional[str]:
         return None
 
 
+def _preferred_cuda_variant(variants: list[str]) -> Optional[str]:
+    for candidate in [
+        "cuda_ad_mono_polarized",
+        "cuda_ad_spectral_polarized",
+        "cuda_ad_mono",
+        "cuda_ad_spectral",
+        "cuda_ad_rgb",
+    ]:
+        if candidate in variants:
+            return candidate
+    return None
+
+
 def disable_pythreejs_import(reason: str = "cli") -> None:
     """Stub out pythreejs to avoid slow imports when previews are unused."""
     import sys
@@ -75,12 +88,14 @@ def select_mitsuba_variant(prefer_gpu: bool, forced_variant: str = "auto") -> st
         mi.set_variant(forced_variant)
         return mi.variant()
 
-    if prefer_gpu and "cuda_ad_rgb" in variants:
-        try:
-            mi.set_variant("cuda_ad_rgb")
-            return mi.variant()
-        except Exception as exc:  # pragma: no cover - runtime GPU variance
-            logger.warning("CUDA variant selection failed, falling back to CPU: %s", exc)
+    if prefer_gpu:
+        candidate = _preferred_cuda_variant(variants)
+        if candidate:
+            try:
+                mi.set_variant(candidate)
+                return mi.variant()
+            except Exception as exc:  # pragma: no cover - runtime GPU variance
+                logger.warning("CUDA variant selection failed (%s): %s", candidate, exc)
 
     # Prefer spectral variants on CPU to avoid RGB spectrum shape mismatches.
     for candidate in [
@@ -371,12 +386,14 @@ def gpu_smoke_test(prefer_gpu: bool = True, forced_variant: str = "auto") -> Dic
     variants = list(mi.variants())
     result["available_variants"] = variants
     selected = None
-    if prefer_gpu and "cuda_ad_rgb" in variants and forced_variant == "auto":
-        try:
-            mi.set_variant("cuda_ad_rgb")
-            selected = mi.variant()
-        except Exception as exc:
-            result["variant_error"] = str(exc)
+    if prefer_gpu and forced_variant == "auto":
+        candidate = _preferred_cuda_variant(variants)
+        if candidate:
+            try:
+                mi.set_variant(candidate)
+                selected = mi.variant()
+            except Exception as exc:
+                result["variant_error"] = str(exc)
     if selected is None:
         try:
             selected = select_mitsuba_variant(prefer_gpu=False, forced_variant=forced_variant)
@@ -450,14 +467,16 @@ def diagnose_environment(
         variants = list(mi.variants())
         rt_diag["mitsuba_variants"] = variants
         rt_diag["mitsuba_cuda_variants"] = [v for v in variants if "cuda" in v]
-        rt_diag["mitsuba_has_cuda_variant"] = "cuda_ad_rgb" in variants
+        rt_diag["mitsuba_has_cuda_variant"] = _preferred_cuda_variant(variants) is not None
         selected = None
-        if prefer_gpu and "cuda_ad_rgb" in variants and forced_variant == "auto":
-            try:
-                mi.set_variant("cuda_ad_rgb")
-                selected = mi.variant()
-            except Exception as exc:
-                rt_diag["variant_error"] = str(exc)
+        if prefer_gpu and forced_variant == "auto":
+            candidate = _preferred_cuda_variant(variants)
+            if candidate:
+                try:
+                    mi.set_variant(candidate)
+                    selected = mi.variant()
+                except Exception as exc:
+                    rt_diag["variant_error"] = str(exc)
         if selected is None:
             try:
                 selected = select_mitsuba_variant(prefer_gpu=False, forced_variant=forced_variant)
