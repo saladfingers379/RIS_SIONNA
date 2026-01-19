@@ -40,9 +40,13 @@
               <select id="sceneRunSelect"></select>
             </div>
             <div class="field">
-              <label>Base config</label>
-              <select id="baseConfig">
-                <option value="">Loading configs...</option>
+              <label>Run profile</label>
+              <select id="runProfile">
+                <option value="cpu_only">CPU Only</option>
+                <option value="gpu_low">GPU Low</option>
+                <option value="gpu_medium">GPU Medium</option>
+                <option value="gpu_high">GPU High</option>
+                <option value="custom">Custom</option>
               </select>
             </div>
 
@@ -79,22 +83,10 @@
         </details>
 
         <details class="panel-section" open>
-          <summary>Jobs</summary>
+          <summary>Run</summary>
           <div class="panel-section-body">
-            <div class="field">
-              <label>Quality preset</label>
-              <select id="qualityPreset">
-                <option value="preview">preview</option>
-                <option value="standard">standard</option>
-                <option value="high">high</option>
-                <option value="benchmark">benchmark</option>
-              </select>
-            </div>
             <div class="job-buttons">
-              <button data-kind="quick_trace">Quick Trace</button>
-              <button data-kind="link_trace">Link Trace</button>
-              <button data-kind="coverage_map">Coverage Map</button>
-              <button data-kind="benchmark">Benchmark</button>
+              <button id="runSim">Run Simulation</button>
             </div>
 
             <div class="job-status">
@@ -104,14 +96,31 @@
           </div>
         </details>
 
-        <details class="panel-section">
-          <summary>Coverage Map Overrides</summary>
+        <details class="panel-section" id="customOverridesSection">
+          <summary>Custom Overrides</summary>
           <div class="panel-section-body">
+            <div class="field">
+              <label>Backend</label>
+              <select id="customBackend">
+                <option value="cpu">CPU only</option>
+                <option value="gpu">Prefer GPU</option>
+              </select>
+            </div>
             <div class="field-grid">
-              <label class="toggle">
-                <input id="radioMapEnabled" type="checkbox" />
-                Enable coverage map
-              </label>
+              <div>
+                <label>Max depth</label>
+                <input id="customMaxDepth" type="number" step="1" min="1" />
+              </div>
+              <div>
+                <label>Samples per src</label>
+                <input id="customSamplesPerSrc" type="number" step="1000" min="1000" />
+              </div>
+              <div>
+                <label>Max paths per src</label>
+                <input id="customMaxPathsPerSrc" type="number" step="1000" min="1000" />
+              </div>
+            </div>
+            <div class="field-grid">
               <label class="toggle">
                 <input id="radioMapAuto" type="checkbox" />
                 Auto size (scene bbox)
@@ -128,6 +137,10 @@
                   <input id="radioMapCellX" type="number" step="0.5" />
                   <input id="radioMapCellY" type="number" step="0.5" />
                 </div>
+              </div>
+              <div>
+                <label>Samples per Tx</label>
+                <input id="customSamplesPerTx" type="number" step="10000" min="1000" />
               </div>
             </div>
             <div class="field-grid">
@@ -183,9 +196,9 @@
               <div class="glossary-item"><strong>Take Snapshot</strong> exports current 3D view to PNG.</div>
               <div class="glossary-item"><strong>Apply Markers</strong> updates Tx/Rx positions used for jobs.</div>
               <div class="glossary-item"><strong>Drag markers in 3D</strong> drag Tx/Rx dots on the ground plane.</div>
-              <div class="glossary-item"><strong>Quick Trace</strong> fast single-link solve; lowest rays/depth.</div>
-              <div class="glossary-item"><strong>Link Trace</strong> higher-quality single link; more rays/depth.</div>
-              <div class="glossary-item"><strong>Coverage Map</strong> batched grid solve; writes heatmap + CSV/NPZ.</div>
+              <div class="glossary-item"><strong>Run Profile</strong> chooses CPU-only or GPU presets (low/medium/high).</div>
+              <div class="glossary-item"><strong>Run Simulation</strong> executes the full pipeline for the selected profile.</div>
+              <div class="glossary-item"><strong>Custom Overrides</strong> unlocks manual tuning for simulation + radio map.</div>
               <div class="glossary-item"><strong>Geometry</strong> toggles the scene mesh/proxy.</div>
               <div class="glossary-item"><strong>Tx/Rx</strong> toggles transmitter/receiver markers.</div>
               <div class="glossary-item"><strong>Ray Paths</strong> toggles RF paths polylines.</div>

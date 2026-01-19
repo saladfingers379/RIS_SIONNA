@@ -22,7 +22,7 @@ const ui = {
   refreshRuns: document.getElementById("refreshRuns"),
   topDown: document.getElementById("topDown"),
   snapshot: document.getElementById("snapshot"),
-  baseConfig: document.getElementById("baseConfig"),
+  runProfile: document.getElementById("runProfile"),
   sceneRunSelect: document.getElementById("sceneRunSelect"),
   runStats: document.getElementById("runStats"),
   txX: document.getElementById("txX"),
@@ -33,10 +33,8 @@ const ui = {
   rxZ: document.getElementById("rxZ"),
   applyMarkers: document.getElementById("applyMarkers"),
   dragMarkers: document.getElementById("dragMarkers"),
-  qualityPreset: document.getElementById("qualityPreset"),
-  jobButtons: document.querySelectorAll(".job-buttons button"),
+  runSim: document.getElementById("runSim"),
   jobList: document.getElementById("jobList"),
-  radioMapEnabled: document.getElementById("radioMapEnabled"),
   radioMapAuto: document.getElementById("radioMapAuto"),
   radioMapPadding: document.getElementById("radioMapPadding"),
   radioMapCellX: document.getElementById("radioMapCellX"),
@@ -46,6 +44,12 @@ const ui = {
   radioMapCenterX: document.getElementById("radioMapCenterX"),
   radioMapCenterY: document.getElementById("radioMapCenterY"),
   radioMapCenterZ: document.getElementById("radioMapCenterZ"),
+  customOverridesSection: document.getElementById("customOverridesSection"),
+  customBackend: document.getElementById("customBackend"),
+  customMaxDepth: document.getElementById("customMaxDepth"),
+  customSamplesPerSrc: document.getElementById("customSamplesPerSrc"),
+  customMaxPathsPerSrc: document.getElementById("customMaxPathsPerSrc"),
+  customSamplesPerTx: document.getElementById("customSamplesPerTx"),
   viewerMeta: document.getElementById("viewerMeta"),
   toggleGeometry: document.getElementById("toggleGeometry"),
   toggleMarkers: document.getElementById("toggleMarkers"),
@@ -70,6 +74,37 @@ const ui = {
   pathTableBody: document.getElementById("pathTableBody"),
   pathStats: document.getElementById("pathStats"),
   randomizeMarkers: document.getElementById("randomizeMarkers"),
+};
+
+const RUN_PROFILES = {
+  cpu_only: {
+    label: "CPU Only",
+    configName: "preview.yaml",
+    runtime: { force_cpu: true, prefer_gpu: false },
+    qualityPreset: "preview",
+  },
+  gpu_low: {
+    label: "GPU Low",
+    configName: "default.yaml",
+    runtime: { force_cpu: false, prefer_gpu: true },
+    qualityPreset: "preview",
+  },
+  gpu_medium: {
+    label: "GPU Medium",
+    configName: "default.yaml",
+    runtime: { force_cpu: false, prefer_gpu: true },
+    qualityPreset: "standard",
+  },
+  gpu_high: {
+    label: "GPU High",
+    configName: "high.yaml",
+    runtime: { force_cpu: false, prefer_gpu: true },
+    qualityPreset: "high",
+  },
+  custom: {
+    label: "Custom",
+    configName: "default.yaml",
+  },
 };
 
 let renderer;
@@ -261,17 +296,26 @@ function bindKeyboardNavigation() {
   });
 }
 
-function getSelectedConfig() {
+function getProfileDefinition() {
+  return RUN_PROFILES[ui.runProfile.value] || RUN_PROFILES.cpu_only;
+}
+
+function resolveConfigPath(configName) {
+  const match = state.configs.find((cfg) => cfg.name === configName);
+  return match ? match.path : `configs/${configName}`;
+}
+
+function getProfileConfig() {
   if (!state.configs.length) {
     return null;
   }
-  const match = state.configs.find((cfg) => cfg.path === ui.baseConfig.value);
+  const profile = getProfileDefinition();
+  const match = state.configs.find((cfg) => cfg.name === profile.configName);
   return match || state.configs[0];
 }
 
 function applyRadioMapDefaults(config) {
   const radio = (config && config.data && config.data.radio_map) || {};
-  ui.radioMapEnabled.checked = Boolean(radio.enabled);
   ui.radioMapAuto.checked = Boolean(radio.auto_size);
   setInputValue(ui.radioMapPadding, radio.auto_padding);
   if (Array.isArray(radio.cell_size)) {
@@ -297,6 +341,27 @@ function applyRadioMapDefaults(config) {
     setInputValue(ui.radioMapCenterY, null);
     setInputValue(ui.radioMapCenterZ, null);
   }
+  }
+}
+
+function applyCustomDefaults(config) {
+  const sim = (config && config.data && config.data.simulation) || {};
+  setInputValue(ui.customMaxDepth, sim.max_depth);
+  setInputValue(ui.customSamplesPerSrc, sim.samples_per_src);
+  setInputValue(ui.customMaxPathsPerSrc, sim.max_num_paths_per_src);
+  const radio = (config && config.data && config.data.radio_map) || {};
+  setInputValue(ui.customSamplesPerTx, radio.samples_per_tx);
+}
+
+function updateCustomVisibility() {
+  const isCustom = ui.runProfile.value === "custom";
+  ui.customOverridesSection.open = isCustom;
+  ui.customOverridesSection.style.display = isCustom ? "" : "none";
+}
+
+function formatProfileLabel(profile) {
+  const def = RUN_PROFILES[profile];
+  return def ? def.label : profile;
 }
 
 async function fetchConfigs() {
@@ -306,18 +371,12 @@ async function fetchConfigs() {
   }
   const data = await res.json();
   state.configs = data.configs || [];
-  ui.baseConfig.innerHTML = "";
-  state.configs.forEach((cfg) => {
-    const opt = document.createElement("option");
-    opt.value = cfg.path;
-    opt.textContent = cfg.name;
-    ui.baseConfig.appendChild(opt);
-  });
-  const defaultCfg = state.configs.find((cfg) => cfg.name === "default.yaml");
-  if (defaultCfg) {
-    ui.baseConfig.value = defaultCfg.path;
+  if (!ui.runProfile.value) {
+    ui.runProfile.value = "cpu_only";
   }
-  applyRadioMapDefaults(getSelectedConfig());
+  applyRadioMapDefaults(getProfileConfig());
+  applyCustomDefaults(getProfileConfig());
+  updateCustomVisibility();
 }
 
 async function fetchRuns() {
@@ -999,7 +1058,8 @@ async function refreshJobs() {
   recentJobs.forEach((job) => {
     const item = document.createElement("div");
     const guard = job.vram_guard && job.vram_guard.applied ? " · VRAM guard" : "";
-    item.textContent = `${job.run_id} · ${job.kind} · ${job.status}${guard}`;
+    const label = job.profile ? ` · ${formatProfileLabel(job.profile)}` : "";
+    item.textContent = `${job.run_id}${label} · ${job.status}${guard}`;
     ui.jobList.appendChild(item);
     jobItems.push({ job, item });
     if (job.status === "completed") {
@@ -1018,7 +1078,8 @@ async function refreshJobs() {
       const pct = progress.progress != null ? Math.round(progress.progress * 100) : null;
       const pctLabel = pct !== null ? ` · ${pct}%` : "";
       const stepLabel = total && idx ? ` · ${step} (${idx}/${total})` : ` · ${step}`;
-      item.textContent = `${job.run_id} · ${job.kind} · ${job.status}${stepLabel}${pctLabel}`;
+      const label = job.profile ? ` · ${formatProfileLabel(job.profile)}` : "";
+      item.textContent = `${job.run_id}${label} · ${job.status}${stepLabel}${pctLabel}`;
     })
   );
   if (needsRunRefresh) {
@@ -1030,46 +1091,69 @@ async function refreshJobs() {
   }
 }
 
-async function submitJob(kind) {
+async function submitJob() {
+  const profile = getProfileDefinition();
   const payload = {
-    kind,
-    preset: ui.qualityPreset.value,
-    base_config: ui.baseConfig.value,
+    kind: "run",
+    profile: ui.runProfile.value,
+    base_config: resolveConfigPath(profile.configName),
   };
-  if (kind === "benchmark") {
-    payload.preset = "benchmark";
+  if (profile.qualityPreset) {
+    payload.preset = profile.qualityPreset;
   }
-  const radio = {};
-  radio.enabled = ui.radioMapEnabled.checked;
-  radio.auto_size = ui.radioMapAuto.checked;
-  const padding = readNumber(ui.radioMapPadding);
-  if (padding !== null) {
-    radio.auto_padding = padding;
+  if (profile.runtime) {
+    payload.runtime = profile.runtime;
   }
-  const cellX = readNumber(ui.radioMapCellX);
-  const cellY = readNumber(ui.radioMapCellY);
-  if (cellX !== null && cellY !== null) {
-    radio.cell_size = [cellX, cellY];
-  }
-  const sizeX = readNumber(ui.radioMapSizeX);
-  const sizeY = readNumber(ui.radioMapSizeY);
-  if (sizeX !== null && sizeY !== null) {
-    radio.size = [sizeX, sizeY];
-  }
-  const centerX = readNumber(ui.radioMapCenterX);
-  const centerY = readNumber(ui.radioMapCenterY);
-  const centerZ = readNumber(ui.radioMapCenterZ);
-  if (centerX !== null && centerY !== null && centerZ !== null) {
-    radio.center = [centerX, centerY, centerZ];
-  }
-  if (Object.keys(radio).length) {
-    payload.radio_map = radio;
+  if (ui.runProfile.value === "custom") {
+    const backend = ui.customBackend.value;
+    payload.runtime = {
+      force_cpu: backend === "cpu",
+      prefer_gpu: backend === "gpu",
+    };
+    const sim = {};
+    const maxDepth = readNumber(ui.customMaxDepth);
+    const samplesPerSrc = readNumber(ui.customSamplesPerSrc);
+    const maxPathsPerSrc = readNumber(ui.customMaxPathsPerSrc);
+    if (maxDepth !== null) sim.max_depth = maxDepth;
+    if (samplesPerSrc !== null) sim.samples_per_src = samplesPerSrc;
+    if (maxPathsPerSrc !== null) sim.max_num_paths_per_src = maxPathsPerSrc;
+    if (Object.keys(sim).length) {
+      payload.simulation = sim;
+    }
+    const radio = { auto_size: ui.radioMapAuto.checked };
+    const padding = readNumber(ui.radioMapPadding);
+    if (padding !== null) {
+      radio.auto_padding = padding;
+    }
+    const cellX = readNumber(ui.radioMapCellX);
+    const cellY = readNumber(ui.radioMapCellY);
+    if (cellX !== null && cellY !== null) {
+      radio.cell_size = [cellX, cellY];
+    }
+    const sizeX = readNumber(ui.radioMapSizeX);
+    const sizeY = readNumber(ui.radioMapSizeY);
+    if (sizeX !== null && sizeY !== null) {
+      radio.size = [sizeX, sizeY];
+    }
+    const centerX = readNumber(ui.radioMapCenterX);
+    const centerY = readNumber(ui.radioMapCenterY);
+    const centerZ = readNumber(ui.radioMapCenterZ);
+    if (centerX !== null && centerY !== null && centerZ !== null) {
+      radio.center = [centerX, centerY, centerZ];
+    }
+    const samplesPerTx = readNumber(ui.customSamplesPerTx);
+    if (samplesPerTx !== null) {
+      radio.samples_per_tx = samplesPerTx;
+    }
+    if (Object.keys(radio).length) {
+      payload.radio_map = radio;
+    }
   }
   const scenePayload = JSON.parse(JSON.stringify(state.sceneOverride || {}));
   scenePayload.tx = { position: state.markers.tx };
   scenePayload.rx = { position: state.markers.rx };
   payload.scene = scenePayload;
-  setMeta(`Submitting ${kind}...`);
+  setMeta("Submitting run...");
   try {
     const res = await fetch("/api/jobs", {
       method: "POST",
@@ -1096,8 +1180,10 @@ function bindUI() {
     const details = await fetchRunDetails(state.sceneSourceRunId);
     state.sceneOverride = details && details.config ? details.config.scene : null;
   });
-  ui.baseConfig.addEventListener("change", () => {
-    applyRadioMapDefaults(getSelectedConfig());
+  ui.runProfile.addEventListener("change", () => {
+    applyRadioMapDefaults(getProfileConfig());
+    applyCustomDefaults(getProfileConfig());
+    updateCustomVisibility();
   });
   ui.applyMarkers.addEventListener("click", () => {
     state.markers.tx = [parseFloat(ui.txX.value), parseFloat(ui.txY.value), parseFloat(ui.txZ.value)];
@@ -1108,9 +1194,7 @@ function bindUI() {
     ui.meshRotationLabel.textContent = `${ui.meshRotation.value}`;
     rebuildScene();
   });
-  ui.jobButtons.forEach((btn) =>
-    btn.addEventListener("click", () => submitJob(btn.dataset.kind))
-  );
+  ui.runSim.addEventListener("click", () => submitJob());
   ui.topDown.addEventListener("click", () => {
     camera.position.set(0, 0, 200);
     controls.target.set(0, 0, 0);

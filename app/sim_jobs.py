@@ -73,51 +73,8 @@ def _apply_vram_guard(cfg: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _job_overrides(kind: str) -> Dict[str, Any]:
-    if kind == "quick_trace":
-        return {
-            "radio_map": {"enabled": False},
-            "simulation": {"max_depth": 2, "samples_per_src": 20000, "max_num_paths_per_src": 20000},
-            "visualization": {"ray_paths": {"max_paths": 120}},
-        }
-    if kind == "link_trace":
-        return {
-            "radio_map": {"enabled": False},
-            "simulation": {"max_depth": 3, "samples_per_src": 120000, "max_num_paths_per_src": 200000},
-            "visualization": {"ray_paths": {"max_paths": 400}},
-        }
-    if kind == "coverage_map":
-        return {
-            "radio_map": {"enabled": True},
-            "visualization": {"ray_paths": {"max_paths": 200}},
-        }
-    if kind == "benchmark":
-        return {
-            "benchmark": {
-                "enabled": True,
-                "radio_map": {
-                    "samples_per_tx": 4000000,
-                    "max_depth": 6,
-                    "batch_size": 512,
-                    "los": True,
-                    "specular_reflection": True,
-                    "diffuse_reflection": True,
-                    "refraction": True,
-                    "diffraction": False,
-                },
-                "radio_map_levels": [
-                    {"name": "rm_256", "grid_shape": [256, 256], "cell_size": [1.0, 1.0]},
-                    {"name": "rm_512", "grid_shape": [512, 512], "cell_size": [1.0, 1.0]},
-                ],
-            },
-            "radio_map": {
-                "enabled": True,
-                "auto_size": False,
-                "center": [0.0, 0.0, 1.5],
-                "cell_size": [1.0, 1.0],
-                "size": [256.0, 256.0],
-                "batch_size": 512,
-            },
-        }
+    if kind != "run":
+        return {}
     return {}
 
 
@@ -184,16 +141,17 @@ class JobManager:
             return {"jobs": list(self.jobs.values())}
 
     def create_job(self, payload: Dict[str, Any]) -> Dict[str, Any]:
-        kind = payload.get("kind", "quick_trace")
+        kind = payload.get("kind", "run")
+        if kind != "run":
+            kind = "run"
         preset = payload.get("preset")
+        profile = payload.get("profile")
         base_config = payload.get("base_config", "configs/default.yaml")
         config_path = Path(base_config)
         if not config_path.exists():
             raise FileNotFoundError(f"Config not found: {config_path}")
 
         cfg = _load_yaml(config_path)
-        if kind == "benchmark" and not preset:
-            cfg.setdefault("quality", {})["preset"] = "benchmark"
         if preset:
             cfg.setdefault("quality", {})["preset"] = preset
         cfg = apply_quality_preset(cfg)
@@ -204,13 +162,23 @@ class JobManager:
             cfg.setdefault("scene", {})
             _deep_update(cfg["scene"], scene_overrides)
 
+        runtime_overrides = payload.get("runtime", {})
+        if runtime_overrides:
+            cfg.setdefault("runtime", {})
+            _deep_update(cfg["runtime"], runtime_overrides)
+
+        sim_overrides = payload.get("simulation", {})
+        if sim_overrides:
+            cfg.setdefault("simulation", {})
+            _deep_update(cfg["simulation"], sim_overrides)
+
         radio_overrides = payload.get("radio_map", {})
         if radio_overrides:
             cfg.setdefault("radio_map", {})
             _deep_update(cfg["radio_map"], radio_overrides)
 
-        if kind in {"quick_trace", "link_trace"}:
-            cfg.setdefault("radio_map", {})["enabled"] = False
+        cfg.setdefault("radio_map", {})["enabled"] = True
+        cfg.setdefault("render", {})["enabled"] = True
 
         run_id = generate_run_id()
         output_dir = create_output_dir(cfg.get("output", {}).get("base_dir", "outputs"), run_id=run_id)
@@ -221,7 +189,9 @@ class JobManager:
 
         job_id = f"job-{run_id}"
         cfg.setdefault("job", {})
-        cfg["job"].update({"id": job_id, "kind": kind, "preset": preset, "estimate": estimate})
+        cfg["job"].update(
+            {"id": job_id, "kind": kind, "profile": profile, "preset": preset, "estimate": estimate}
+        )
 
         job_config_path = output_dir / "job_config.yaml"
         save_yaml(job_config_path, cfg)
@@ -231,6 +201,7 @@ class JobManager:
             "job_id": job_id,
             "run_id": run_id,
             "kind": kind,
+            "profile": profile,
             "preset": preset,
             "status": "running",
             "created_at": _now_ts(),
