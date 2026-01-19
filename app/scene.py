@@ -103,10 +103,9 @@ def _write_procedural_scene_xml(path: Path, spec: Dict[str, Any]) -> None:
   <shape type=\"rectangle\" id=\"ground\">
     <transform name=\"to_world\">
       <scale x=\"{ground_size[0]}\" y=\"{ground_size[1]}\" z=\"1\"/>
-      <rotate x=\"1\" angle=\"-90\"/>
       <translate x=\"0\" y=\"0\" z=\"{ground_elev}\"/>
     </transform>
-{_itu_bsdf_xml(ground_mat, "mat-ground")}
+{_itu_bsdf_xml(ground_mat, "rm-ground")}
   </shape>
 """
     )
@@ -121,7 +120,7 @@ def _write_procedural_scene_xml(path: Path, spec: Dict[str, Any]) -> None:
       <scale x=\"{size[0]}\" y=\"{size[1]}\" z=\"{size[2]}\"/>
       <translate x=\"{center[0]}\" y=\"{center[1]}\" z=\"{center[2]}\"/>
     </transform>
-{_itu_bsdf_xml(mat_name, f"mat-box-{idx}")}
+{_itu_bsdf_xml(mat_name, f"rm-box-{idx}")}
   </shape>
 """
         )
@@ -193,7 +192,11 @@ def _build_procedural_scene(rt, scene_cfg: Dict[str, Any], cfg: Dict[str, Any]):
     if not rewrite:
         try:
             xml_text = xml_path.read_text(encoding="utf-8")
-            if "itu-radio-material" not in xml_text:
+            if (
+                "itu-radio-material" not in xml_text
+                or "rm-" not in xml_text
+                or "rotate x=\"1\" angle=\"-90\"" in xml_text
+            ):
                 rewrite = True
         except Exception:
             rewrite = True
