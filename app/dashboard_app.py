@@ -51,7 +51,7 @@ with st.sidebar:
     st.header("3D Viewer")
     mesh_choices = ["Use run config"] + [p.name for p in mesh_files]
     mesh_choice = st.selectbox("Mesh override", mesh_choices, index=0)
-    proxy_default = st.checkbox("Show proxy geometry by default", value=bool(scene_cfg.get("proxy_enabled", True)))
+    proxy_default = st.checkbox("Show proxy geometry by default", value=bool(scene_cfg.get("proxy_enabled", False)))
     regen_clicked = st.button("Regenerate viewer now")
 
 

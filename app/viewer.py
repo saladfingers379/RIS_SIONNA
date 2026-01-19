@@ -91,16 +91,6 @@ def _segments_to_polylines(segments: List[List[float]]) -> Dict[int, List[List[f
     return polylines
 
 
-def _default_proxy() -> Dict[str, Any]:
-    return {
-        "ground": {"size": [200.0, 200.0], "elevation": 0.0},
-        "boxes": [
-            {"center": [35.0, 40.0, 5.0], "size": [20.0, 20.0, 10.0]},
-            {"center": [10.0, 20.0, 4.0], "size": [12.0, 16.0, 8.0]},
-        ],
-    }
-
-
 def _ensure_vendor(viewer_dir: Path) -> None:
     ensure_three_vendor(viewer_dir)
 
@@ -141,8 +131,8 @@ def generate_viewer(output_dir: Path, config: Dict[str, Any]) -> Optional[Path]:
                 shutil.copyfile(src, dst)
             mesh_files.append(f"meshes/{dst.name}")
 
-    proxy_enabled = scene_cfg.get("proxy_enabled", True)
-    proxy = (scene_cfg.get("proxy") or _default_proxy()) if proxy_enabled else None
+    proxy_enabled = scene_cfg.get("proxy_enabled", False)
+    proxy = scene_cfg.get("proxy") if proxy_enabled else None
 
     plot_dir = output_dir / "plots"
     overlays = []
