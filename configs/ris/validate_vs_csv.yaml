@@ -1,0 +1,39 @@
+schema_version: 1
+
+geometry:
+  nx: 20
+  ny: 20
+  dx: 0.0046
+  dy: 0.0046
+  origin: [0.0, 0.0, 0.0]
+  normal: [0.0, 0.0, 1.0]
+  x_axis_hint: [1.0, 0.0, 0.0]
+
+control:
+  mode: steer
+  params:
+    azimuth_deg: 20.0
+    elevation_deg: 0.0
+
+quantization:
+  bits: 1
+
+pattern_mode:
+  normalization: peak_0db
+  rx_sweep_deg:
+    start: -90.0
+    stop: 90.0
+    step: 2.0
+
+validation:
+  normalization: peak_0db
+  rmse_db_max: 2.0
+  peak_angle_err_deg_max: 2.0
+  peak_db_err_max: 1.5
+
+experiment:
+  frequency_hz: 28000000000
+  tx_incident_angle_deg: -30.0
+
+output:
+  base_dir: outputs

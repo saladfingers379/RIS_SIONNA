@@ -1,0 +1,10 @@
+{
+  "ok": true,
+  "total": 11,
+  "remaining": 1,
+  "quality_gates": [
+    "python -m pytest"
+  ],
+  "id": "US-010",
+  "title": "Document RIS Lab usage and config examples"
+}

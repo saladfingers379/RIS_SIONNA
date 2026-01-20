@@ -304,7 +304,7 @@
     {
       "id": "US-009",
       "title": "Add regression test fixture and validation tests",
-      "status": "in_progress",
+      "status": "done",
       "dependsOn": [
         "US-005"
       ],
@@ -316,13 +316,13 @@
         "python -m pytest passes"
       ],
       "startedAt": "2026-01-20T19:14:39.982014+00:00",
-      "completedAt": null,
-      "updatedAt": "2026-01-20T19:14:39.982023+00:00"
+      "completedAt": "2026-01-20T19:24:26.851125+00:00",
+      "updatedAt": "2026-01-20T19:24:26.851110+00:00"
     },
     {
       "id": "US-010",
       "title": "Document RIS Lab usage and config examples",
-      "status": "open",
+      "status": "in_progress",
       "dependsOn": [
         "US-003",
         "US-004",
@@ -335,7 +335,10 @@
         "Add example configs under configs/ris/ (steer_1bit.yaml, focus_point.yaml, validate_vs_csv.yaml)",
         "Docs warn that ray tracing RIS integration is out of scope and not enabled",
         "Documentation describes CSV reference format and required fields"
-      ]
+      ],
+      "startedAt": "2026-01-20T19:24:28.898990+00:00",
+      "completedAt": null,
+      "updatedAt": "2026-01-20T19:24:28.898999+00:00"
     }
   ]
 }

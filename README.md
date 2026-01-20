@@ -92,6 +92,30 @@ python -m app run --config configs/high.yaml
 - `python -m app dashboard`
 - `python -m app sim`
 
+## RIS Lab (CPU-only)
+RIS Lab is a math-first validation tool for RIS patterns and link metrics. It is **not**
+ray-traced RIS integration and does not enable RIS in Sionna RT yet.
+
+CLI examples:
+```bash
+python -m app ris run --config configs/ris/steer_1bit.yaml --mode pattern
+python -m app ris run --config configs/ris/focus_point.yaml --mode pattern
+python -m app ris validate --config configs/ris/validate_vs_csv.yaml --ref refs/pattern.csv
+```
+
+Simulator UI:
+1. Run `python -m app sim`
+2. Open the "RIS Lab" tab
+3. Set the config path (for example `configs/ris/steer_1bit.yaml`)
+4. Choose Run (pattern/link) or Validate, then start the job
+
+Required artifacts (written to `outputs/<run_id>/`):
+- Common: `config.yaml`, `config.json`, `summary.json`, `progress.json`, `metrics.json`
+- Pattern runs: `plots/phase_map.png`, `plots/pattern_cartesian.png`,
+  `plots/pattern_polar.png`, `data/phase_map.npy`, `data/theta_deg.npy`,
+  `data/pattern_linear.npy`, `data/pattern_db.npy`
+- Validation runs: `plots/phase_map.png`, `plots/validation_overlay.png`
+
 Makefile shortcuts:
 - `make diagnose`, `make run`, `make plot`, `make dashboard`, `make sim`
 
@@ -196,8 +220,15 @@ ris:
 ```
 
 ## RIS Lab Reference Imports
+CSV format (required fields):
+- Header row required.
+- Columns: `theta_deg` plus either `pattern_db` or `pattern_linear`.
+- Extra columns are ignored.
+
+Supported reference files:
 - CSV and NPZ reference files are supported by default.
-- MAT reference files require the optional dependency: `pip install 'ris_sionna[mat]'` (keeps the base CLI lightweight while enabling MATLAB exports).
+- MAT reference files require the optional dependency: `pip install 'ris_sionna[mat]'`
+  (keeps the base CLI lightweight while enabling MATLAB exports).
 
 ## Project Notes
 For operational notes, known quirks, and handoff context, see `PROJECT_CONTEXT.md`.
