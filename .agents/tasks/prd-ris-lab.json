@@ -140,7 +140,7 @@
     {
       "id": "US-001",
       "title": "Add ris_core math primitives and unit tests",
-      "status": "in_progress",
+      "status": "done",
       "dependsOn": [],
       "description": "As a developer, I want deterministic RIS geometry, phase synthesis, and quantization functions so validation runs are reproducible.",
       "acceptanceCriteria": [
@@ -151,13 +151,13 @@
         "python -m pytest passes"
       ],
       "startedAt": "2026-01-20T17:51:22.599335+00:00",
-      "completedAt": null,
-      "updatedAt": "2026-01-20T17:51:22.599343+00:00"
+      "completedAt": "2026-01-20T17:57:10.145050+00:00",
+      "updatedAt": "2026-01-20T17:57:10.145041+00:00"
     },
     {
       "id": "US-002",
       "title": "Define RIS Lab config schema and snapshot outputs",
-      "status": "open",
+      "status": "in_progress",
       "dependsOn": [
         "US-001"
       ],
@@ -167,7 +167,10 @@
         "Example: a minimal YAML config runs with defaults and writes outputs/<run_id>/config.yaml and outputs/<run_id>/config.json",
         "Negative case: missing required fields (e.g., N/M or dx/dy) produces a clear error listing required fields",
         "Config resolution is deterministic and recorded in run metadata (metrics.json or summary.json)"
-      ]
+      ],
+      "startedAt": "2026-01-20T17:57:12.190815+00:00",
+      "completedAt": null,
+      "updatedAt": "2026-01-20T17:57:12.190823+00:00"
     },
     {
       "id": "US-003",

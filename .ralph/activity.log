@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-01-20 17:57:10 | run=20260120-175122-20544 | iter=1 | mode=build | story=US-001 | duration=348s | status=success
 
 ## Events
 
@@ -11,3 +12,9 @@
 2026-01-20T17:54:24Z Refined local frame fallback and phase quantization
 2026-01-20T17:54:36Z Re-ran tests (python/pytest missing)
 2026-01-20T17:56:03Z Updated progress log for US-001
+[2026-01-20 17:57:10] ITERATION 1 end (duration=348s)
+[2026-01-20 17:57:12] ITERATION 2 start (mode=build story=US-002)
+[2026-01-20 17:57:28] Start US-002 work
+[2026-01-20 18:01:29] Implemented RIS Lab config schema and tests
+[2026-01-20 18:01:54] Ran tests: pytest
+[2026-01-20 18:03:12] Re-ran tests after config update

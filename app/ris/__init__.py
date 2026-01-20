@@ -1,5 +1,13 @@
 """RIS core math primitives and helpers."""
 
+from .ris_config import (  # noqa: F401
+    RIS_LAB_SCHEMA_VERSION,
+    compute_ris_lab_config_hash,
+    load_ris_lab_config,
+    resolve_and_snapshot_ris_lab_config,
+    resolve_ris_lab_config,
+    snapshot_ris_lab_config,
+)
 from .ris_core import (  # noqa: F401
     RisFrame,
     RisGeometry,

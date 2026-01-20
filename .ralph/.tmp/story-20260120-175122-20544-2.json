@@ -1,0 +1,10 @@
+{
+  "ok": true,
+  "total": 11,
+  "remaining": 10,
+  "quality_gates": [
+    "python -m pytest"
+  ],
+  "id": "US-002",
+  "title": "Define RIS Lab config schema and snapshot outputs"
+}
