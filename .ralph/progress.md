@@ -98,3 +98,36 @@ Run summary: /home/josh/Documents/Github/RIS_SIONNA/.ralph/runs/run-20260120-175
   - Use `.venv/bin/python -m pytest` when `python` is unavailable
   - Install pytest in the project virtualenv before running tests
 ---
+## [2026-01-20 18:30 UTC] - US-003A: Wire RIS Lab into sim_jobs and sim_server for non-blocking UI runs
+Thread: 
+Run: 20260120-175122-20544 (iteration 4)
+Run log: /home/josh/Documents/Github/RIS_SIONNA/.ralph/runs/run-20260120-175122-20544-iter-4.log
+Run summary: /home/josh/Documents/Github/RIS_SIONNA/.ralph/runs/run-20260120-175122-20544-iter-4.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 06931d9 feat(sim): add RIS Lab job handling
+- Post-commit status: dirty (.ralph/runs/run-20260120-175122-20544-iter-4.log)
+- Verification:
+  - Command: python -m pytest -> FAIL (python not found)
+  - Command: python3 -m pytest -> FAIL (pytest module missing)
+  - Command: .venv/bin/python -m pytest -> PASS
+- Files changed:
+  - .agents/tasks/prd-ris-lab.json
+  - .ralph/.tmp/prompt-20260120-175122-20544-4.md
+  - .ralph/.tmp/story-20260120-175122-20544-4.json
+  - .ralph/.tmp/story-20260120-175122-20544-4.md
+  - .ralph/activity.log
+  - .ralph/errors.log
+  - .ralph/runs/run-20260120-175122-20544-iter-3.log
+  - .ralph/runs/run-20260120-175122-20544-iter-3.md
+  - .ralph/runs/run-20260120-175122-20544-iter-4.log
+  - app/ris/ris_lab.py
+  - app/sim_jobs.py
+  - app/sim_server.py
+- What was implemented
+  - Added RIS Lab progress.json updates for run/validate jobs with failure surfacing
+  - Added RIS Lab job type handling in sim_jobs with config snapshotting
+  - Added sim_server endpoints to submit and list RIS Lab jobs
+- **Learnings for future iterations:**
+  - Use `.venv/bin/python -m pytest` when pytest isn't installed globally
+---
