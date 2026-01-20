@@ -1,0 +1,10 @@
+{
+  "ok": true,
+  "total": 11,
+  "remaining": 5,
+  "quality_gates": [
+    "python -m pytest"
+  ],
+  "id": "US-006",
+  "title": "Add NPZ reference import support"
+}

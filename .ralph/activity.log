@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-01-20 18:44:26 | run=20260120-175122-20544 | iter=6 | mode=build | story=US-005 | duration=372s | status=success
 - 2026-01-20 18:38:12 | run=20260120-175122-20544 | iter=5 | mode=build | story=US-004 | duration=396s | status=success
 - 2026-01-20 18:31:34 | run=20260120-175122-20544 | iter=4 | mode=build | story=US-003A | duration=570s | status=success
 - 2026-01-20 18:22:02 | run=20260120-175122-20544 | iter=3 | mode=build | story=US-003 | duration=755s | status=success
@@ -49,3 +50,8 @@
 [2026-01-20 18:39:23] Update CSV validation errors to include field list
 [2026-01-20 18:39:35] Run tests: python -m pytest (python missing) then python3 -m pytest (pytest missing)
 [2026-01-20 18:42:57] Append US-005 progress entry
+[2026-01-20 18:44:26] ITERATION 6 end (duration=372s)
+[2026-01-20 18:44:28] ITERATION 7 start (mode=build story=US-006)
+[2026-01-20 18:44:59] Start US-006 work
+[2026-01-20 18:46:04] Implemented NPZ reference loading and tests
+[2026-01-20 18:46:12] Ran pytest (python missing; python3 missing pytest)

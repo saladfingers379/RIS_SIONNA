@@ -191,6 +191,28 @@ def _load_reference_csv(path: Path) -> Tuple[np.ndarray, np.ndarray, str]:
     return np.array(theta_vals, dtype=float), np.array(pattern_vals, dtype=float), pattern_kind
 
 
+def _load_reference_npz(path: Path) -> Tuple[np.ndarray, np.ndarray, str]:
+    with np.load(path, allow_pickle=False) as data:
+        keys = set(data.files)
+        missing = []
+        if "theta_deg" not in keys:
+            missing.append("theta_deg")
+        if "pattern_db" not in keys and "pattern_linear" not in keys:
+            missing.append("pattern_db or pattern_linear")
+        if missing:
+            key_list = ", ".join(sorted(keys)) if keys else "(none)"
+            missing_list = ", ".join(missing)
+            raise ValueError(
+                "Reference NPZ missing required key(s): "
+                f"{missing_list}. Expected keys: theta_deg + (pattern_db or pattern_linear). "
+                f"Found keys: {key_list}"
+            )
+        pattern_kind = "pattern_db" if "pattern_db" in keys else "pattern_linear"
+        theta = np.asarray(data["theta_deg"], dtype=float).reshape(-1)
+        pattern = np.asarray(data[pattern_kind], dtype=float).reshape(-1)
+    return theta, pattern, pattern_kind
+
+
 def _validate_theta_pattern_lengths(
     theta_deg: np.ndarray, pattern: np.ndarray, pattern_name: str
 ) -> None:
@@ -394,10 +416,14 @@ def validate_ris_lab(config_path: str, ref_path: str) -> Path:
         ref_path = Path(ref_path)
         if not ref_path.exists():
             raise FileNotFoundError(f"Reference file not found: {ref_path}")
-        if ref_path.suffix.lower() != ".csv":
-            raise ValueError("Reference file must be a CSV for now")
+        suffix = ref_path.suffix.lower()
+        if suffix not in {".csv", ".npz"}:
+            raise ValueError("Reference file must be a CSV or NPZ")
 
-        theta_ref, ref_vals, ref_kind = _load_reference_csv(ref_path)
+        if suffix == ".csv":
+            theta_ref, ref_vals, ref_kind = _load_reference_csv(ref_path)
+        else:
+            theta_ref, ref_vals, ref_kind = _load_reference_npz(ref_path)
         sim_linear = _compute_array_response(
             geometry.centers, phase_map, geometry.frame, wavelength, theta_ref
         )
