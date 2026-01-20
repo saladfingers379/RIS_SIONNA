@@ -4,6 +4,14 @@ import { GLTFLoader } from "./vendor/GLTFLoader.js";
 import { OBJLoader } from "./vendor/OBJLoader.js";
 import { PLYLoader } from "./vendor/PLYLoader.js";
 
+window.onerror = function (msg, url, line) {
+  const div = document.createElement("div");
+  div.style.cssText = "position:fixed;top:0;left:0;right:0;background:red;color:white;z-index:9999;padding:10px;font-family:monospace;font-size:12px;white-space:pre-wrap;";
+  div.textContent = `JS Error: ${msg}\nLine: ${line}\nURL: ${url}`;
+  document.body.appendChild(div);
+  console.error("Global error:", msg, url, line);
+};
+
 const state = {
   runId: null,
   markers: { tx: [0, 0, 0], rx: [0, 0, 0] },
@@ -641,7 +649,10 @@ async function refreshRisJobs() {
 }
 
 async function submitRisJob() {
-  const configPath = ui.risConfigPath.value.trim();
+  let configPath = ui.risConfigPath.value.trim();
+  if (!configPath && ui.risConfigPath.placeholder) {
+    configPath = ui.risConfigPath.placeholder;
+  }
   if (!configPath) {
     setRisStatus("Config path required.");
     return;
@@ -1465,49 +1476,82 @@ async function submitJob() {
 }
 
 function bindUI() {
+  console.log("Starting bindUI...");
+  if (!ui.refreshRuns) console.error("ui.refreshRuns is missing");
   ui.refreshRuns.addEventListener("click", fetchRuns);
+  
+  if (!ui.runSelect) console.error("ui.runSelect is missing");
   ui.runSelect.addEventListener("change", () => loadRun(ui.runSelect.value));
+  
+  if (!ui.sceneRunSelect) console.error("ui.sceneRunSelect is missing");
   ui.sceneRunSelect.addEventListener("change", async () => {
     state.sceneSourceRunId = ui.sceneRunSelect.value;
     const details = await fetchRunDetails(state.sceneSourceRunId);
     state.sceneOverride = details && details.config ? details.config.scene : null;
   });
+  
+  if (!ui.runProfile) console.error("ui.runProfile is missing");
   ui.runProfile.addEventListener("change", () => {
     applyRadioMapDefaults(getProfileConfig());
     applyCustomDefaults(getProfileConfig());
     updateCustomVisibility();
   });
+  
+  if (!ui.applyMarkers) console.error("ui.applyMarkers is missing");
   ui.applyMarkers.addEventListener("click", () => {
     state.markers.tx = [parseFloat(ui.txX.value), parseFloat(ui.txY.value), parseFloat(ui.txZ.value)];
     state.markers.rx = [parseFloat(ui.rxX.value), parseFloat(ui.rxY.value), parseFloat(ui.rxZ.value)];
     rebuildScene();
   });
+  
+  if (!ui.meshRotation) console.error("ui.meshRotation is missing");
   ui.meshRotation.addEventListener("input", () => {
     ui.meshRotationLabel.textContent = `${ui.meshRotation.value}`;
     rebuildScene();
   });
+  
+  if (!ui.runSim) console.error("ui.runSim is missing");
   ui.runSim.addEventListener("click", () => submitJob());
+  
+  console.log("Binding RIS controls...");
+  if (!ui.risTabStrip) console.error("ui.risTabStrip is missing");
   ui.risTabStrip.addEventListener("click", (event) => {
     const target = event.target;
     if (target instanceof HTMLButtonElement && target.dataset.tab) {
       setRisTab(target.dataset.tab);
     }
   });
+  
+  if (!ui.risAction) console.error("ui.risAction is missing");
   ui.risAction.addEventListener("change", updateRisActionVisibility);
+  
+  if (!ui.risStart) console.error("ui.risStart is missing");
   ui.risStart.addEventListener("click", submitRisJob);
+  
+  if (!ui.risRefresh) console.error("ui.risRefresh is missing");
   ui.risRefresh.addEventListener("click", refreshRisJobs);
+  
+  if (!ui.risLoadResults) console.error("ui.risLoadResults is missing");
   ui.risLoadResults.addEventListener("click", () => loadRisResults(ui.risRunSelect.value));
+  
+  if (!ui.risRunSelect) console.error("ui.risRunSelect is missing");
   ui.risRunSelect.addEventListener("change", () => loadRisResults(ui.risRunSelect.value));
+  
+  if (!ui.topDown) console.error("ui.topDown is missing");
   ui.topDown.addEventListener("click", () => {
     camera.position.set(0, 0, 200);
     controls.target.set(0, 0, 0);
   });
+  
+  if (!ui.snapshot) console.error("ui.snapshot is missing");
   ui.snapshot.addEventListener("click", () => {
     const link = document.createElement("a");
     link.download = `snapshot-${state.runId || "run"}.png`;
     link.href = renderer.domElement.toDataURL("image/png");
     link.click();
   });
+  
+  if (!ui.toggleGeometry) console.error("ui.toggleGeometry is missing");
   ui.toggleGeometry.addEventListener("change", () => {
     geometryGroup.visible = ui.toggleGeometry.checked;
     if (ui.toggleGeometry.checked) {
@@ -1516,24 +1560,36 @@ function bindUI() {
       geometryGroup.clear();
     }
   });
+  
+  if (!ui.toggleMarkers) console.error("ui.toggleMarkers is missing");
   ui.toggleMarkers.addEventListener("change", () => {
     markerGroup.visible = ui.toggleMarkers.checked;
   });
+  
+  if (!ui.toggleRays) console.error("ui.toggleRays is missing");
   ui.toggleRays.addEventListener("change", () => {
     rayGroup.visible = ui.toggleRays.checked;
   });
+  
+  if (!ui.toggleHeatmap) console.error("ui.toggleHeatmap is missing");
   ui.toggleHeatmap.addEventListener("change", () => {
     heatmapGroup.visible = ui.toggleHeatmap.checked;
     updateHeatmapScaleVisibility();
   });
+  
+  if (!ui.toggleGuides) console.error("ui.toggleGuides is missing");
   ui.toggleGuides.addEventListener("change", () => {
     alignmentGroup.visible = ui.toggleGuides.checked;
   });
+  
+  if (!ui.heatmapRotation) console.error("ui.heatmapRotation is missing");
   ui.heatmapRotation.addEventListener("input", () => {
     ui.heatmapRotationLabel.textContent = `${ui.heatmapRotation.value}`;
     heatmapGroup.clear();
     addHeatmap();
   });
+  
+  if (!ui.heatmapMin) console.error("ui.heatmapMin is missing");
   ui.heatmapMin.addEventListener("input", () => {
     ui.heatmapMinLabel.textContent = `${ui.heatmapMin.value}`;
     ui.heatmapMinInput.value = ui.heatmapMin.value;
@@ -1541,6 +1597,8 @@ function bindUI() {
     heatmapGroup.clear();
     addHeatmap();
   });
+  
+  if (!ui.heatmapMax) console.error("ui.heatmapMax is missing");
   ui.heatmapMax.addEventListener("input", () => {
     ui.heatmapMaxLabel.textContent = `${ui.heatmapMax.value}`;
     ui.heatmapMaxInput.value = ui.heatmapMax.value;
@@ -1548,6 +1606,8 @@ function bindUI() {
     heatmapGroup.clear();
     addHeatmap();
   });
+  
+  if (!ui.heatmapMinInput) console.error("ui.heatmapMinInput is missing");
   ui.heatmapMinInput.addEventListener("change", () => {
     ui.heatmapMin.value = ui.heatmapMinInput.value;
     ui.heatmapMinLabel.textContent = `${ui.heatmapMin.value}`;
@@ -1555,6 +1615,8 @@ function bindUI() {
     heatmapGroup.clear();
     addHeatmap();
   });
+  
+  if (!ui.heatmapMaxInput) console.error("ui.heatmapMaxInput is missing");
   ui.heatmapMaxInput.addEventListener("change", () => {
     ui.heatmapMax.value = ui.heatmapMaxInput.value;
     ui.heatmapMaxLabel.textContent = `${ui.heatmapMax.value}`;
@@ -1562,12 +1624,25 @@ function bindUI() {
     heatmapGroup.clear();
     addHeatmap();
   });
+  
+  if (!ui.randomizeMarkers) console.error("ui.randomizeMarkers is missing");
   ui.randomizeMarkers.addEventListener("click", randomizeMarkers);
+  
+  if (!ui.pathTypeFilter) console.error("ui.pathTypeFilter is missing");
   ui.pathTypeFilter.addEventListener("change", renderPathTable);
+  
+  if (!ui.pathOrderFilter) console.error("ui.pathOrderFilter is missing");
   ui.pathOrderFilter.addEventListener("input", renderPathTable);
+  
+  console.log("bindUI complete.");
 }
 
-initViewer();
+try {
+  initViewer();
+} catch (err) {
+  console.error("Viewer init failed:", err);
+  setMeta("3D Viewer failed (WebGL error?)");
+}
 bindKeyboardNavigation();
 bindUI();
 updateRisActionVisibility();

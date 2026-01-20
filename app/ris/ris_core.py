@@ -106,27 +106,62 @@ def synthesize_steering_phase(
     centers: np.ndarray,
     wavelength: float,
     direction: Iterable[float],
+    incident_direction: Optional[Iterable[float]] = None,
 ) -> np.ndarray:
-    """Far-field steering phase for a desired direction."""
+    """Far-field steering phase for a desired direction, optionally compensating for incidence."""
 
     k = 2.0 * np.pi / float(wavelength)
     direction_vec = _normalize(np.array(direction, dtype=float), "direction")
-    phase = -k * np.tensordot(centers, direction_vec, axes=([2], [0]))
-    return phase
+    
+    # Phase gradient to align emission towards 'direction'
+    # Phase required: -k * (r . r_out)
+    phase_out = -k * np.tensordot(centers, direction_vec, axes=([2], [0]))
+
+    if incident_direction is not None:
+        # Compensate for incident phase: -k * (r . r_inc)
+        # We want: Phase_RIS = Phase_out - Phase_inc
+        # But wait, the physical phase at the element is Phase_inc.
+        # So Total_Phase = Phase_inc + Phase_RIS.
+        # We want Total_Phase to equal Phase_out (the planar gradient).
+        # So Phase_RIS = Phase_out - Phase_inc.
+        inc_vec = _normalize(np.array(incident_direction, dtype=float), "incident_direction")
+        phase_inc = -k * np.tensordot(centers, inc_vec, axes=([2], [0]))
+        return phase_out - phase_inc
+
+    return phase_out
 
 
 def synthesize_focusing_phase(
     centers: np.ndarray,
     wavelength: float,
     focal_point: Iterable[float],
+    incident_direction: Optional[Iterable[float]] = None,
 ) -> np.ndarray:
-    """Near-field focusing phase towards a focal point."""
+    """Near-field focusing phase towards a focal point, optionally compensating for incidence."""
 
     k = 2.0 * np.pi / float(wavelength)
     focal = np.array(focal_point, dtype=float)
+    # Distance from each element to focal point
     distances = np.linalg.norm(centers - focal[None, None, :], axis=2)
-    phase = -k * distances
-    return phase
+    # Phase to focus: proportional to distance (conjugate phase)
+    phase_out = k * distances # Focusing usually adds positive phase to delay center relative to edges
+
+    # Actually, standard focusing phase is -k * distance (to advance phase) or +k * distance?
+    # To focus at F, we want waves from all elements to arrive at F in phase.
+    # Path length L_i = distance(element_i, F).
+    # Phase accumulation = -k * L_i.
+    # To align them, we need Element_Phase_i such that -k * L_i + Element_Phase_i = Constant.
+    # So Element_Phase_i = k * L_i + C. 
+    # Let's stick to k * distances.
+    
+    phase_out = k * distances
+
+    if incident_direction is not None:
+        inc_vec = _normalize(np.array(incident_direction, dtype=float), "incident_direction")
+        phase_inc = -k * np.tensordot(centers, inc_vec, axes=([2], [0]))
+        return phase_out - phase_inc
+
+    return phase_out
 
 
 def quantize_phase(phase_rad: np.ndarray, bits: Optional[int]) -> np.ndarray:
