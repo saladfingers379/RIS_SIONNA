@@ -226,3 +226,37 @@ Run summary: /home/josh/Documents/Github/RIS_SIONNA/.ralph/runs/run-20260120-175
   - `python` is unavailable in this environment; use `python3` or document setup
   - `pytest` is not installed for `python3`; install dependencies before running tests
 ---
+## [2026-01-20 18:56] - US-007: Add MAT reference import (stretch)
+Thread: 019bdcbd-ec20-77a0-8fe9-f12322126705
+Run: 20260120-175122-20544 (iteration 8)
+Run log: /home/josh/Documents/Github/RIS_SIONNA/.ralph/runs/run-20260120-175122-20544-iter-8.log
+Run summary: /home/josh/Documents/Github/RIS_SIONNA/.ralph/runs/run-20260120-175122-20544-iter-8.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 45cba3f feat(validation): add MAT reference imports
+- Post-commit status: clean
+- Verification:
+  - Command: python -m pytest -> FAIL (python not found)
+  - Command: /home/josh/Documents/Github/RIS_SIONNA/.venv/bin/python -m pytest -> PASS
+- Files changed:
+  - .agents/tasks/prd-ris-lab.json
+  - .ralph/.tmp/prompt-20260120-175122-20544-8.md
+  - .ralph/.tmp/story-20260120-175122-20544-8.json
+  - .ralph/.tmp/story-20260120-175122-20544-8.md
+  - .ralph/activity.log
+  - .ralph/errors.log
+  - .ralph/progress.md
+  - .ralph/runs/run-20260120-175122-20544-iter-7.log
+  - .ralph/runs/run-20260120-175122-20544-iter-7.md
+  - .ralph/runs/run-20260120-175122-20544-iter-8.log
+  - README.md
+  - app/cli.py
+  - app/ris/ris_lab.py
+  - pyproject.toml
+  - tests/test_ris_lab_reference.py
+- What was implemented: added MAT reference loading via optional scipy, extended validation to accept .mat, updated CLI/docs, and added MAT import tests.
+- **Learnings for future iterations:**
+  - Patterns discovered: MAT imports fit the same theta/pattern contract as CSV/NPZ after normalization.
+  - Gotchas encountered: `python` may not be on PATH; use the repo venv for pytest.
+  - Useful context: mock `__import__` to assert actionable missing-scipy errors.
+---
