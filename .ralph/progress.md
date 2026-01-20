@@ -139,7 +139,7 @@ Run summary: /home/josh/Documents/Github/RIS_SIONNA/.ralph/runs/run-20260120-175
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: f0bf697 feat(ris-lab): add sidelobe metrics
-- Post-commit status: clean
+- Post-commit status: dirty: .ralph/runs/run-20260120-175122-20544-iter-10.log
 - Verification:
   - Command: python -m pytest -> FAIL (python not found)
   - Command: python3 -m pytest -> FAIL (pytest module missing)
