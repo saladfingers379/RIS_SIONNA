@@ -62,7 +62,7 @@ def _parse_args() -> argparse.Namespace:
     ris_validate = ris_subparsers.add_parser("validate", help="Validate RIS Lab")
     ris_validate.add_argument("--config", required=True, help="Path to RIS Lab YAML config")
     ris_validate.add_argument(
-        "--ref", required=True, help="Path to reference CSV or NPZ file"
+        "--ref", required=True, help="Path to reference CSV, NPZ, or MAT file"
     )
 
     return parser.parse_args()

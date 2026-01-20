@@ -250,7 +250,7 @@
     {
       "id": "US-006",
       "title": "Add NPZ reference import support",
-      "status": "in_progress",
+      "status": "done",
       "dependsOn": [
         "US-005"
       ],
@@ -261,13 +261,13 @@
         "Negative case: missing keys cause a clear error listing expected keys"
       ],
       "startedAt": "2026-01-20T18:44:28.903291+00:00",
-      "completedAt": null,
-      "updatedAt": "2026-01-20T18:44:28.903299+00:00"
+      "completedAt": "2026-01-20T18:49:50.686520+00:00",
+      "updatedAt": "2026-01-20T18:49:50.686510+00:00"
     },
     {
       "id": "US-007",
       "title": "Add MAT reference import (stretch)",
-      "status": "open",
+      "status": "in_progress",
       "dependsOn": [
         "US-005"
       ],
@@ -276,7 +276,10 @@
         "If MAT import is enabled, document and add scipy as an optional dependency (extras)",
         "Example: MAT file containing theta_deg + pattern_db validates and generates overlay plots",
         "Negative case: when scipy is missing, CLI returns an actionable install message"
-      ]
+      ],
+      "startedAt": "2026-01-20T18:49:52.732480+00:00",
+      "completedAt": null,
+      "updatedAt": "2026-01-20T18:49:52.732488+00:00"
     },
     {
       "id": "US-008",

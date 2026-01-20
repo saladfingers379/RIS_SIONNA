@@ -22,6 +22,9 @@ dependencies = [
 dashboard = [
   "streamlit==1.53.0",
 ]
+mat = [
+  "scipy==1.12.0",
+]
 
 [build-system]
 requires = ["setuptools>=77.0.0"]

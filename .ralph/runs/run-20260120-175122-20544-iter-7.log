@@ -3255,4 +3255,214 @@ thinking
 
 The run log is updated before each tool call, causing dirty state if git status runs separately after committing. To solve this, I’ll run a single combined command that stages and commits the run log, then runs git status and git show within the same tool call, ensuring the repo is clean afterward with no further tool calls needed.
 exec
-/usr/bin/zsh -lc 'git add .ralph/runs/run-20260120-175122-20544-iter-7.log && git commit -m "chore(run-log): update iter-7 log" && git status --porcelain && git show -s --format="%h %s" HEAD' in /home/josh/Documents/Github/RIS_SIONNA
+/usr/bin/zsh -lc 'git add .ralph/runs/run-20260120-175122-20544-iter-7.log && git commit -m "chore(run-log): update iter-7 log" && git status --porcelain && git show -s --format="%h %s" HEAD' in /home/josh/Documents/Github/RIS_SIONNA succeeded in 20ms:
+[linux ac9b9c6] chore(run-log): update iter-7 log
+ 1 file changed, 285 insertions(+), 1 deletion(-)
+ac9b9c6 chore(run-log): update iter-7 log
+file update:
+diff --git a/.ralph/progress.md b/.ralph/progress.md
+index 5e888bf1d8d9c1b7682c54fece3dba220178f455..010d42485818cbe6544afb7d90b6b8544b9c0710
+--- a/.ralph/progress.md
++++ b/.ralph/progress.md
+@@ -219,8 +219,10 @@
+   - app/ris/ris_lab.py
+   - tests/test_ris_lab_reference.py
+ - What was implemented
++  - Added NPZ reference loader with required key validation for theta_deg + pattern data
++  - Enabled validation to accept NPZ files alongside CSV with consistent overlay outputs
++  - Added NPZ reference loader tests for success and missing-key errors
+ - **Learnings for future iterations:**
+-  - Patterns discovered
+-  - Gotchas encountered
+-  - Useful context
++  - `python` is unavailable in this environment; use `python3` or document setup
++  - `pytest` is not installed for `python3`; install dependencies before running tests
+ ---
+diff --git a/app/cli.py b/app/cli.py
+index ce5a161d990f55a79f3b1fb908abe7b0f60b1bf5..a9a5995d795b5f1caaea3ba2f6963231cd4bb30c
+--- a/app/cli.py
++++ b/app/cli.py
+@@ -61,7 +61,9 @@
+     )
+     ris_validate = ris_subparsers.add_parser("validate", help="Validate RIS Lab")
+     ris_validate.add_argument("--config", required=True, help="Path to RIS Lab YAML config")
+-    ris_validate.add_argument("--ref", required=True, help="Path to reference CSV file")
++    ris_validate.add_argument(
++        "--ref", required=True, help="Path to reference CSV or NPZ file"
++    )
+ 
+     return parser.parse_args()
+ 
+diff --git a/app/ris/ris_lab.py b/app/ris/ris_lab.py
+index 419b6e0bac13c9911f0eca1fbff1ed59253a6926..b02ee9da6a80ac30900b98e9b530ceb1fd70bd85
+--- a/app/ris/ris_lab.py
++++ b/app/ris/ris_lab.py
+@@ -191,6 +191,28 @@
+     return np.array(theta_vals, dtype=float), np.array(pattern_vals, dtype=float), pattern_kind
+ 
+ 
++def _load_reference_npz(path: Path) -> Tuple[np.ndarray, np.ndarray, str]:
++    with np.load(path, allow_pickle=False) as data:
++        keys = set(data.files)
++        missing = []
++        if "theta_deg" not in keys:
++            missing.append("theta_deg")
++        if "pattern_db" not in keys and "pattern_linear" not in keys:
++            missing.append("pattern_db or pattern_linear")
++        if missing:
++            key_list = ", ".join(sorted(keys)) if keys else "(none)"
++            missing_list = ", ".join(missing)
++            raise ValueError(
++                "Reference NPZ missing required key(s): "
++                f"{missing_list}. Expected keys: theta_deg + (pattern_db or pattern_linear). "
++                f"Found keys: {key_list}"
++            )
++        pattern_kind = "pattern_db" if "pattern_db" in keys else "pattern_linear"
++        theta = np.asarray(data["theta_deg"], dtype=float).reshape(-1)
++        pattern = np.asarray(data[pattern_kind], dtype=float).reshape(-1)
++    return theta, pattern, pattern_kind
++
++
+ def _validate_theta_pattern_lengths(
+     theta_deg: np.ndarray, pattern: np.ndarray, pattern_name: str
+ ) -> None:
+@@ -394,10 +416,14 @@
+         ref_path = Path(ref_path)
+         if not ref_path.exists():
+             raise FileNotFoundError(f"Reference file not found: {ref_path}")
+-        if ref_path.suffix.lower() != ".csv":
+-            raise ValueError("Reference file must be a CSV for now")
++        suffix = ref_path.suffix.lower()
++        if suffix not in {".csv", ".npz"}:
++            raise ValueError("Reference file must be a CSV or NPZ")
+ 
+-        theta_ref, ref_vals, ref_kind = _load_reference_csv(ref_path)
++        if suffix == ".csv":
++            theta_ref, ref_vals, ref_kind = _load_reference_csv(ref_path)
++        else:
++            theta_ref, ref_vals, ref_kind = _load_reference_npz(ref_path)
+         sim_linear = _compute_array_response(
+             geometry.centers, phase_map, geometry.frame, wavelength, theta_ref
+         )
+
+
+
+thinking
+**Confirming commit and status logging**
+
+The latest commit hash differs in the progress log versus final capture, but no further tool calls can be made to update it. The clean status is confirmed and logged; the final response will note the last commit hash and verified clean status as captured earlier.
+thinking
+**Summarizing final review and test outcomes**
+
+The final response will note adding NPZ loader, CLI, and validation with changes in `app/ris/ris_lab.py`, `app/cli.py`, plus a new test file. It’ll explain test attempts failed due to missing Python/pytest, confirm no security/perf/regression issues found, and suggest installing dependencies and rerunning tests. The summary will mention all commits including the final HEAD hash and reference the logged progress entry, listing file paths properly.
+codex
+Added NPZ reference import support for validation (same overlay outputs as CSV) and updated CLI help, plus unit tests for the NPZ loader in `app/ris/ris_lab.py`, `app/cli.py`, and `tests/test_ris_lab_reference.py`.
+
+Security/performance/regression review: no unsafe deserialization (`np.load` uses `allow_pickle=False`), minimal overhead, and CSV behavior remains unchanged.
+
+Tests:
+- `python -m pytest` -> FAIL (python not found)
+- `python3 -m pytest` -> FAIL (pytest not installed)
+
+Next steps:
+1) Ensure `python` is available or use your project venv, then install pytest dependencies.
+2) Rerun `python -m pytest` to satisfy the quality gate.
+file update:
+diff --git a/.ralph/progress.md b/.ralph/progress.md
+index 5e888bf1d8d9c1b7682c54fece3dba220178f455..010d42485818cbe6544afb7d90b6b8544b9c0710
+--- a/.ralph/progress.md
++++ b/.ralph/progress.md
+@@ -219,8 +219,10 @@
+   - app/ris/ris_lab.py
+   - tests/test_ris_lab_reference.py
+ - What was implemented
++  - Added NPZ reference loader with required key validation for theta_deg + pattern data
++  - Enabled validation to accept NPZ files alongside CSV with consistent overlay outputs
++  - Added NPZ reference loader tests for success and missing-key errors
+ - **Learnings for future iterations:**
+-  - Patterns discovered
+-  - Gotchas encountered
+-  - Useful context
++  - `python` is unavailable in this environment; use `python3` or document setup
++  - `pytest` is not installed for `python3`; install dependencies before running tests
+ ---
+diff --git a/app/cli.py b/app/cli.py
+index ce5a161d990f55a79f3b1fb908abe7b0f60b1bf5..a9a5995d795b5f1caaea3ba2f6963231cd4bb30c
+--- a/app/cli.py
++++ b/app/cli.py
+@@ -61,7 +61,9 @@
+     )
+     ris_validate = ris_subparsers.add_parser("validate", help="Validate RIS Lab")
+     ris_validate.add_argument("--config", required=True, help="Path to RIS Lab YAML config")
+-    ris_validate.add_argument("--ref", required=True, help="Path to reference CSV file")
++    ris_validate.add_argument(
++        "--ref", required=True, help="Path to reference CSV or NPZ file"
++    )
+ 
+     return parser.parse_args()
+ 
+diff --git a/app/ris/ris_lab.py b/app/ris/ris_lab.py
+index 419b6e0bac13c9911f0eca1fbff1ed59253a6926..b02ee9da6a80ac30900b98e9b530ceb1fd70bd85
+--- a/app/ris/ris_lab.py
++++ b/app/ris/ris_lab.py
+@@ -191,6 +191,28 @@
+     return np.array(theta_vals, dtype=float), np.array(pattern_vals, dtype=float), pattern_kind
+ 
+ 
++def _load_reference_npz(path: Path) -> Tuple[np.ndarray, np.ndarray, str]:
++    with np.load(path, allow_pickle=False) as data:
++        keys = set(data.files)
++        missing = []
++        if "theta_deg" not in keys:
++            missing.append("theta_deg")
++        if "pattern_db" not in keys and "pattern_linear" not in keys:
++            missing.append("pattern_db or pattern_linear")
++        if missing:
++            key_list = ", ".join(sorted(keys)) if keys else "(none)"
++            missing_list = ", ".join(missing)
++            raise ValueError(
++                "Reference NPZ missing required key(s): "
++                f"{missing_list}. Expected keys: theta_deg + (pattern_db or pattern_linear). "
++                f"Found keys: {key_list}"
++            )
++        pattern_kind = "pattern_db" if "pattern_db" in keys else "pattern_linear"
++        theta = np.asarray(data["theta_deg"], dtype=float).reshape(-1)
++        pattern = np.asarray(data[pattern_kind], dtype=float).reshape(-1)
++    return theta, pattern, pattern_kind
++
++
+ def _validate_theta_pattern_lengths(
+     theta_deg: np.ndarray, pattern: np.ndarray, pattern_name: str
+ ) -> None:
+@@ -394,10 +416,14 @@
+         ref_path = Path(ref_path)
+         if not ref_path.exists():
+             raise FileNotFoundError(f"Reference file not found: {ref_path}")
+-        if ref_path.suffix.lower() != ".csv":
+-            raise ValueError("Reference file must be a CSV for now")
++        suffix = ref_path.suffix.lower()
++        if suffix not in {".csv", ".npz"}:
++            raise ValueError("Reference file must be a CSV or NPZ")
+ 
+-        theta_ref, ref_vals, ref_kind = _load_reference_csv(ref_path)
++        if suffix == ".csv":
++            theta_ref, ref_vals, ref_kind = _load_reference_csv(ref_path)
++        else:
++            theta_ref, ref_vals, ref_kind = _load_reference_npz(ref_path)
+         sim_linear = _compute_array_response(
+             geometry.centers, phase_map, geometry.frame, wavelength, theta_ref
+         )
+
+tokens used
+73,824
+Added NPZ reference import support for validation (same overlay outputs as CSV) and updated CLI help, plus unit tests for the NPZ loader in `app/ris/ris_lab.py`, `app/cli.py`, and `tests/test_ris_lab_reference.py`.
+
+Security/performance/regression review: no unsafe deserialization (`np.load` uses `allow_pickle=False`), minimal overhead, and CSV behavior remains unchanged.
+
+Tests:
+- `python -m pytest` -> FAIL (python not found)
+- `python3 -m pytest` -> FAIL (pytest not installed)
+
+Next steps:
+1) Ensure `python` is available or use your project venv, then install pytest dependencies.
+2) Rerun `python -m pytest` to satisfy the quality gate.

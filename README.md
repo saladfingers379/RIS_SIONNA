@@ -195,6 +195,10 @@ ris:
   enabled: false
 ```
 
+## RIS Lab Reference Imports
+- CSV and NPZ reference files are supported by default.
+- MAT reference files require the optional dependency: `pip install 'ris_sionna[mat]'` (keeps the base CLI lightweight while enabling MATLAB exports).
+
 ## Project Notes
 For operational notes, known quirks, and handoff context, see `PROJECT_CONTEXT.md`.
 Performance trace notes for the simulator viewer: `docs/perf.md`.

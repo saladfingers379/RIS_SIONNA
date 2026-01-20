@@ -1,0 +1,10 @@
+{
+  "ok": true,
+  "total": 11,
+  "remaining": 4,
+  "quality_gates": [
+    "python -m pytest"
+  ],
+  "id": "US-007",
+  "title": "Add MAT reference import (stretch)"
+}

@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-01-20 18:49:50 | run=20260120-175122-20544 | iter=7 | mode=build | story=US-006 | duration=322s | status=success
 - 2026-01-20 18:44:26 | run=20260120-175122-20544 | iter=6 | mode=build | story=US-005 | duration=372s | status=success
 - 2026-01-20 18:38:12 | run=20260120-175122-20544 | iter=5 | mode=build | story=US-004 | duration=396s | status=success
 - 2026-01-20 18:31:34 | run=20260120-175122-20544 | iter=4 | mode=build | story=US-003A | duration=570s | status=success
@@ -56,3 +57,8 @@
 [2026-01-20 18:46:04] Implemented NPZ reference loading and tests
 [2026-01-20 18:46:12] Ran pytest (python missing; python3 missing pytest)
 [2026-01-20 18:47:55] Updated progress log for US-006
+[2026-01-20 18:49:50] ITERATION 7 end (duration=322s)
+[2026-01-20 18:49:52] ITERATION 8 start (mode=build story=US-007)
+[2026-01-20 18:50:16] Start US-007 MAT import support
+[2026-01-20 18:52:34] Implemented MAT reference loader with optional scipy dependency
+[2026-01-20 18:52:51] Ran tests: /home/josh/Documents/Github/RIS_SIONNA/.venv/bin/python -m pytest
