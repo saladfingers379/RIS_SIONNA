@@ -5,6 +5,38 @@ Started: Tue 20 Jan 2026 05:51:22 PM GMT
 - (add reusable patterns here)
 
 ---
+
+## [2026-01-20 18:20:20] - US-003: Add CLI entrypoint for RIS Lab runs and validation
+Thread: 
+Run: 20260120-175122-20544 (iteration 3)
+Run log: /home/josh/Documents/Github/RIS_SIONNA/.ralph/runs/run-20260120-175122-20544-iter-3.log
+Run summary: /home/josh/Documents/Github/RIS_SIONNA/.ralph/runs/run-20260120-175122-20544-iter-3.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: b68f3bc feat(ris-lab): add CLI run and validate
+- Post-commit status: clean
+- Verification:
+  - Command: python -m pytest -> FAIL (python not found)
+  - Command: python3 -m pytest -> FAIL (pytest not installed)
+  - Command: .venv/bin/python -m pytest -> PASS
+- Files changed:
+  - .agents/tasks/prd-ris-lab.json
+  - .ralph/.tmp/prompt-20260120-175122-20544-3.md
+  - .ralph/.tmp/story-20260120-175122-20544-3.json
+  - .ralph/.tmp/story-20260120-175122-20544-3.md
+  - .ralph/activity.log
+  - .ralph/errors.log
+  - .ralph/runs/run-20260120-175122-20544-iter-2.log
+  - .ralph/runs/run-20260120-175122-20544-iter-2.md
+  - .ralph/runs/run-20260120-175122-20544-iter-3.log
+  - app/cli.py
+  - app/ris/ris_lab.py
+- What was implemented
+  - Added RIS Lab CLI subcommands for run/validate and a pattern/link runner that writes plots and metrics
+  - Added CSV-based validation flow with overlay plot and thresholded metrics
+- **Learnings for future iterations:**
+  - Use `.venv/bin/python -m pytest` when system Python lacks pytest
+---
 ## [2026-01-20 17:55 UTC] - US-001: Add ris_core math primitives and unit tests
 Thread: 
 Run: 20260120-175122-20544 (iteration 1)
