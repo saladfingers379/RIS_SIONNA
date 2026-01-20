@@ -40,3 +40,5 @@
 [2026-01-20 18:31:55] Start US-004 work
 [2026-01-20 18:33:17] Implemented pattern mode sidelobe metrics and length validation
 [2026-01-20 18:33:28] Ran tests (pytest not available)
+[2026-01-20 18:34:47] Ran pytest via .venv/bin/python
+[2026-01-20 18:35:22] Updated progress log for US-004

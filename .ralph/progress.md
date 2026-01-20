@@ -131,3 +131,35 @@ Run summary: /home/josh/Documents/Github/RIS_SIONNA/.ralph/runs/run-20260120-175
 - **Learnings for future iterations:**
   - Use `.venv/bin/python -m pytest` when pytest isn't installed globally
 ---
+## [2026-01-20 18:34 UTC] - US-004: Implement pattern mode artifacts and metrics
+Thread: 
+Run: 20260120-175122-20544 (iteration 5)
+Run log: /home/josh/Documents/Github/RIS_SIONNA/.ralph/runs/run-20260120-175122-20544-iter-5.log
+Run summary: /home/josh/Documents/Github/RIS_SIONNA/.ralph/runs/run-20260120-175122-20544-iter-5.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: f0bf697 feat(ris-lab): add sidelobe metrics
+- Post-commit status: clean
+- Verification:
+  - Command: python -m pytest -> FAIL (python not found)
+  - Command: python3 -m pytest -> FAIL (pytest module missing)
+  - Command: .venv/bin/python -m pytest -> PASS
+- Files changed:
+  - .agents/tasks/prd-ris-lab.json
+  - .ralph/.tmp/prompt-20260120-175122-20544-5.md
+  - .ralph/.tmp/story-20260120-175122-20544-5.json
+  - .ralph/.tmp/story-20260120-175122-20544-5.md
+  - .ralph/activity.log
+  - .ralph/errors.log
+  - .ralph/runs/run-20260120-175122-20544-iter-4.log
+  - .ralph/runs/run-20260120-175122-20544-iter-4.md
+  - .ralph/runs/run-20260120-175122-20544-iter-5.log
+  - app/ris/ris_lab.py
+  - tests/test_ris_lab_pattern.py
+- What was implemented
+  - Added theta/pattern length validation and sidelobe metrics in pattern mode
+  - Saved sidelobe definition and peak metrics alongside existing artifacts
+  - Added unit tests for sidelobe metric computation and length mismatch errors
+- **Learnings for future iterations:**
+  - Use `.venv/bin/python -m pytest` when pytest is not installed globally
+---
