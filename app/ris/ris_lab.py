@@ -165,18 +165,29 @@ def _load_reference_csv(path: Path) -> Tuple[np.ndarray, np.ndarray, str]:
         reader = csv.DictReader(handle)
         if reader.fieldnames is None:
             raise ValueError("Reference CSV must include header row")
-        fields = {name.strip() for name in reader.fieldnames}
+        field_map = {name.strip(): name for name in reader.fieldnames}
+        fields = set(field_map.keys())
+        missing = []
         if "theta_deg" not in fields:
-            raise ValueError("Reference CSV missing required column: theta_deg")
+            missing.append("theta_deg")
         if "pattern_db" not in fields and "pattern_linear" not in fields:
-            raise ValueError("Reference CSV missing required pattern_db or pattern_linear column")
+            missing.append("pattern_db or pattern_linear")
+        if missing:
+            field_list = ", ".join(sorted(fields)) if fields else "(none)"
+            missing_list = ", ".join(missing)
+            raise ValueError(
+                "Reference CSV missing required column(s): "
+                f"{missing_list}. Found columns: {field_list}"
+            )
 
         theta_vals = []
         pattern_vals = []
         pattern_kind = "pattern_db" if "pattern_db" in fields else "pattern_linear"
+        theta_key = field_map["theta_deg"]
+        pattern_key = field_map[pattern_kind]
         for row in reader:
-            theta_vals.append(float(row["theta_deg"]))
-            pattern_vals.append(float(row[pattern_kind]))
+            theta_vals.append(float(row[theta_key]))
+            pattern_vals.append(float(row[pattern_key]))
     return np.array(theta_vals, dtype=float), np.array(pattern_vals, dtype=float), pattern_kind
 
 

@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-01-20 18:38:12 | run=20260120-175122-20544 | iter=5 | mode=build | story=US-004 | duration=396s | status=success
 - 2026-01-20 18:31:34 | run=20260120-175122-20544 | iter=4 | mode=build | story=US-003A | duration=570s | status=success
 - 2026-01-20 18:22:02 | run=20260120-175122-20544 | iter=3 | mode=build | story=US-003 | duration=755s | status=success
 - 2026-01-20 18:09:25 | run=20260120-175122-20544 | iter=2 | mode=build | story=US-002 | duration=733s | status=success
@@ -42,3 +43,8 @@
 [2026-01-20 18:33:28] Ran tests (pytest not available)
 [2026-01-20 18:34:47] Ran pytest via .venv/bin/python
 [2026-01-20 18:35:22] Updated progress log for US-004
+[2026-01-20 18:38:12] ITERATION 5 end (duration=396s)
+[2026-01-20 18:38:15] ITERATION 6 start (mode=build story=US-005)
+[2026-01-20 18:38:41] Start US-005 validation harness
+[2026-01-20 18:39:23] Update CSV validation errors to include field list
+[2026-01-20 18:39:35] Run tests: python -m pytest (python missing) then python3 -m pytest (pytest missing)

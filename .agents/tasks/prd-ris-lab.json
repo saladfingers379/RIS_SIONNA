@@ -212,7 +212,7 @@
     {
       "id": "US-004",
       "title": "Implement pattern mode artifacts and metrics",
-      "status": "in_progress",
+      "status": "done",
       "dependsOn": [
         "US-001",
         "US-002",
@@ -226,13 +226,13 @@
         "Negative case: mismatched theta array lengths are rejected with a clear error"
       ],
       "startedAt": "2026-01-20T18:31:36.493747+00:00",
-      "completedAt": null,
-      "updatedAt": "2026-01-20T18:31:36.493755+00:00"
+      "completedAt": "2026-01-20T18:38:12.945411+00:00",
+      "updatedAt": "2026-01-20T18:38:12.945402+00:00"
     },
     {
       "id": "US-005",
       "title": "Add validation harness for CSV reference data",
-      "status": "open",
+      "status": "in_progress",
       "dependsOn": [
         "US-004"
       ],
@@ -242,7 +242,10 @@
         "Validation run creates overlay plot (reference vs sim) and error report containing RMSE and peak angle error",
         "Negative case: CSV missing theta_deg or pattern column fails with a clear field list",
         "PASS/FAIL result is written to metrics.json (or pass_fail.json) with threshold values used"
-      ]
+      ],
+      "startedAt": "2026-01-20T18:38:14.991792+00:00",
+      "completedAt": null,
+      "updatedAt": "2026-01-20T18:38:14.991800+00:00"
     },
     {
       "id": "US-006",
