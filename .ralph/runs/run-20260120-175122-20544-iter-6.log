@@ -959,4 +959,225 @@ index a76e8ae37ef51c1cf72293851022a2590dfc0765..419b6e0bac13c9911f0eca1fbff1ed59
 thinking
 **Preparing commit and staging all changes**
 exec
-/usr/bin/zsh -lc 'git add -A' in /home/josh/Documents/Github/RIS_SIONNA
+/usr/bin/zsh -lc 'git add -A' in /home/josh/Documents/Github/RIS_SIONNA succeeded in 8ms:
+
+file update:
+diff --git a/app/ris/ris_lab.py b/app/ris/ris_lab.py
+index a76e8ae37ef51c1cf72293851022a2590dfc0765..419b6e0bac13c9911f0eca1fbff1ed59253a6926
+--- a/app/ris/ris_lab.py
++++ b/app/ris/ris_lab.py
+@@ -165,18 +165,29 @@
+         reader = csv.DictReader(handle)
+         if reader.fieldnames is None:
+             raise ValueError("Reference CSV must include header row")
+-        fields = {name.strip() for name in reader.fieldnames}
++        field_map = {name.strip(): name for name in reader.fieldnames}
++        fields = set(field_map.keys())
++        missing = []
+         if "theta_deg" not in fields:
+-            raise ValueError("Reference CSV missing required column: theta_deg")
++            missing.append("theta_deg")
+         if "pattern_db" not in fields and "pattern_linear" not in fields:
+-            raise ValueError("Reference CSV missing required pattern_db or pattern_linear column")
++            missing.append("pattern_db or pattern_linear")
++        if missing:
++            field_list = ", ".join(sorted(fields)) if fields else "(none)"
++            missing_list = ", ".join(missing)
++            raise ValueError(
++                "Reference CSV missing required column(s): "
++                f"{missing_list}. Found columns: {field_list}"
++            )
+ 
+         theta_vals = []
+         pattern_vals = []
+         pattern_kind = "pattern_db" if "pattern_db" in fields else "pattern_linear"
++        theta_key = field_map["theta_deg"]
++        pattern_key = field_map[pattern_kind]
+         for row in reader:
+-            theta_vals.append(float(row["theta_deg"]))
+-            pattern_vals.append(float(row[pattern_kind]))
++            theta_vals.append(float(row[theta_key]))
++            pattern_vals.append(float(row[pattern_key]))
+     return np.array(theta_vals, dtype=float), np.array(pattern_vals, dtype=float), pattern_kind
+ 
+ 
+
+
+thinking
+**Committing fix with conventional message**
+
+I'm committing the fix with the subject "fix(validation): include csv field list errors" as a concise one-liner to clearly describe the change.
+exec
+/usr/bin/zsh -lc 'git commit -m "fix(validation): clarify csv field errors"' in /home/josh/Documents/Github/RIS_SIONNA succeeded in 12ms:
+[linux fe6983e] fix(validation): clarify csv field errors
+ 10 files changed, 1637 insertions(+), 11 deletions(-)
+ create mode 100644 .ralph/.tmp/prompt-20260120-175122-20544-6.md
+ create mode 100644 .ralph/.tmp/story-20260120-175122-20544-6.json
+ create mode 100644 .ralph/.tmp/story-20260120-175122-20544-6.md
+ create mode 100644 .ralph/runs/run-20260120-175122-20544-iter-5.md
+ create mode 100644 .ralph/runs/run-20260120-175122-20544-iter-6.log
+file update:
+diff --git a/app/ris/ris_lab.py b/app/ris/ris_lab.py
+index a76e8ae37ef51c1cf72293851022a2590dfc0765..419b6e0bac13c9911f0eca1fbff1ed59253a6926
+--- a/app/ris/ris_lab.py
++++ b/app/ris/ris_lab.py
+@@ -165,18 +165,29 @@
+         reader = csv.DictReader(handle)
+         if reader.fieldnames is None:
+             raise ValueError("Reference CSV must include header row")
+-        fields = {name.strip() for name in reader.fieldnames}
++        field_map = {name.strip(): name for name in reader.fieldnames}
++        fields = set(field_map.keys())
++        missing = []
+         if "theta_deg" not in fields:
+-            raise ValueError("Reference CSV missing required column: theta_deg")
++            missing.append("theta_deg")
+         if "pattern_db" not in fields and "pattern_linear" not in fields:
+-            raise ValueError("Reference CSV missing required pattern_db or pattern_linear column")
++            missing.append("pattern_db or pattern_linear")
++        if missing:
++            field_list = ", ".join(sorted(fields)) if fields else "(none)"
++            missing_list = ", ".join(missing)
++            raise ValueError(
++                "Reference CSV missing required column(s): "
++                f"{missing_list}. Found columns: {field_list}"
++            )
+ 
+         theta_vals = []
+         pattern_vals = []
+         pattern_kind = "pattern_db" if "pattern_db" in fields else "pattern_linear"
++        theta_key = field_map["theta_deg"]
++        pattern_key = field_map[pattern_kind]
+         for row in reader:
+-            theta_vals.append(float(row["theta_deg"]))
+-            pattern_vals.append(float(row[pattern_kind]))
++            theta_vals.append(float(row[theta_key]))
++            pattern_vals.append(float(row[pattern_key]))
+     return np.array(theta_vals, dtype=float), np.array(pattern_vals, dtype=float), pattern_kind
+ 
+ 
+
+
+thinking
+**Considering activity logging**
+
+I'm evaluating adding activity logs after commits, tests, and major code changes to track progress, though it's optional. Next, I'll check the git status to confirm a clean state.
+exec
+/usr/bin/zsh -lc 'git status --porcelain' in /home/josh/Documents/Github/RIS_SIONNA succeeded in 4ms:
+ M .ralph/runs/run-20260120-175122-20544-iter-6.log
+file update:
+diff --git a/app/ris/ris_lab.py b/app/ris/ris_lab.py
+index a76e8ae37ef51c1cf72293851022a2590dfc0765..419b6e0bac13c9911f0eca1fbff1ed59253a6926
+--- a/app/ris/ris_lab.py
++++ b/app/ris/ris_lab.py
+@@ -165,18 +165,29 @@
+         reader = csv.DictReader(handle)
+         if reader.fieldnames is None:
+             raise ValueError("Reference CSV must include header row")
+-        fields = {name.strip() for name in reader.fieldnames}
++        field_map = {name.strip(): name for name in reader.fieldnames}
++        fields = set(field_map.keys())
++        missing = []
+         if "theta_deg" not in fields:
+-            raise ValueError("Reference CSV missing required column: theta_deg")
++            missing.append("theta_deg")
+         if "pattern_db" not in fields and "pattern_linear" not in fields:
+-            raise ValueError("Reference CSV missing required pattern_db or pattern_linear column")
++            missing.append("pattern_db or pattern_linear")
++        if missing:
++            field_list = ", ".join(sorted(fields)) if fields else "(none)"
++            missing_list = ", ".join(missing)
++            raise ValueError(
++                "Reference CSV missing required column(s): "
++                f"{missing_list}. Found columns: {field_list}"
++            )
+ 
+         theta_vals = []
+         pattern_vals = []
+         pattern_kind = "pattern_db" if "pattern_db" in fields else "pattern_linear"
++        theta_key = field_map["theta_deg"]
++        pattern_key = field_map[pattern_kind]
+         for row in reader:
+-            theta_vals.append(float(row["theta_deg"]))
+-            pattern_vals.append(float(row[pattern_kind]))
++            theta_vals.append(float(row[theta_key]))
++            pattern_vals.append(float(row[pattern_key]))
+     return np.array(theta_vals, dtype=float), np.array(pattern_vals, dtype=float), pattern_kind
+ 
+ 
+
+
+thinking
+**Noticing post-commit working tree changes**
+
+The run log changes after the initial commit, making the working tree dirty again; since amending commits isn't allowed, the plan is to stage and create a second commit to capture these post-commit modifications.
+exec
+/usr/bin/zsh -lc 'git diff -- /home/josh/Documents/Github/RIS_SIONNA/.ralph/runs/run-20260120-175122-20544-iter-6.log' in /home/josh/Documents/Github/RIS_SIONNA succeeded in 4ms:
+diff --git a/.ralph/runs/run-20260120-175122-20544-iter-6.log b/.ralph/runs/run-20260120-175122-20544-iter-6.log
+index 9c3528f..c3be3d1 100644
+--- a/.ralph/runs/run-20260120-175122-20544-iter-6.log
++++ b/.ralph/runs/run-20260120-175122-20544-iter-6.log
+@@ -959,4 +959,157 @@ index a76e8ae37ef51c1cf72293851022a2590dfc0765..419b6e0bac13c9911f0eca1fbff1ed59
+ thinking
+ **Preparing commit and staging all changes**
+ exec
+-/usr/bin/zsh -lc 'git add -A' in /home/josh/Documents/Github/RIS_SIONNA
+\ No newline at end of file
++/usr/bin/zsh -lc 'git add -A' in /home/josh/Documents/Github/RIS_SIONNA succeeded in 8ms:
++
++file update:
++diff --git a/app/ris/ris_lab.py b/app/ris/ris_lab.py
++index a76e8ae37ef51c1cf72293851022a2590dfc0765..419b6e0bac13c9911f0eca1fbff1ed59253a6926
++--- a/app/ris/ris_lab.py
+++++ b/app/ris/ris_lab.py
++@@ -165,18 +165,29 @@
++         reader = csv.DictReader(handle)
++         if reader.fieldnames is None:
+file update:
+diff --git a/app/ris/ris_lab.py b/app/ris/ris_lab.py
+index a76e8ae37ef51c1cf72293851022a2590dfc0765..419b6e0bac13c9911f0eca1fbff1ed59253a6926
+--- a/app/ris/ris_lab.py
++++ b/app/ris/ris_lab.py
+@@ -165,18 +165,29 @@
+         reader = csv.DictReader(handle)
+         if reader.fieldnames is None:
+             raise ValueError("Reference CSV must include header row")
+-        fields = {name.strip() for name in reader.fieldnames}
++        field_map = {name.strip(): name for name in reader.fieldnames}
++        fields = set(field_map.keys())
++        missing = []
+         if "theta_deg" not in fields:
+-            raise ValueError("Reference CSV missing required column: theta_deg")
++            missing.append("theta_deg")
+         if "pattern_db" not in fields and "pattern_linear" not in fields:
+-            raise ValueError("Reference CSV missing required pattern_db or pattern_linear column")
++            missing.append("pattern_db or pattern_linear")
++        if missing:
++            field_list = ", ".join(sorted(fields)) if fields else "(none)"
++            missing_list = ", ".join(missing)
++            raise ValueError(
++                "Reference CSV missing required column(s): "
++                f"{missing_list}. Found columns: {field_list}"
++            )
+ 
+         theta_vals = []
+         pattern_vals = []
+         pattern_kind = "pattern_db" if "pattern_db" in fields else "pattern_linear"
++        theta_key = field_map["theta_deg"]
++        pattern_key = field_map[pattern_kind]
+         for row in reader:
+-            theta_vals.append(float(row["theta_deg"]))
+-            pattern_vals.append(float(row[pattern_kind]))
++            theta_vals.append(float(row[theta_key]))
++            pattern_vals.append(float(row[pattern_key]))
+     return np.array(theta_vals, dtype=float), np.array(pattern_vals, dtype=float), pattern_kind
+ 
+ 
+
+
+thinking
+**Committing updated run log**
+
+I'm staging the updated run log file and committing it with a chore message to keep the repository clean and comply with the run's requirement.
+exec
+/usr/bin/zsh -lc 'git add /home/josh/Documents/Github/RIS_SIONNA/.ralph/runs/run-20260120-175122-20544-iter-6.log' in /home/josh/Documents/Github/RIS_SIONNA
