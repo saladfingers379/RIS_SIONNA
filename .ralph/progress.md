@@ -289,3 +289,33 @@ Run summary: /home/josh/Documents/Github/RIS_SIONNA/.ralph/runs/run-20260120-175
   - Gotchas encountered: `python` was not on PATH; use the repo venv to run the simulator and tests.
   - Useful context: RIS Lab artifacts live under `/runs/<run_id>/plots` and `metrics.json` for UI rendering.
 ---
+## [2026-01-20 19:20:25] - US-009: Add regression test fixture and validation tests
+Thread: 
+Run: 20260120-175122-20544 (iteration 10)
+Run log: /home/josh/Documents/Github/RIS_SIONNA/.ralph/runs/run-20260120-175122-20544-iter-10.log
+Run summary: /home/josh/Documents/Github/RIS_SIONNA/.ralph/runs/run-20260120-175122-20544-iter-10.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: ce1ba55 test(validation): add RIS fixture regression tests
+- Post-commit status: clean
+- Verification:
+  - Command: .venv/bin/python -m pytest -> PASS
+- Files changed:
+  - .agents/tasks/prd-ris-lab.json
+  - .ralph/.tmp/prompt-20260120-175122-20544-10.md
+  - .ralph/.tmp/story-20260120-175122-20544-10.json
+  - .ralph/.tmp/story-20260120-175122-20544-10.md
+  - .ralph/activity.log
+  - .ralph/errors.log
+  - .ralph/progress.md
+  - .ralph/runs/run-20260120-175122-20544-iter-9.log
+  - .ralph/runs/run-20260120-175122-20544-iter-9.md
+  - .ralph/runs/run-20260120-175122-20544-iter-10.log
+  - tests/fixtures/ris_validation_fixture.csv
+  - tests/test_ris_lab_validation.py
+- What was implemented: added a small CSV fixture and validation tests that assert PASS metric ranges and a FAIL case for perturbed reference data.
+- **Learnings for future iterations:**
+  - Patterns discovered: peak-normalized reference data needs shape changes (not constant offsets) to force validation failures.
+  - Gotchas encountered: `python` may not be on PATH; use the repo venv for pytest.
+  - Useful context: validation outputs metrics to `metrics.json` under each run directory.
+---
