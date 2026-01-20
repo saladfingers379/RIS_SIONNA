@@ -2313,4 +2313,283 @@ thinking
 
 The security, performance, and regression review for the changes passed with no issues; now staging all changes for commit.
 exec
-/usr/bin/zsh -lc 'git add -A' in /home/josh/Documents/Github/RIS_SIONNA
+/usr/bin/zsh -lc 'git add -A' in /home/josh/Documents/Github/RIS_SIONNA succeeded in 6ms:
+
+file update:
+diff --git a/.ralph/progress.md b/.ralph/progress.md
+index 5e888bf1d8d9c1b7682c54fece3dba220178f455..010d42485818cbe6544afb7d90b6b8544b9c0710
+--- a/.ralph/progress.md
++++ b/.ralph/progress.md
+@@ -219,8 +219,10 @@
+   - app/ris/ris_lab.py
+   - tests/test_ris_lab_reference.py
+ - What was implemented
++  - Added NPZ reference loader with required key validation for theta_deg + pattern data
++  - Enabled validation to accept NPZ files alongside CSV with consistent overlay outputs
++  - Added NPZ reference loader tests for success and missing-key errors
+ - **Learnings for future iterations:**
+-  - Patterns discovered
+-  - Gotchas encountered
+-  - Useful context
++  - `python` is unavailable in this environment; use `python3` or document setup
++  - `pytest` is not installed for `python3`; install dependencies before running tests
+ ---
+diff --git a/app/cli.py b/app/cli.py
+index ce5a161d990f55a79f3b1fb908abe7b0f60b1bf5..a9a5995d795b5f1caaea3ba2f6963231cd4bb30c
+--- a/app/cli.py
++++ b/app/cli.py
+@@ -61,7 +61,9 @@
+     )
+     ris_validate = ris_subparsers.add_parser("validate", help="Validate RIS Lab")
+     ris_validate.add_argument("--config", required=True, help="Path to RIS Lab YAML config")
+-    ris_validate.add_argument("--ref", required=True, help="Path to reference CSV file")
++    ris_validate.add_argument(
++        "--ref", required=True, help="Path to reference CSV or NPZ file"
++    )
+ 
+     return parser.parse_args()
+ 
+diff --git a/app/ris/ris_lab.py b/app/ris/ris_lab.py
+index 419b6e0bac13c9911f0eca1fbff1ed59253a6926..b02ee9da6a80ac30900b98e9b530ceb1fd70bd85
+--- a/app/ris/ris_lab.py
++++ b/app/ris/ris_lab.py
+@@ -191,6 +191,28 @@
+     return np.array(theta_vals, dtype=float), np.array(pattern_vals, dtype=float), pattern_kind
+ 
+ 
++def _load_reference_npz(path: Path) -> Tuple[np.ndarray, np.ndarray, str]:
++    with np.load(path, allow_pickle=False) as data:
++        keys = set(data.files)
++        missing = []
++        if "theta_deg" not in keys:
++            missing.append("theta_deg")
++        if "pattern_db" not in keys and "pattern_linear" not in keys:
++            missing.append("pattern_db or pattern_linear")
++        if missing:
++            key_list = ", ".join(sorted(keys)) if keys else "(none)"
++            missing_list = ", ".join(missing)
++            raise ValueError(
++                "Reference NPZ missing required key(s): "
++                f"{missing_list}. Expected keys: theta_deg + (pattern_db or pattern_linear). "
++                f"Found keys: {key_list}"
++            )
++        pattern_kind = "pattern_db" if "pattern_db" in keys else "pattern_linear"
++        theta = np.asarray(data["theta_deg"], dtype=float).reshape(-1)
++        pattern = np.asarray(data[pattern_kind], dtype=float).reshape(-1)
++    return theta, pattern, pattern_kind
++
++
+ def _validate_theta_pattern_lengths(
+     theta_deg: np.ndarray, pattern: np.ndarray, pattern_name: str
+ ) -> None:
+@@ -394,10 +416,14 @@
+         ref_path = Path(ref_path)
+         if not ref_path.exists():
+             raise FileNotFoundError(f"Reference file not found: {ref_path}")
+-        if ref_path.suffix.lower() != ".csv":
+-            raise ValueError("Reference file must be a CSV for now")
++        suffix = ref_path.suffix.lower()
++        if suffix not in {".csv", ".npz"}:
++            raise ValueError("Reference file must be a CSV or NPZ")
+ 
+-        theta_ref, ref_vals, ref_kind = _load_reference_csv(ref_path)
++        if suffix == ".csv":
++            theta_ref, ref_vals, ref_kind = _load_reference_csv(ref_path)
++        else:
++            theta_ref, ref_vals, ref_kind = _load_reference_npz(ref_path)
+         sim_linear = _compute_array_response(
+             geometry.centers, phase_map, geometry.frame, wavelength, theta_ref
+         )
+
+
+thinking
+**Committing progress with scoped message**
+exec
+/usr/bin/zsh -lc 'git commit -m "chore(progress): log US-006 run"' in /home/josh/Documents/Github/RIS_SIONNA succeeded in 7ms:
+[linux 6ccd67e] chore(progress): log US-006 run
+ 3 files changed, 924 insertions(+)
+file update:
+diff --git a/.ralph/progress.md b/.ralph/progress.md
+index 5e888bf1d8d9c1b7682c54fece3dba220178f455..010d42485818cbe6544afb7d90b6b8544b9c0710
+--- a/.ralph/progress.md
++++ b/.ralph/progress.md
+@@ -219,8 +219,10 @@
+   - app/ris/ris_lab.py
+   - tests/test_ris_lab_reference.py
+ - What was implemented
++  - Added NPZ reference loader with required key validation for theta_deg + pattern data
++  - Enabled validation to accept NPZ files alongside CSV with consistent overlay outputs
++  - Added NPZ reference loader tests for success and missing-key errors
+ - **Learnings for future iterations:**
+-  - Patterns discovered
+-  - Gotchas encountered
+-  - Useful context
++  - `python` is unavailable in this environment; use `python3` or document setup
++  - `pytest` is not installed for `python3`; install dependencies before running tests
+ ---
+diff --git a/app/cli.py b/app/cli.py
+index ce5a161d990f55a79f3b1fb908abe7b0f60b1bf5..a9a5995d795b5f1caaea3ba2f6963231cd4bb30c
+--- a/app/cli.py
++++ b/app/cli.py
+@@ -61,7 +61,9 @@
+     )
+     ris_validate = ris_subparsers.add_parser("validate", help="Validate RIS Lab")
+     ris_validate.add_argument("--config", required=True, help="Path to RIS Lab YAML config")
+-    ris_validate.add_argument("--ref", required=True, help="Path to reference CSV file")
++    ris_validate.add_argument(
++        "--ref", required=True, help="Path to reference CSV or NPZ file"
++    )
+ 
+     return parser.parse_args()
+ 
+diff --git a/app/ris/ris_lab.py b/app/ris/ris_lab.py
+index 419b6e0bac13c9911f0eca1fbff1ed59253a6926..b02ee9da6a80ac30900b98e9b530ceb1fd70bd85
+--- a/app/ris/ris_lab.py
++++ b/app/ris/ris_lab.py
+@@ -191,6 +191,28 @@
+     return np.array(theta_vals, dtype=float), np.array(pattern_vals, dtype=float), pattern_kind
+ 
+ 
++def _load_reference_npz(path: Path) -> Tuple[np.ndarray, np.ndarray, str]:
++    with np.load(path, allow_pickle=False) as data:
++        keys = set(data.files)
++        missing = []
++        if "theta_deg" not in keys:
++            missing.append("theta_deg")
++        if "pattern_db" not in keys and "pattern_linear" not in keys:
++            missing.append("pattern_db or pattern_linear")
++        if missing:
++            key_list = ", ".join(sorted(keys)) if keys else "(none)"
++            missing_list = ", ".join(missing)
++            raise ValueError(
++                "Reference NPZ missing required key(s): "
++                f"{missing_list}. Expected keys: theta_deg + (pattern_db or pattern_linear). "
++                f"Found keys: {key_list}"
++            )
++        pattern_kind = "pattern_db" if "pattern_db" in keys else "pattern_linear"
++        theta = np.asarray(data["theta_deg"], dtype=float).reshape(-1)
++        pattern = np.asarray(data[pattern_kind], dtype=float).reshape(-1)
++    return theta, pattern, pattern_kind
++
++
+ def _validate_theta_pattern_lengths(
+     theta_deg: np.ndarray, pattern: np.ndarray, pattern_name: str
+ ) -> None:
+@@ -394,10 +416,14 @@
+         ref_path = Path(ref_path)
+         if not ref_path.exists():
+             raise FileNotFoundError(f"Reference file not found: {ref_path}")
+-        if ref_path.suffix.lower() != ".csv":
+-            raise ValueError("Reference file must be a CSV for now")
++        suffix = ref_path.suffix.lower()
++        if suffix not in {".csv", ".npz"}:
++            raise ValueError("Reference file must be a CSV or NPZ")
+ 
+-        theta_ref, ref_vals, ref_kind = _load_reference_csv(ref_path)
++        if suffix == ".csv":
++            theta_ref, ref_vals, ref_kind = _load_reference_csv(ref_path)
++        else:
++            theta_ref, ref_vals, ref_kind = _load_reference_npz(ref_path)
+         sim_linear = _compute_array_response(
+             geometry.centers, phase_map, geometry.frame, wavelength, theta_ref
+         )
+
+
+thinking
+**Checking clean status**
+exec
+/usr/bin/zsh -lc 'git status --porcelain' in /home/josh/Documents/Github/RIS_SIONNA succeeded in 4ms:
+ M .ralph/runs/run-20260120-175122-20544-iter-7.log
+file update:
+diff --git a/.ralph/progress.md b/.ralph/progress.md
+index 5e888bf1d8d9c1b7682c54fece3dba220178f455..010d42485818cbe6544afb7d90b6b8544b9c0710
+--- a/.ralph/progress.md
++++ b/.ralph/progress.md
+@@ -219,8 +219,10 @@
+   - app/ris/ris_lab.py
+   - tests/test_ris_lab_reference.py
+ - What was implemented
++  - Added NPZ reference loader with required key validation for theta_deg + pattern data
++  - Enabled validation to accept NPZ files alongside CSV with consistent overlay outputs
++  - Added NPZ reference loader tests for success and missing-key errors
+ - **Learnings for future iterations:**
+-  - Patterns discovered
+-  - Gotchas encountered
+-  - Useful context
++  - `python` is unavailable in this environment; use `python3` or document setup
++  - `pytest` is not installed for `python3`; install dependencies before running tests
+ ---
+diff --git a/app/cli.py b/app/cli.py
+index ce5a161d990f55a79f3b1fb908abe7b0f60b1bf5..a9a5995d795b5f1caaea3ba2f6963231cd4bb30c
+--- a/app/cli.py
++++ b/app/cli.py
+@@ -61,7 +61,9 @@
+     )
+     ris_validate = ris_subparsers.add_parser("validate", help="Validate RIS Lab")
+     ris_validate.add_argument("--config", required=True, help="Path to RIS Lab YAML config")
+-    ris_validate.add_argument("--ref", required=True, help="Path to reference CSV file")
++    ris_validate.add_argument(
++        "--ref", required=True, help="Path to reference CSV or NPZ file"
++    )
+ 
+     return parser.parse_args()
+ 
+diff --git a/app/ris/ris_lab.py b/app/ris/ris_lab.py
+index 419b6e0bac13c9911f0eca1fbff1ed59253a6926..b02ee9da6a80ac30900b98e9b530ceb1fd70bd85
+--- a/app/ris/ris_lab.py
++++ b/app/ris/ris_lab.py
+@@ -191,6 +191,28 @@
+     return np.array(theta_vals, dtype=float), np.array(pattern_vals, dtype=float), pattern_kind
+ 
+ 
++def _load_reference_npz(path: Path) -> Tuple[np.ndarray, np.ndarray, str]:
++    with np.load(path, allow_pickle=False) as data:
++        keys = set(data.files)
++        missing = []
++        if "theta_deg" not in keys:
++            missing.append("theta_deg")
++        if "pattern_db" not in keys and "pattern_linear" not in keys:
++            missing.append("pattern_db or pattern_linear")
++        if missing:
++            key_list = ", ".join(sorted(keys)) if keys else "(none)"
++            missing_list = ", ".join(missing)
++            raise ValueError(
++                "Reference NPZ missing required key(s): "
++                f"{missing_list}. Expected keys: theta_deg + (pattern_db or pattern_linear). "
++                f"Found keys: {key_list}"
++            )
++        pattern_kind = "pattern_db" if "pattern_db" in keys else "pattern_linear"
++        theta = np.asarray(data["theta_deg"], dtype=float).reshape(-1)
++        pattern = np.asarray(data[pattern_kind], dtype=float).reshape(-1)
++    return theta, pattern, pattern_kind
++
++
+ def _validate_theta_pattern_lengths(
+     theta_deg: np.ndarray, pattern: np.ndarray, pattern_name: str
+ ) -> None:
+@@ -394,10 +416,14 @@
+         ref_path = Path(ref_path)
+         if not ref_path.exists():
+             raise FileNotFoundError(f"Reference file not found: {ref_path}")
+-        if ref_path.suffix.lower() != ".csv":
+-            raise ValueError("Reference file must be a CSV for now")
++        suffix = ref_path.suffix.lower()
++        if suffix not in {".csv", ".npz"}:
++            raise ValueError("Reference file must be a CSV or NPZ")
+ 
+-        theta_ref, ref_vals, ref_kind = _load_reference_csv(ref_path)
++        if suffix == ".csv":
++            theta_ref, ref_vals, ref_kind = _load_reference_csv(ref_path)
++        else:
++            theta_ref, ref_vals, ref_kind = _load_reference_npz(ref_path)
+         sim_linear = _compute_array_response(
+             geometry.centers, phase_map, geometry.frame, wavelength, theta_ref
+         )
+
+
+thinking
+**Committing updated run log**
+
+Noticed the run log changed after recent commands, so I'll stage and commit it to keep the workspace clean per requirements.
+exec
+/usr/bin/zsh -lc 'git add .ralph/runs/run-20260120-175122-20544-iter-7.log' in /home/josh/Documents/Github/RIS_SIONNA
