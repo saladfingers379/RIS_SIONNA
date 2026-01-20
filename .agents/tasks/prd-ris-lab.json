@@ -284,7 +284,7 @@
     {
       "id": "US-008",
       "title": "Add RIS Lab UI tab with Config/Run/Results",
-      "status": "in_progress",
+      "status": "done",
       "dependsOn": [
         "US-003A",
         "US-004",
@@ -298,13 +298,13 @@
         "Negative case: if a run fails, Results shows the error and preserves partial artifacts"
       ],
       "startedAt": "2026-01-20T19:00:45.981180+00:00",
-      "completedAt": null,
-      "updatedAt": "2026-01-20T19:00:45.981188+00:00"
+      "completedAt": "2026-01-20T19:14:37.935928+00:00",
+      "updatedAt": "2026-01-20T19:14:37.935919+00:00"
     },
     {
       "id": "US-009",
       "title": "Add regression test fixture and validation tests",
-      "status": "open",
+      "status": "in_progress",
       "dependsOn": [
         "US-005"
       ],
@@ -314,7 +314,10 @@
         "Validation test asserts PASS and expected metric ranges",
         "Negative case: intentionally perturbed data fails thresholds and reports FAIL",
         "python -m pytest passes"
-      ]
+      ],
+      "startedAt": "2026-01-20T19:14:39.982014+00:00",
+      "completedAt": null,
+      "updatedAt": "2026-01-20T19:14:39.982023+00:00"
     },
     {
       "id": "US-010",

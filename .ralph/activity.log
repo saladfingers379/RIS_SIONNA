@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-01-20 19:14:37 | run=20260120-175122-20544 | iter=9 | mode=build | story=US-008 | duration=832s | status=success
 - 2026-01-20 19:00:43 | run=20260120-175122-20544 | iter=8 | mode=build | story=US-007 | duration=651s | status=success
 - 2026-01-20 18:49:50 | run=20260120-175122-20544 | iter=7 | mode=build | story=US-006 | duration=322s | status=success
 - 2026-01-20 18:44:26 | run=20260120-175122-20544 | iter=6 | mode=build | story=US-005 | duration=372s | status=success
@@ -70,3 +71,10 @@
 [2026-01-20 19:06:17] Updated sim_web UI for RIS Lab tabs and logic
 [2026-01-20 19:08:39] Ran pytest and browser verification for RIS Lab UI
 [2026-01-20 19:12:02] Updated progress log for US-008
+[2026-01-20 19:14:37] ITERATION 9 end (duration=832s)
+[2026-01-20 19:14:40] ITERATION 10 start (mode=build story=US-009)
+[2026-01-20 19:14:58] Start US-009 regression test fixture and validation tests
+[2026-01-20 19:17:40] Added RIS Lab validation fixture test and CSV fixture
+[2026-01-20 19:17:52] Ran pytest for US-009
+[2026-01-20 19:18:44] Normalized RIS validation CSV fixture line endings
+[2026-01-20 19:18:52] Re-ran pytest after fixture update

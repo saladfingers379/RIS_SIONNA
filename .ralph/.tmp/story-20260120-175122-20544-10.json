@@ -1,0 +1,10 @@
+{
+  "ok": true,
+  "total": 11,
+  "remaining": 2,
+  "quality_gates": [
+    "python -m pytest"
+  ],
+  "id": "US-009",
+  "title": "Add regression test fixture and validation tests"
+}

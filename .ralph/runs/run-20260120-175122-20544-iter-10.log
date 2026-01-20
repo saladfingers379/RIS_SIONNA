@@ -1,0 +1,2600 @@
+OpenAI Codex v0.87.0 (research preview)
+--------
+workdir: /home/josh/Documents/Github/RIS_SIONNA
+model: gpt-5.2-codex
+provider: openai
+approval: never
+sandbox: danger-full-access
+reasoning effort: none
+reasoning summaries: auto
+session id: 019bdcd4-9db1-7493-ab00-0ba79cf56f11
+--------
+user
+# Build
+
+You are an autonomous coding agent. Your task is to complete the work for exactly one story and record the outcome.
+
+## Paths
+- PRD: /home/josh/Documents/Github/RIS_SIONNA/.agents/tasks/prd-ris-lab.json
+- AGENTS (optional): /home/josh/Documents/Github/RIS_SIONNA/AGENTS.md
+- Progress Log: /home/josh/Documents/Github/RIS_SIONNA/.ralph/progress.md
+- Guardrails: /home/josh/Documents/Github/RIS_SIONNA/.ralph/guardrails.md
+- Guardrails Reference: /home/josh/Documents/Github/RIS_SIONNA/.agents/ralph/references/GUARDRAILS.md
+- Context Reference: /home/josh/Documents/Github/RIS_SIONNA/.agents/ralph/references/CONTEXT_ENGINEERING.md
+- Errors Log: /home/josh/Documents/Github/RIS_SIONNA/.ralph/errors.log
+- Activity Log: /home/josh/Documents/Github/RIS_SIONNA/.ralph/activity.log
+- Activity Logger: /home/josh/Documents/Github/RIS_SIONNA/ralph log
+- No-commit: false
+- Repo Root: /home/josh/Documents/Github/RIS_SIONNA
+- Run ID: 20260120-175122-20544
+- Iteration: 10
+- Run Log: /home/josh/Documents/Github/RIS_SIONNA/.ralph/runs/run-20260120-175122-20544-iter-10.log
+- Run Summary: /home/josh/Documents/Github/RIS_SIONNA/.ralph/runs/run-20260120-175122-20544-iter-10.md
+
+## Global Quality Gates (apply to every story)
+- python -m pytest
+
+## Selected Story (Do not change scope)
+ID: US-009
+Title: Add regression test fixture and validation tests
+
+Story details:
+### US-009: Add regression test fixture and validation tests
+Status: in_progress
+Depends on: US-005
+
+Description:
+As a developer, I want a small golden fixture to keep validation metrics stable in CI.
+
+Acceptance Criteria:
+- [ ] Add a small reference fixture (CSV) and a test that runs validation with known thresholds
+- [ ] Validation test asserts PASS and expected metric ranges
+- [ ] Negative case: intentionally perturbed data fails thresholds and reports FAIL
+- [ ] python -m pytest passes
+
+
+If the story details are empty or missing, STOP and report that the PRD story format could not be parsed.
+
+## Rules (Non-Negotiable)
+- Implement **only** the work required to complete the selected story.
+- Complete all tasks associated with this story (and only this story).
+- Do NOT ask the user questions.
+- Do NOT change unrelated code.
+- Do NOT assume something is unimplemented — confirm by reading code.
+- Implement completely; no placeholders or stubs.
+- If No-commit is true, do NOT commit or push changes.
+- Do NOT edit the PRD JSON (status is handled by the loop).
+- All changes made during the run must be committed (including updates to progress/logs).
+ - Before committing, perform a final **security**, **performance**, and **regression** review of your changes.
+
+## Your Task (Do this in order)
+1. Read /home/josh/Documents/Github/RIS_SIONNA/.ralph/guardrails.md before any code changes.
+2. Read /home/josh/Documents/Github/RIS_SIONNA/.ralph/errors.log for repeated failures to avoid.
+3. Read /home/josh/Documents/Github/RIS_SIONNA/.agents/tasks/prd-ris-lab.json for global context (do not edit).
+4. Fully audit and read all necessary files to understand the task end-to-end before implementing. Do not assume missing functionality.
+5. If /home/josh/Documents/Github/RIS_SIONNA/AGENTS.md exists, follow its build/test instructions.
+6. Implement only the tasks that belong to US-009.
+7. Run verification commands listed in the story, the global quality gates, and in /home/josh/Documents/Github/RIS_SIONNA/AGENTS.md (if required).
+8. If the project has a build or dev workflow, run what applies:
+   - Build step (e.g., `npm run build`) if defined.
+   - Dev server (e.g., `npm run dev`, `wrangler dev`) if it is the normal validation path.
+   - Confirm no runtime/build errors in the console.
+9. Perform a brief audit before committing:
+   - **Security:** check for obvious vulnerabilities or unsafe handling introduced by your changes.
+   - **Performance:** check for avoidable regressions (extra queries, heavy loops, unnecessary re-renders).
+   - **Regression:** verify existing behavior that could be impacted still works.
+10. If No-commit is false, commit changes using the `$commit` skill.
+    - Stage everything: `git add -A`
+    - Confirm a clean working tree after commit: `git status --porcelain` should be empty.
+    - After committing, capture the commit hash and subject using:
+      `git show -s --format="%h %s" HEAD`.
+11. Append a progress entry to /home/josh/Documents/Github/RIS_SIONNA/.ralph/progress.md with run/commit/test details (format below).
+    If No-commit is true, skip committing and note it in the progress entry.
+
+## Progress Entry Format (Append Only)
+```
+## [Date/Time] - US-009: Add regression test fixture and validation tests
+Thread: [codex exec session id if available, otherwise leave blank]
+Run: 20260120-175122-20544 (iteration 10)
+Run log: /home/josh/Documents/Github/RIS_SIONNA/.ralph/runs/run-20260120-175122-20544-iter-10.log
+Run summary: /home/josh/Documents/Github/RIS_SIONNA/.ralph/runs/run-20260120-175122-20544-iter-10.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: <hash> <subject> (or `none` + reason)
+- Post-commit status: `clean` or list remaining files
+- Verification:
+  - Command: <exact command> -> PASS/FAIL
+  - Command: <exact command> -> PASS/FAIL
+- Files changed:
+  - <file path>
+  - <file path>
+- What was implemented
+- **Learnings for future iterations:**
+  - Patterns discovered
+  - Gotchas encountered
+  - Useful context
+---
+```
+
+## Completion Signal
+Only output the completion signal when the **selected story** is fully complete and verified.
+When the selected story is complete, output:
+<promise>COMPLETE</promise>
+
+Otherwise, end normally without the signal.
+
+## Additional Guardrails
+- When authoring documentation, capture the why (tests + implementation intent).
+- If you learn how to run/build/test the project, update /home/josh/Documents/Github/RIS_SIONNA/AGENTS.md briefly (operational only).
+- Keep AGENTS operational only; progress notes belong in /home/josh/Documents/Github/RIS_SIONNA/.ralph/progress.md.
+- If you hit repeated errors, log them in /home/josh/Documents/Github/RIS_SIONNA/.ralph/errors.log and add a Sign to /home/josh/Documents/Github/RIS_SIONNA/.ralph/guardrails.md using /home/josh/Documents/Github/RIS_SIONNA/.agents/ralph/references/GUARDRAILS.md as the template.
+
+## Activity Logging (Required)
+Log major actions to /home/josh/Documents/Github/RIS_SIONNA/.ralph/activity.log using the helper:
+```
+/home/josh/Documents/Github/RIS_SIONNA/ralph log "message"
+```
+Log at least:
+- Start of work on the story
+- After major code changes
+- After tests/verification
+- After updating progress log
+
+## Browser Testing (Required for Frontend Stories)
+If the selected story changes UI, you MUST verify it in the browser:
+1. Load the `dev-browser` skill.
+2. Navigate to the relevant page.
+3. Verify the UI changes work as expected.
+4. Take a screenshot if helpful for the progress log.
+
+A frontend story is NOT complete until browser verification passes.
+
+mcp: context7 starting
+mcp: filesystem starting
+mcp: memory starting
+mcp: context7 ready
+mcp: memory ready
+mcp: filesystem ready
+mcp startup: ready: context7, memory, filesystem
+
+thinking
+**Planning initial activity logging**
+
+I'm starting by reading the activity log to track actions as I proceed, preparing to handle guardrails, errors, PRD, AGENTS, and skill commits.
+exec
+/usr/bin/zsh -lc '/home/josh/Documents/Github/RIS_SIONNA/ralph log "Start US-009 regression test fixture and validation tests"' in /home/josh/Documents/Github/RIS_SIONNA exited 127 in 2ms:
+zsh:1: no such file or directory: /home/josh/Documents/Github/RIS_SIONNA/ralph
+
+thinking
+**Identifying error source**
+
+I'm checking error logs and searching for the script or path named "ralph" to locate the source of the command failure and understand the required activity log.
+exec
+/usr/bin/zsh -lc 'ls -la' in /home/josh/Documents/Github/RIS_SIONNA succeeded in 3ms:
+total 108
+drwxrwxr-x 16 josh josh  4096 Jan 20 18:01 .
+drwxrwxr-x  3 josh josh  4096 Jan 19 17:55 ..
+drwxrwxr-x  4 josh josh  4096 Jan 20 17:19 .agents
+-rw-rw-r--  1 josh josh  7343 Jan 20 17:42 AGENTS.md
+drwxrwxr-x  6 josh josh  4096 Jan 19 20:19 app
+drwxrwxr-x  4 josh josh  4096 Jan 19 23:11 build
+drwxrwxr-x  3 josh josh  4096 Jan 20 16:20 .codex
+drwxrwxr-x  2 josh josh  4096 Jan 19 23:02 configs
+drwxrwxr-x  2 josh josh  4096 Jan 19 20:03 docs
+drwxrwxr-x  8 josh josh  4096 Jan 20 19:14 .git
+-rw-rw-r--  1 josh josh    45 Jan 19 17:55 .gitignore
+-rw-rw-r--  1 josh josh   228 Jan 19 17:55 Makefile
+drwxrwxr-x  7 josh josh  4096 Jan 20 16:23 outputs
+-rw-rw-r--  1 josh josh  4736 Jan 19 23:04 PROJECT_CONTEXT.md
+-rw-rw-r--  1 josh josh   778 Jan 20 18:52 pyproject.toml
+drwxrwxr-x  3 josh josh  4096 Jan 20 18:01 .pytest_cache
+drwxrwxr-x  4 josh josh  4096 Jan 20 19:09 .ralph
+-rw-rw-r--  1 josh josh 12040 Jan 20 18:52 README.md
+-rw-rw-r--  1 josh josh   649 Jan 19 23:04 REPO_STATUS.md
+
+thinking
+**Checking for missing helper script**
+
+I'm searching for a helper script named "ralph," exploring the repo root and the .agents directory to locate it or confirm its absence.
+exec
+/usr/bin/zsh -lc "rg --files -g 'ralph'" in /home/josh/Documents/Github/RIS_SIONNA exited 1 in 6ms:
+
+
+thinking
+**Checking if tool is in PATH**
+exec
+/usr/bin/zsh -lc 'which ralph || true' in /home/josh/Documents/Github/RIS_SIONNA succeeded in 2ms:
+/home/josh/.npm-global/bin/ralph
+
+thinking
+**Using available ralph command**
+
+I'll run `ralph log` from the current working directory since the exact path is missing but the command is available in PATH as the instructions imply.
+exec
+/usr/bin/zsh -lc 'ralph log "Start US-009 regression test fixture and validation tests"' in /home/josh/Documents/Github/RIS_SIONNA succeeded in 87ms:
+Using local templates: /home/josh/Documents/Github/RIS_SIONNA/.agents/ralph
+
+thinking
+**Reading key documentation**
+
+I'm reviewing the guardrails, errors, PRD, and AGENTS files to gather critical context and constraints that will guide the implementation approach.
+exec
+/usr/bin/zsh -lc 'cat /home/josh/Documents/Github/RIS_SIONNA/.ralph/guardrails.md' in /home/josh/Documents/Github/RIS_SIONNA succeeded in 3ms:
+# Guardrails (Signs)
+
+> Lessons learned from failures. Read before acting.
+
+## Core Signs
+
+### Sign: Read Before Writing
+- **Trigger**: Before modifying any file
+- **Instruction**: Read the file first
+- **Added after**: Core principle
+
+### Sign: Test Before Commit
+- **Trigger**: Before committing changes
+- **Instruction**: Run required tests and verify outputs
+- **Added after**: Core principle
+
+---
+
+## Learned Signs
+
+
+thinking
+**Reviewing error logs**
+exec
+/usr/bin/zsh -lc 'cat /home/josh/Documents/Github/RIS_SIONNA/.ralph/errors.log' in /home/josh/Documents/Github/RIS_SIONNA succeeded in 3ms:
+# Error Log
+
+> Failures and repeated issues. Use this to add guardrails.
+
+[2026-01-20 17:57:10] ITERATION 1 left uncommitted changes; review run summary at /home/josh/Documents/Github/RIS_SIONNA/.ralph/runs/run-20260120-175122-20544-iter-1.md
+[2026-01-20 18:09:25] ITERATION 2 left uncommitted changes; review run summary at /home/josh/Documents/Github/RIS_SIONNA/.ralph/runs/run-20260120-175122-20544-iter-2.md
+[2026-01-20 18:22:02] ITERATION 3 left uncommitted changes; review run summary at /home/josh/Documents/Github/RIS_SIONNA/.ralph/runs/run-20260120-175122-20544-iter-3.md
+[2026-01-20 18:31:34] ITERATION 4 left uncommitted changes; review run summary at /home/josh/Documents/Github/RIS_SIONNA/.ralph/runs/run-20260120-175122-20544-iter-4.md
+[2026-01-20 18:38:12] ITERATION 5 left uncommitted changes; review run summary at /home/josh/Documents/Github/RIS_SIONNA/.ralph/runs/run-20260120-175122-20544-iter-5.md
+[2026-01-20 18:44:26] ITERATION 6 left uncommitted changes; review run summary at /home/josh/Documents/Github/RIS_SIONNA/.ralph/runs/run-20260120-175122-20544-iter-6.md
+[2026-01-20 18:49:50] ITERATION 7 left uncommitted changes; review run summary at /home/josh/Documents/Github/RIS_SIONNA/.ralph/runs/run-20260120-175122-20544-iter-7.md
+[2026-01-20 19:00:43] ITERATION 8 left uncommitted changes; review run summary at /home/josh/Documents/Github/RIS_SIONNA/.ralph/runs/run-20260120-175122-20544-iter-8.md
+[2026-01-20 19:14:37] ITERATION 9 left uncommitted changes; review run summary at /home/josh/Documents/Github/RIS_SIONNA/.ralph/runs/run-20260120-175122-20544-iter-9.md
+
+thinking
+**Reading PRD json**
+exec
+/usr/bin/zsh -lc 'cat /home/josh/Documents/Github/RIS_SIONNA/.agents/tasks/prd-ris-lab.json' in /home/josh/Documents/Github/RIS_SIONNA succeeded in 3ms:
+{
+  "version": 1,
+  "project": "RIS Lab (Validation First)",
+  "overview": "Add a RIS Lab module to design and validate RIS behaviors against MATLAB and paper-style references with reproducible CLI and Simulator-UI runs, saving full artifacts for regression testing.",
+  "goals": [
+    "Provide deterministic RIS math, control synthesis, and pattern/link validation via CLI and Simulator UI",
+    "Reproduce MATLAB reference patterns within configurable RMSE + peak-angle thresholds",
+    "Persist all run artifacts under outputs/<run_id>/ for regression tracking"
+  ],
+  "nonGoals": [
+    "Ray tracing or Sionna RT RIS integration (no ray-traced RIS scattering)",
+    "RIS optimization, auto-tuning, or search algorithms",
+    "GIS or map ingestion"
+  ],
+  "successMetrics": [
+    "A validation run matches MATLAB pattern within RMSE threshold and peak-angle error threshold",
+    "A run produces all required artifacts under outputs/<run_id>/"
+  ],
+  "openQuestions": [],
+  "defaults": {
+exec
+/usr/bin/zsh -lc 'cat /home/josh/Documents/Github/RIS_SIONNA/AGENTS.md' in /home/josh/Documents/Github/RIS_SIONNA succeeded in 3ms:
+# AGENTS.md — RIS_SIONNA
+**Native Ubuntu 24.04 · GPU-first (CUDA/OptiX) · Sionna RT baseline @ 28 GHz · RIS Lab (validation-first)**
+
+---
+
+## 0. HARD CONTEXT RESET (NON-NEGOTIABLE)
+
+- Primary target: **native Ubuntu 24.04**
+- GPU RT target: **CUDA + OptiX (real runtime)**
+- WSL may exist as a *CPU-only dev shell*, but **GPU OptiX on WSL is unsupported/unstable** for this repo.
+- Any GPU RT failure on native Ubuntu is treated as **misconfiguration**, not “platform limitation”.
+
+This repo must never silently “looks fine” while running CPU/LLVM when a GPU is available.
+If we fall back, we must say so loudly and explain why.
+
+---
+
+## 1. SYSTEM ENVIRONMENT (AUTHORITATIVE)
+
+**Baseline assumptions for “GPU-first” work:**
+
+thinking
+**Investigating missing log command**
+
+I'm checking why the ralph log command path is missing despite an earlier successful command and will review existing validation code tests to understand related behavior.
+exec
+/usr/bin/zsh -lc "rg --files -g 'ris' -g '*.py' app tests" in /home/josh/Documents/Github/RIS_SIONNA succeeded in 5ms:
+app/viewer.py
+app/sim_jobs.py
+app/__main__.py
+app/scene.py
+app/plots.py
+app/web_assets.py
+tests/test_ris_core.py
+tests/test_ris_lab_pattern.py
+tests/test_ris_lab_reference.py
+tests/test_alignment.py
+tests/test_ui_smoke.py
+tests/test_ris_config.py
+app/cli.py
+app/config.py
+app/dashboard_app.py
+app/io.py
+app/simulate.py
+app/__init__.py
+app/sim_server.py
+app/metrics.py
+
+thinking
+**Identifying validation test focus**
+
+I noted that the existing tests for validation functions are in `test_ris_lab_reference`, guiding the scope for implementing validation next.
+exec
+/usr/bin/zsh -lc "sed -n '1,200p' tests/test_ris_lab_reference.py" in /home/josh/Documents/Github/RIS_SIONNA succeeded in 3ms:
+import tempfile
+import unittest
+from unittest import mock
+from pathlib import Path
+
+import numpy as np
+
+from app.ris.ris_lab import _load_reference_mat, _load_reference_npz
+
+try:
+    import scipy  # noqa: F401
+    SCIPY_AVAILABLE = True
+except Exception:
+    SCIPY_AVAILABLE = False
+
+
+class TestRisLabReference(unittest.TestCase):
+    def test_load_reference_npz_pattern_db(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            path = Path(tmp_dir) / "ref.npz"
+
+thinking
+**Identifying validation need**
+
+I've determined that a validation function is required in app/ris/ris_lab.py.
+exec
+/usr/bin/zsh -lc "sed -n '1,260p' app/ris/ris_lab.py" in /home/josh/Documents/Github/RIS_SIONNA succeeded in 3ms:
+"""RIS Lab runners for pattern and validation modes."""
+
+from __future__ import annotations
+
+import csv
+import logging
+import time
+from pathlib import Path
+from typing import Any, Dict, Tuple
+
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import numpy as np
+
+from app.io import save_json
+from app.ris.ris_config import resolve_and_snapshot_ris_lab_config
+from app.ris.ris_core import (
+    compute_element_centers,
+    degrees_to_radians,
+exec
+/usr/bin/zsh -lc "sed -n '260,620p' app/ris/ris_lab.py" in /home/josh/Documents/Github/RIS_SIONNA succeeded in 3ms:
+    if len(pattern_db) < 2:
+        return {
+            "sidelobe_level_db": None,
+            "sidelobe_peak_db": None,
+            "sidelobe_definition": "undefined for fewer than 2 samples",
+        }
+    peak_idx = int(np.argmax(pattern_db))
+    sidelobe_mask = np.ones_like(pattern_db, dtype=bool)
+    sidelobe_mask[peak_idx] = False
+    sidelobe_peak_db = float(np.max(pattern_db[sidelobe_mask]))
+    peak_db = float(pattern_db[peak_idx])
+    return {
+        "sidelobe_level_db": float(peak_db - sidelobe_peak_db),
+        "sidelobe_peak_db": sidelobe_peak_db,
+        "sidelobe_definition": "peak_db - max(pattern_db excluding peak index)",
+    }
+
+
+def _write_metrics(output_dir: Path, metrics: Dict[str, Any]) -> None:
+    save_json(output_dir / "metrics.json", metrics)
+
+thinking
+**Reviewing existing tests for CSV fixtures**
+
+I'm checking current tests to identify patterns for fixture CSV usage to guide creating new CSV fixtures and related tests.
+exec
+/usr/bin/zsh -lc "sed -n '1,220p' tests/test_ris_lab_pattern.py" in /home/josh/Documents/Github/RIS_SIONNA succeeded in 3ms:
+import unittest
+
+import numpy as np
+
+from app.ris.ris_lab import _compute_sidelobe_metrics, _validate_theta_pattern_lengths
+
+
+class TestRisLabPattern(unittest.TestCase):
+    def test_validate_theta_pattern_lengths_raises(self) -> None:
+        theta = np.array([0.0, 1.0, 2.0])
+        pattern = np.array([0.0, -3.0])
+        with self.assertRaises(ValueError) as ctx:
+            _validate_theta_pattern_lengths(theta, pattern, "pattern_db")
+        self.assertIn("theta_deg length does not match", str(ctx.exception))
+
+    def test_compute_sidelobe_metrics(self) -> None:
+        theta = np.array([-10.0, 0.0, 10.0])
+        pattern_db = np.array([-10.0, 0.0, -3.0])
+        metrics = _compute_sidelobe_metrics(theta, pattern_db)
+        self.assertAlmostEqual(metrics["sidelobe_peak_db"], -3.0)
+
+thinking
+**Identifying test location for validation**
+
+I'm considering adding validation tests using fixtures and will check the config-related test files, likely starting with tests/test_ris_config.
+exec
+/usr/bin/zsh -lc "sed -n '1,240p' tests/test_ris_config.py" in /home/josh/Documents/Github/RIS_SIONNA succeeded in 3ms:
+import json
+import tempfile
+import unittest
+from pathlib import Path
+
+import yaml
+
+from app.ris.ris_config import (
+    compute_ris_lab_config_hash,
+    resolve_and_snapshot_ris_lab_config,
+    resolve_ris_lab_config,
+)
+
+
+class TestRisLabConfig(unittest.TestCase):
+    def test_minimal_config_resolves_defaults(self) -> None:
+        resolved = resolve_ris_lab_config(
+            {"geometry": {"nx": 4, "ny": 2, "dx": 0.5, "dy": 0.25}}
+        )
+        self.assertEqual(resolved["control"]["mode"], "uniform")
+
+thinking
+**Locating sample config for validation tests**
+
+I'm searching test files for sample configs related to output directories and validation to reuse for fixture setup and running validation with a proper config.
+exec
+/usr/bin/zsh -lc 'rg -n "ris" tests' in /home/josh/Documents/Github/RIS_SIONNA succeeded in 6ms:
+tests/test_ris_core.py:5:from app.ris.ris_core import (
+tests/test_ris_lab_pattern.py:5:from app.ris.ris_lab import _compute_sidelobe_metrics, _validate_theta_pattern_lengths
+tests/test_ris_lab_reference.py:8:from app.ris.ris_lab import _load_reference_mat, _load_reference_npz
+tests/test_ris_config.py:8:from app.ris.ris_config import (
+tests/test_ris_config.py:9:    compute_ris_lab_config_hash,
+tests/test_ris_config.py:10:    resolve_and_snapshot_ris_lab_config,
+tests/test_ris_config.py:11:    resolve_ris_lab_config,
+tests/test_ris_config.py:17:        resolved = resolve_ris_lab_config(
+tests/test_ris_config.py:27:            resolve_ris_lab_config({"geometry": {"nx": 4}})
+tests/test_ris_config.py:36:            config_path = tmp_path / "ris.yaml"
+tests/test_ris_config.py:46:            config, output_dir, summary = resolve_and_snapshot_ris_lab_config(config_path)
+tests/test_ris_config.py:51:            self.assertEqual(summary["config"]["hash_sha256"], compute_ris_lab_config_hash(config))
+
+thinking
+**Checking fixture storage**
+
+I'm reviewing where existing CSV fixtures live to decide if tests/fixtures is the right place to add new test data.
+exec
+/usr/bin/zsh -lc "rg --files -g '*.csv' -g '*fixture*' -g 'fixtures'" in /home/josh/Documents/Github/RIS_SIONNA exited 1 in 7ms:
+
+
+thinking
+**Planning test fixtures and config**
+
+I'm planning to add a new test fixtures directory and create temporary config files referencing the base temp directory and overriding run_id as needed. Next, I'll examine ris_config defaults and create a CSV fixture in the repo for validation tests.
+exec
+/usr/bin/zsh -lc "sed -n '1,260p' app/ris/ris_config.py" in /home/josh/Documents/Github/RIS_SIONNA succeeded in 3ms:
+"""RIS Lab configuration schema and snapshot helpers."""
+
+from __future__ import annotations
+
+import copy
+import hashlib
+import json
+from pathlib import Path
+from typing import Any, Dict, Optional
+
+import yaml
+
+from app.io import create_output_dir, save_json, save_yaml
+
+RIS_LAB_SCHEMA_VERSION = 1
+
+DEFAULT_RIS_LAB_CONFIG: Dict[str, Any] = {
+    "schema_version": RIS_LAB_SCHEMA_VERSION,
+    "geometry": {
+        "nx": None,
+
+
+thinking
+**Creating static CSV fixture for test**
+
+Planning to generate a small fixed CSV fixture from current code output using a simple config, then freeze it in the repo under tests/fixtures to ensure stable validation without recomputing during tests.
+thinking
+**Designing threshold-based validation tests with perturbed negatives**
+
+Planning tests that assert tight metric thresholds (e.g., rmse < 1e-6) for the fixture CSV to pass and use a perturbed CSV for a negative test expected to fail these thresholds, ensuring both cases exercise the validation logic robustly with output isolated in temp dirs.
+exec
+/usr/bin/zsh -lc "python - <<'PY'
+import csv
+from pathlib import Path
+import numpy as np
+from app.ris.ris_core import compute_element_centers
+from app.ris.ris_lab import _apply_normalization, _compute_array_response, _resolve_phase_map
+
+config = {
+    \"geometry\": {\"nx\": 2, \"ny\": 2, \"dx\": 0.5, \"dy\": 0.5},
+    \"control\": {\"mode\": \"uniform\", \"params\": {\"phase_rad\": 0.0}},
+    \"quantization\": {\"bits\": 0},
+    \"pattern_mode\": {\"normalization\": \"peak_0db\"},
+    \"validation\": {\"normalization\": \"peak_0db\"},
+    \"experiment\": {\"frequency_hz\": 28_000_000_000},
+}
+geometry = compute_element_centers(
+    nx=config[\"geometry\"][\"nx\"],
+    ny=config[\"geometry\"][\"ny\"],
+    dx=config[\"geometry\"][\"dx\"],
+    dy=config[\"geometry\"][\"dy\"],
+)
+wavelength = 299_792_458.0 / config[\"experiment\"][\"frequency_hz\"]
+phase_map = _resolve_phase_map(config, geometry, wavelength)
+
+theta_deg = np.array([-10.0, -5.0, 0.0, 5.0, 10.0], dtype=float)
+linear = _compute_array_response(geometry.centers, phase_map, geometry.frame, wavelength, theta_deg)
+linear_norm = _apply_normalization(linear, \"peak_0db\")
+pattern_db = 10.0 * np.log10(linear_norm + 1e-12)
+
+path = Path(\"tests/fixtures/ris_validation_fixture.csv\")
+path.parent.mkdir(parents=True, exist_ok=True)
+with path.open(\"w\", newline=\"\", encoding=\"utf-8\") as handle:
+    writer = csv.writer(handle)
+    writer.writerow([\"theta_deg\", \"pattern_db\"])
+    for theta, val in zip(theta_deg, pattern_db):
+        writer.writerow([f\"{theta:.1f}\", f\"{val:.6f}\"])
+print(path)
+PY" in /home/josh/Documents/Github/RIS_SIONNA exited 127 in 2ms:
+zsh:1: command not found: python
+
+thinking
+**Testing python3 fallback**
+
+I'm checking if using python3 instead of python resolves the PATH issue.
+exec
+/usr/bin/zsh -lc "python3 - <<'PY'
+import csv
+from pathlib import Path
+import numpy as np
+from app.ris.ris_core import compute_element_centers
+from app.ris.ris_lab import _apply_normalization, _compute_array_response, _resolve_phase_map
+
+config = {
+    \"geometry\": {\"nx\": 2, \"ny\": 2, \"dx\": 0.5, \"dy\": 0.5},
+    \"control\": {\"mode\": \"uniform\", \"params\": {\"phase_rad\": 0.0}},
+    \"quantization\": {\"bits\": 0},
+    \"pattern_mode\": {\"normalization\": \"peak_0db\"},
+    \"validation\": {\"normalization\": \"peak_0db\"},
+    \"experiment\": {\"frequency_hz\": 28_000_000_000},
+}
+geometry = compute_element_centers(
+    nx=config[\"geometry\"][\"nx\"],
+    ny=config[\"geometry\"][\"ny\"],
+    dx=config[\"geometry\"][\"dx\"],
+    dy=config[\"geometry\"][\"dy\"],
+)
+wavelength = 299_792_458.0 / config[\"experiment\"][\"frequency_hz\"]
+phase_map = _resolve_phase_map(config, geometry, wavelength)
+
+theta_deg = np.array([-10.0, -5.0, 0.0, 5.0, 10.0], dtype=float)
+linear = _compute_array_response(geometry.centers, phase_map, geometry.frame, wavelength, theta_deg)
+linear_norm = _apply_normalization(linear, \"peak_0db\")
+pattern_db = 10.0 * np.log10(linear_norm + 1e-12)
+
+path = Path(\"tests/fixtures/ris_validation_fixture.csv\")
+path.parent.mkdir(parents=True, exist_ok=True)
+with path.open(\"w\", newline=\"\", encoding=\"utf-8\") as handle:
+    writer = csv.writer(handle)
+    writer.writerow([\"theta_deg\", \"pattern_db\"])
+    for theta, val in zip(theta_deg, pattern_db):
+        writer.writerow([f\"{theta:.1f}\", f\"{val:.6f}\"])
+print(path)
+PY" in /home/josh/Documents/Github/RIS_SIONNA exited 1 in 69ms:
+Traceback (most recent call last):
+  File "<stdin>", line 3, in <module>
+ModuleNotFoundError: No module named 'numpy'
+
+thinking
+**Switching to repo virtual environment**
+
+I'm switching to the repository's virtual environment at .venv/bin/python to ensure numpy and other dependencies are available.
+exec
+/usr/bin/zsh -lc ".venv/bin/python - <<'PY'
+import csv
+from pathlib import Path
+import numpy as np
+from app.ris.ris_core import compute_element_centers
+from app.ris.ris_lab import _apply_normalization, _compute_array_response, _resolve_phase_map
+
+config = {
+    \"geometry\": {\"nx\": 2, \"ny\": 2, \"dx\": 0.5, \"dy\": 0.5},
+    \"control\": {\"mode\": \"uniform\", \"params\": {\"phase_rad\": 0.0}},
+    \"quantization\": {\"bits\": 0},
+    \"pattern_mode\": {\"normalization\": \"peak_0db\"},
+    \"validation\": {\"normalization\": \"peak_0db\"},
+    \"experiment\": {\"frequency_hz\": 28_000_000_000},
+}
+geometry = compute_element_centers(
+    nx=config[\"geometry\"][\"nx\"],
+    ny=config[\"geometry\"][\"ny\"],
+    dx=config[\"geometry\"][\"dx\"],
+    dy=config[\"geometry\"][\"dy\"],
+)
+wavelength = 299_792_458.0 / config[\"experiment\"][\"frequency_hz\"]
+phase_map = _resolve_phase_map(config, geometry, wavelength)
+
+theta_deg = np.array([-10.0, -5.0, 0.0, 5.0, 10.0], dtype=float)
+linear = _compute_array_response(geometry.centers, phase_map, geometry.frame, wavelength, theta_deg)
+linear_norm = _apply_normalization(linear, \"peak_0db\")
+pattern_db = 10.0 * np.log10(linear_norm + 1e-12)
+
+path = Path(\"tests/fixtures/ris_validation_fixture.csv\")
+path.parent.mkdir(parents=True, exist_ok=True)
+with path.open(\"w\", newline=\"\", encoding=\"utf-8\") as handle:
+    writer = csv.writer(handle)
+    writer.writerow([\"theta_deg\", \"pattern_db\"])
+    for theta, val in zip(theta_deg, pattern_db):
+        writer.writerow([f\"{theta:.1f}\", f\"{val:.6f}\"])
+print(path)
+PY" in /home/josh/Documents/Github/RIS_SIONNA succeeded in 324ms:
+tests/fixtures/ris_validation_fixture.csv
+
+thinking
+**Verifying file content necessity**
+
+I'm confirming the file content to ensure the record creation step is warranted before proceeding.
+exec
+/usr/bin/zsh -lc 'cat tests/fixtures/ris_validation_fixture.csv' in /home/josh/Documents/Github/RIS_SIONNA succeeded in 3ms:
+theta_deg,pattern_db
+-10.0,-0.521398
+-5.0,-0.212255
+0.0,0.000000
+5.0,-0.212255
+10.0,-0.521398
+
+thinking
+**Preparing validation test setup**
+
+I'm planning to create tests for validation in tests/test_ris_lab_validation.py using validate_ris_lab, leveraging a temp directory for config and output files. Next, I'll review create_output_dir in app/io since it's part of the output creation flow called during validation.
+exec
+/usr/bin/zsh -lc "sed -n '1,200p' app/io.py" in /home/josh/Documents/Github/RIS_SIONNA succeeded in 3ms:
+import json
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, Optional
+
+import yaml
+import numpy as np
+
+
+def generate_run_id() -> str:
+    return datetime.now().strftime("%Y%m%d_%H%M%S")
+
+
+def create_output_dir(base_dir: str, run_id: Optional[str] = None) -> Path:
+    run_id = run_id or generate_run_id()
+    root = Path(base_dir) / run_id
+    (root / "plots").mkdir(parents=True, exist_ok=True)
+    (root / "data").mkdir(parents=True, exist_ok=True)
+    return root
+
+
+
+thinking
+**Planning test setup with fixture and temp output**
+
+I'm defining a test that calls the validation function using a temporary output directory and fixed run ID for determinism. The minimal YAML config will set geometry, output base dir, validation thresholds, and rely on defaults for control and normalization, matching the fixture's parameters. Next, I'll write this config and run the validation with the fixture and config file.
+thinking
+**Designing positive and negative validation tests**
+
+I'm planning tests that read metrics.json from the validation output directory to assert pass/fail against tight thresholds. The negative case alters one pattern point to shift the peak angle, ensuring failure. Both tests use fixture data from a repo file and generate configs with controlled run IDs and output dirs. Next, I'll implement a unittest test class with helpers to write configs, load fixture data, and run these validations.
+file update
+A /home/josh/Documents/Github/RIS_SIONNA/tests/test_ris_lab_validation.py
+import csv
+import json
+import tempfile
+import unittest
+from pathlib import Path
+
+import yaml
+
+from app.ris.ris_lab import validate_ris_lab
+
+
+class TestRisLabValidationFixture(unittest.TestCase):
+    def _write_config(self, base_dir: Path, run_id: str, thresholds: dict) -> Path:
+        config = {
+            "geometry": {"nx": 2, "ny": 2, "dx": 0.5, "dy": 0.5},
+            "validation": thresholds,
+            "output": {"base_dir": str(base_dir), "run_id": run_id},
+        }
+        config_path = base_dir / f"{run_id}.yaml"
+        with config_path.open("w", encoding="utf-8") as handle:
+            yaml.safe_dump(config, handle, sort_keys=False)
+        return config_path
+
+    def _fixture_path(self) -> Path:
+        return Path(__file__).resolve().parent / "fixtures" / "ris_validation_fixture.csv"
+
+    def _load_fixture_rows(self) -> list[list[str]]:
+        with self._fixture_path().open("r", encoding="utf-8") as handle:
+            reader = csv.reader(handle)
+            rows = list(reader)
+        return rows
+
+    def test_validation_fixture_passes(self) -> None:
+        thresholds = {
+            "normalization": "peak_0db",
+            "rmse_db_max": 0.05,
+            "peak_angle_err_deg_max": 0.1,
+            "peak_db_err_max": 0.1,
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            config_path = self._write_config(base_dir, "fixture-pass", thresholds)
+            output_dir = validate_ris_lab(str(config_path), str(self._fixture_path()))
+            metrics = json.loads((output_dir / "metrics.json").read_text(encoding="utf-8"))
+
+        self.assertTrue(metrics["passed"])
+        self.assertLess(metrics["rmse_db"], 1e-6)
+        self.assertLess(metrics["peak_angle_error_deg"], 1e-6)
+        self.assertLess(metrics["peak_db_error"], 1e-6)
+        self.assertEqual(metrics["thresholds"]["rmse_db_max"], thresholds["rmse_db_max"])
+
+    def test_validation_fixture_fails_with_perturbed_data(self) -> None:
+        thresholds = {
+            "normalization": "peak_0db",
+            "rmse_db_max": 0.05,
+            "peak_angle_err_deg_max": 0.1,
+            "peak_db_err_max": 0.1,
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            config_path = self._write_config(base_dir, "fixture-fail", thresholds)
+            perturbed_path = base_dir / "fixture_perturbed.csv"
+            rows = self._load_fixture_rows()
+            header, data_rows = rows[0], rows[1:]
+            data_rows[-1][1] = "1.000000"
+            with perturbed_path.open("w", newline="", encoding="utf-8") as handle:
+                writer = csv.writer(handle)
+                writer.writerow(header)
+                writer.writerows(data_rows)
+
+            output_dir = validate_ris_lab(str(config_path), str(perturbed_path))
+            metrics = json.loads((output_dir / "metrics.json").read_text(encoding="utf-8"))
+
+        self.assertFalse(metrics["passed"])
+        self.assertGreater(metrics["peak_angle_error_deg"], 1.0)
+
+
+if __name__ == "__main__":
+    unittest.main()
+apply_patch(auto_approved=true) exited 0 in 2ms:
+Success. Updated the following files:
+A tests/test_ris_lab_validation.py
+file update:
+diff --git a/tests/test_ris_lab_validation.py b/tests/test_ris_lab_validation.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..4320cbb2f85f6b6fced53765aea113dc159ff7e7
+--- /dev/null
++++ b/tests/test_ris_lab_validation.py
+@@ -0,0 +1,79 @@
++import csv
++import json
++import tempfile
++import unittest
++from pathlib import Path
++
++import yaml
++
++from app.ris.ris_lab import validate_ris_lab
++
++
++class TestRisLabValidationFixture(unittest.TestCase):
++    def _write_config(self, base_dir: Path, run_id: str, thresholds: dict) -> Path:
++        config = {
++            "geometry": {"nx": 2, "ny": 2, "dx": 0.5, "dy": 0.5},
++            "validation": thresholds,
++            "output": {"base_dir": str(base_dir), "run_id": run_id},
++        }
++        config_path = base_dir / f"{run_id}.yaml"
++        with config_path.open("w", encoding="utf-8") as handle:
++            yaml.safe_dump(config, handle, sort_keys=False)
++        return config_path
++
++    def _fixture_path(self) -> Path:
++        return Path(__file__).resolve().parent / "fixtures" / "ris_validation_fixture.csv"
++
++    def _load_fixture_rows(self) -> list[list[str]]:
++        with self._fixture_path().open("r", encoding="utf-8") as handle:
++            reader = csv.reader(handle)
++            rows = list(reader)
++        return rows
++
++    def test_validation_fixture_passes(self) -> None:
++        thresholds = {
++            "normalization": "peak_0db",
++            "rmse_db_max": 0.05,
++            "peak_angle_err_deg_max": 0.1,
++            "peak_db_err_max": 0.1,
++        }
++        with tempfile.TemporaryDirectory() as tmpdir:
++            base_dir = Path(tmpdir)
++            config_path = self._write_config(base_dir, "fixture-pass", thresholds)
++            output_dir = validate_ris_lab(str(config_path), str(self._fixture_path()))
++            metrics = json.loads((output_dir / "metrics.json").read_text(encoding="utf-8"))
++
++        self.assertTrue(metrics["passed"])
++        self.assertLess(metrics["rmse_db"], 1e-6)
++        self.assertLess(metrics["peak_angle_error_deg"], 1e-6)
++        self.assertLess(metrics["peak_db_error"], 1e-6)
++        self.assertEqual(metrics["thresholds"]["rmse_db_max"], thresholds["rmse_db_max"])
++
++    def test_validation_fixture_fails_with_perturbed_data(self) -> None:
++        thresholds = {
++            "normalization": "peak_0db",
++            "rmse_db_max": 0.05,
++            "peak_angle_err_deg_max": 0.1,
++            "peak_db_err_max": 0.1,
++        }
++        with tempfile.TemporaryDirectory() as tmpdir:
++            base_dir = Path(tmpdir)
++            config_path = self._write_config(base_dir, "fixture-fail", thresholds)
++            perturbed_path = base_dir / "fixture_perturbed.csv"
++            rows = self._load_fixture_rows()
++            header, data_rows = rows[0], rows[1:]
++            data_rows[-1][1] = "1.000000"
++            with perturbed_path.open("w", newline="", encoding="utf-8") as handle:
++                writer = csv.writer(handle)
++                writer.writerow(header)
++                writer.writerows(data_rows)
++
++            output_dir = validate_ris_lab(str(config_path), str(perturbed_path))
++            metrics = json.loads((output_dir / "metrics.json").read_text(encoding="utf-8"))
++
++        self.assertFalse(metrics["passed"])
++        self.assertGreater(metrics["peak_angle_error_deg"], 1.0)
++
++
++if __name__ == "__main__":
++    unittest.main()
+
+file update:
+diff --git a/tests/test_ris_lab_validation.py b/tests/test_ris_lab_validation.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..4320cbb2f85f6b6fced53765aea113dc159ff7e7
+--- /dev/null
++++ b/tests/test_ris_lab_validation.py
+@@ -0,0 +1,79 @@
++import csv
++import json
++import tempfile
++import unittest
++from pathlib import Path
++
++import yaml
++
++from app.ris.ris_lab import validate_ris_lab
++
++
++class TestRisLabValidationFixture(unittest.TestCase):
++    def _write_config(self, base_dir: Path, run_id: str, thresholds: dict) -> Path:
++        config = {
++            "geometry": {"nx": 2, "ny": 2, "dx": 0.5, "dy": 0.5},
++            "validation": thresholds,
++            "output": {"base_dir": str(base_dir), "run_id": run_id},
++        }
++        config_path = base_dir / f"{run_id}.yaml"
++        with config_path.open("w", encoding="utf-8") as handle:
++            yaml.safe_dump(config, handle, sort_keys=False)
++        return config_path
++
++    def _fixture_path(self) -> Path:
++        return Path(__file__).resolve().parent / "fixtures" / "ris_validation_fixture.csv"
++
++    def _load_fixture_rows(self) -> list[list[str]]:
++        with self._fixture_path().open("r", encoding="utf-8") as handle:
++            reader = csv.reader(handle)
++            rows = list(reader)
++        return rows
++
++    def test_validation_fixture_passes(self) -> None:
++        thresholds = {
++            "normalization": "peak_0db",
++            "rmse_db_max": 0.05,
++            "peak_angle_err_deg_max": 0.1,
++            "peak_db_err_max": 0.1,
++        }
++        with tempfile.TemporaryDirectory() as tmpdir:
++            base_dir = Path(tmpdir)
++            config_path = self._write_config(base_dir, "fixture-pass", thresholds)
++            output_dir = validate_ris_lab(str(config_path), str(self._fixture_path()))
++            metrics = json.loads((output_dir / "metrics.json").read_text(encoding="utf-8"))
++
++        self.assertTrue(metrics["passed"])
++        self.assertLess(metrics["rmse_db"], 1e-6)
++        self.assertLess(metrics["peak_angle_error_deg"], 1e-6)
++        self.assertLess(metrics["peak_db_error"], 1e-6)
++        self.assertEqual(metrics["thresholds"]["rmse_db_max"], thresholds["rmse_db_max"])
++
++    def test_validation_fixture_fails_with_perturbed_data(self) -> None:
++        thresholds = {
++            "normalization": "peak_0db",
++            "rmse_db_max": 0.05,
++            "peak_angle_err_deg_max": 0.1,
++            "peak_db_err_max": 0.1,
++        }
++        with tempfile.TemporaryDirectory() as tmpdir:
++            base_dir = Path(tmpdir)
++            config_path = self._write_config(base_dir, "fixture-fail", thresholds)
++            perturbed_path = base_dir / "fixture_perturbed.csv"
++            rows = self._load_fixture_rows()
++            header, data_rows = rows[0], rows[1:]
++            data_rows[-1][1] = "1.000000"
++            with perturbed_path.open("w", newline="", encoding="utf-8") as handle:
++                writer = csv.writer(handle)
++                writer.writerow(header)
++                writer.writerows(data_rows)
++
++            output_dir = validate_ris_lab(str(config_path), str(perturbed_path))
++            metrics = json.loads((output_dir / "metrics.json").read_text(encoding="utf-8"))
++
++        self.assertFalse(metrics["passed"])
++        self.assertGreater(metrics["peak_angle_error_deg"], 1.0)
++
++
++if __name__ == "__main__":
++    unittest.main()
+
+
+thinking
+**Confirming fixture file handling and logging**
+
+The fixture file was created via Python without reading beforehand since it didn't exist, which aligns with requirements. I should ensure apply_patch isn't used on this fixture and add logging for key actions using ralph log.
+exec
+/usr/bin/zsh -lc 'ralph log "Added RIS Lab validation fixture test and CSV fixture"' in /home/josh/Documents/Github/RIS_SIONNA succeeded in 88ms:
+Using local templates: /home/josh/Documents/Github/RIS_SIONNA/.agents/ralph
+file update:
+diff --git a/tests/test_ris_lab_validation.py b/tests/test_ris_lab_validation.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..4320cbb2f85f6b6fced53765aea113dc159ff7e7
+--- /dev/null
++++ b/tests/test_ris_lab_validation.py
+@@ -0,0 +1,79 @@
++import csv
++import json
++import tempfile
++import unittest
++from pathlib import Path
++
++import yaml
++
++from app.ris.ris_lab import validate_ris_lab
++
++
++class TestRisLabValidationFixture(unittest.TestCase):
++    def _write_config(self, base_dir: Path, run_id: str, thresholds: dict) -> Path:
++        config = {
++            "geometry": {"nx": 2, "ny": 2, "dx": 0.5, "dy": 0.5},
++            "validation": thresholds,
++            "output": {"base_dir": str(base_dir), "run_id": run_id},
++        }
++        config_path = base_dir / f"{run_id}.yaml"
++        with config_path.open("w", encoding="utf-8") as handle:
++            yaml.safe_dump(config, handle, sort_keys=False)
++        return config_path
++
++    def _fixture_path(self) -> Path:
++        return Path(__file__).resolve().parent / "fixtures" / "ris_validation_fixture.csv"
++
++    def _load_fixture_rows(self) -> list[list[str]]:
++        with self._fixture_path().open("r", encoding="utf-8") as handle:
++            reader = csv.reader(handle)
++            rows = list(reader)
++        return rows
++
++    def test_validation_fixture_passes(self) -> None:
++        thresholds = {
++            "normalization": "peak_0db",
++            "rmse_db_max": 0.05,
++            "peak_angle_err_deg_max": 0.1,
++            "peak_db_err_max": 0.1,
++        }
++        with tempfile.TemporaryDirectory() as tmpdir:
++            base_dir = Path(tmpdir)
++            config_path = self._write_config(base_dir, "fixture-pass", thresholds)
++            output_dir = validate_ris_lab(str(config_path), str(self._fixture_path()))
++            metrics = json.loads((output_dir / "metrics.json").read_text(encoding="utf-8"))
++
++        self.assertTrue(metrics["passed"])
++        self.assertLess(metrics["rmse_db"], 1e-6)
++        self.assertLess(metrics["peak_angle_error_deg"], 1e-6)
++        self.assertLess(metrics["peak_db_error"], 1e-6)
++        self.assertEqual(metrics["thresholds"]["rmse_db_max"], thresholds["rmse_db_max"])
++
++    def test_validation_fixture_fails_with_perturbed_data(self) -> None:
++        thresholds = {
++            "normalization": "peak_0db",
++            "rmse_db_max": 0.05,
++            "peak_angle_err_deg_max": 0.1,
++            "peak_db_err_max": 0.1,
++        }
++        with tempfile.TemporaryDirectory() as tmpdir:
++            base_dir = Path(tmpdir)
++            config_path = self._write_config(base_dir, "fixture-fail", thresholds)
++            perturbed_path = base_dir / "fixture_perturbed.csv"
++            rows = self._load_fixture_rows()
++            header, data_rows = rows[0], rows[1:]
++            data_rows[-1][1] = "1.000000"
++            with perturbed_path.open("w", newline="", encoding="utf-8") as handle:
++                writer = csv.writer(handle)
++                writer.writerow(header)
++                writer.writerows(data_rows)
++
++            output_dir = validate_ris_lab(str(config_path), str(perturbed_path))
++            metrics = json.loads((output_dir / "metrics.json").read_text(encoding="utf-8"))
++
++        self.assertFalse(metrics["passed"])
++        self.assertGreater(metrics["peak_angle_error_deg"], 1.0)
++
++
++if __name__ == "__main__":
++    unittest.main()
+
+
+thinking
+**Verifying fixture and test setup**
+
+I'm confirming the fixture file is correctly tracked and loaded with proper CSV handling, ensuring output directories for plots are created appropriately in the temp structure, and verifying tests use the right paths and run within the virtual environment.
+exec
+/usr/bin/zsh -lc '.venv/bin/python -m pytest' in /home/josh/Documents/Github/RIS_SIONNA succeeded in 927ms:
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.0.2, pluggy-1.6.0
+rootdir: /home/josh/Documents/Github/RIS_SIONNA
+configfile: pyproject.toml
+collected 19 items
+
+tests/test_alignment.py ..                                               [ 10%]
+tests/test_ris_config.py ...                                             [ 26%]
+tests/test_ris_core.py ......                                            [ 57%]
+tests/test_ris_lab_pattern.py ..                                         [ 68%]
+tests/test_ris_lab_reference.py ....                                     [ 89%]
+tests/test_ris_lab_validation.py ..                                      [100%]
+
+============================== 19 passed in 0.75s ==============================
+file update:
+diff --git a/tests/test_ris_lab_validation.py b/tests/test_ris_lab_validation.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..4320cbb2f85f6b6fced53765aea113dc159ff7e7
+--- /dev/null
++++ b/tests/test_ris_lab_validation.py
+@@ -0,0 +1,79 @@
++import csv
++import json
++import tempfile
++import unittest
++from pathlib import Path
++
++import yaml
++
++from app.ris.ris_lab import validate_ris_lab
++
++
++class TestRisLabValidationFixture(unittest.TestCase):
++    def _write_config(self, base_dir: Path, run_id: str, thresholds: dict) -> Path:
++        config = {
++            "geometry": {"nx": 2, "ny": 2, "dx": 0.5, "dy": 0.5},
++            "validation": thresholds,
++            "output": {"base_dir": str(base_dir), "run_id": run_id},
++        }
++        config_path = base_dir / f"{run_id}.yaml"
++        with config_path.open("w", encoding="utf-8") as handle:
++            yaml.safe_dump(config, handle, sort_keys=False)
++        return config_path
++
++    def _fixture_path(self) -> Path:
++        return Path(__file__).resolve().parent / "fixtures" / "ris_validation_fixture.csv"
++
++    def _load_fixture_rows(self) -> list[list[str]]:
++        with self._fixture_path().open("r", encoding="utf-8") as handle:
++            reader = csv.reader(handle)
++            rows = list(reader)
++        return rows
++
++    def test_validation_fixture_passes(self) -> None:
++        thresholds = {
++            "normalization": "peak_0db",
++            "rmse_db_max": 0.05,
++            "peak_angle_err_deg_max": 0.1,
++            "peak_db_err_max": 0.1,
++        }
++        with tempfile.TemporaryDirectory() as tmpdir:
++            base_dir = Path(tmpdir)
++            config_path = self._write_config(base_dir, "fixture-pass", thresholds)
++            output_dir = validate_ris_lab(str(config_path), str(self._fixture_path()))
++            metrics = json.loads((output_dir / "metrics.json").read_text(encoding="utf-8"))
++
++        self.assertTrue(metrics["passed"])
++        self.assertLess(metrics["rmse_db"], 1e-6)
++        self.assertLess(metrics["peak_angle_error_deg"], 1e-6)
++        self.assertLess(metrics["peak_db_error"], 1e-6)
++        self.assertEqual(metrics["thresholds"]["rmse_db_max"], thresholds["rmse_db_max"])
++
++    def test_validation_fixture_fails_with_perturbed_data(self) -> None:
++        thresholds = {
++            "normalization": "peak_0db",
++            "rmse_db_max": 0.05,
++            "peak_angle_err_deg_max": 0.1,
++            "peak_db_err_max": 0.1,
++        }
++        with tempfile.TemporaryDirectory() as tmpdir:
++            base_dir = Path(tmpdir)
++            config_path = self._write_config(base_dir, "fixture-fail", thresholds)
++            perturbed_path = base_dir / "fixture_perturbed.csv"
++            rows = self._load_fixture_rows()
++            header, data_rows = rows[0], rows[1:]
++            data_rows[-1][1] = "1.000000"
++            with perturbed_path.open("w", newline="", encoding="utf-8") as handle:
++                writer = csv.writer(handle)
++                writer.writerow(header)
++                writer.writerows(data_rows)
++
++            output_dir = validate_ris_lab(str(config_path), str(perturbed_path))
++            metrics = json.loads((output_dir / "metrics.json").read_text(encoding="utf-8"))
++
++        self.assertFalse(metrics["passed"])
++        self.assertGreater(metrics["peak_angle_error_deg"], 1.0)
++
++
++if __name__ == "__main__":
++    unittest.main()
+
+
+thinking
+**Adding activity log after tests**
+exec
+/usr/bin/zsh -lc 'ralph log "Ran pytest for US-009"' in /home/josh/Documents/Github/RIS_SIONNA succeeded in 87ms:
+Using local templates: /home/josh/Documents/Github/RIS_SIONNA/.agents/ralph
+file update:
+diff --git a/tests/test_ris_lab_validation.py b/tests/test_ris_lab_validation.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..4320cbb2f85f6b6fced53765aea113dc159ff7e7
+--- /dev/null
++++ b/tests/test_ris_lab_validation.py
+@@ -0,0 +1,79 @@
++import csv
++import json
++import tempfile
++import unittest
++from pathlib import Path
++
++import yaml
++
++from app.ris.ris_lab import validate_ris_lab
++
++
++class TestRisLabValidationFixture(unittest.TestCase):
++    def _write_config(self, base_dir: Path, run_id: str, thresholds: dict) -> Path:
++        config = {
++            "geometry": {"nx": 2, "ny": 2, "dx": 0.5, "dy": 0.5},
++            "validation": thresholds,
++            "output": {"base_dir": str(base_dir), "run_id": run_id},
++        }
++        config_path = base_dir / f"{run_id}.yaml"
++        with config_path.open("w", encoding="utf-8") as handle:
++            yaml.safe_dump(config, handle, sort_keys=False)
++        return config_path
++
++    def _fixture_path(self) -> Path:
++        return Path(__file__).resolve().parent / "fixtures" / "ris_validation_fixture.csv"
++
++    def _load_fixture_rows(self) -> list[list[str]]:
++        with self._fixture_path().open("r", encoding="utf-8") as handle:
++            reader = csv.reader(handle)
++            rows = list(reader)
++        return rows
++
++    def test_validation_fixture_passes(self) -> None:
++        thresholds = {
++            "normalization": "peak_0db",
++            "rmse_db_max": 0.05,
++            "peak_angle_err_deg_max": 0.1,
++            "peak_db_err_max": 0.1,
++        }
++        with tempfile.TemporaryDirectory() as tmpdir:
++            base_dir = Path(tmpdir)
++            config_path = self._write_config(base_dir, "fixture-pass", thresholds)
++            output_dir = validate_ris_lab(str(config_path), str(self._fixture_path()))
++            metrics = json.loads((output_dir / "metrics.json").read_text(encoding="utf-8"))
++
++        self.assertTrue(metrics["passed"])
++        self.assertLess(metrics["rmse_db"], 1e-6)
++        self.assertLess(metrics["peak_angle_error_deg"], 1e-6)
++        self.assertLess(metrics["peak_db_error"], 1e-6)
++        self.assertEqual(metrics["thresholds"]["rmse_db_max"], thresholds["rmse_db_max"])
++
++    def test_validation_fixture_fails_with_perturbed_data(self) -> None:
++        thresholds = {
++            "normalization": "peak_0db",
++            "rmse_db_max": 0.05,
++            "peak_angle_err_deg_max": 0.1,
++            "peak_db_err_max": 0.1,
++        }
++        with tempfile.TemporaryDirectory() as tmpdir:
++            base_dir = Path(tmpdir)
++            config_path = self._write_config(base_dir, "fixture-fail", thresholds)
++            perturbed_path = base_dir / "fixture_perturbed.csv"
++            rows = self._load_fixture_rows()
++            header, data_rows = rows[0], rows[1:]
++            data_rows[-1][1] = "1.000000"
++            with perturbed_path.open("w", newline="", encoding="utf-8") as handle:
++                writer = csv.writer(handle)
++                writer.writerow(header)
++                writer.writerows(data_rows)
++
++            output_dir = validate_ris_lab(str(config_path), str(perturbed_path))
++            metrics = json.loads((output_dir / "metrics.json").read_text(encoding="utf-8"))
++
++        self.assertFalse(metrics["passed"])
++        self.assertGreater(metrics["peak_angle_error_deg"], 1.0)
++
++
++if __name__ == "__main__":
++    unittest.main()
+
+
+thinking
+**Preparing for review before commit**
+exec
+/usr/bin/zsh -lc 'git status --porcelain' in /home/josh/Documents/Github/RIS_SIONNA succeeded in 5ms:
+ M .agents/tasks/prd-ris-lab.json
+ M .ralph/activity.log
+ M .ralph/errors.log
+ M .ralph/runs/run-20260120-175122-20544-iter-9.log
+?? .ralph/.tmp/prompt-20260120-175122-20544-10.md
+?? .ralph/.tmp/story-20260120-175122-20544-10.json
+?? .ralph/.tmp/story-20260120-175122-20544-10.md
+?? .ralph/runs/run-20260120-175122-20544-iter-10.log
+?? .ralph/runs/run-20260120-175122-20544-iter-9.md
+?? tests/fixtures/
+?? tests/test_ris_lab_validation.py
+file update:
+diff --git a/tests/test_ris_lab_validation.py b/tests/test_ris_lab_validation.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..4320cbb2f85f6b6fced53765aea113dc159ff7e7
+--- /dev/null
++++ b/tests/test_ris_lab_validation.py
+@@ -0,0 +1,79 @@
++import csv
++import json
++import tempfile
++import unittest
++from pathlib import Path
++
++import yaml
++
++from app.ris.ris_lab import validate_ris_lab
++
++
++class TestRisLabValidationFixture(unittest.TestCase):
++    def _write_config(self, base_dir: Path, run_id: str, thresholds: dict) -> Path:
++        config = {
++            "geometry": {"nx": 2, "ny": 2, "dx": 0.5, "dy": 0.5},
++            "validation": thresholds,
++            "output": {"base_dir": str(base_dir), "run_id": run_id},
++        }
++        config_path = base_dir / f"{run_id}.yaml"
++        with config_path.open("w", encoding="utf-8") as handle:
++            yaml.safe_dump(config, handle, sort_keys=False)
++        return config_path
++
++    def _fixture_path(self) -> Path:
++        return Path(__file__).resolve().parent / "fixtures" / "ris_validation_fixture.csv"
++
++    def _load_fixture_rows(self) -> list[list[str]]:
++        with self._fixture_path().open("r", encoding="utf-8") as handle:
++            reader = csv.reader(handle)
++            rows = list(reader)
++        return rows
++
++    def test_validation_fixture_passes(self) -> None:
++        thresholds = {
++            "normalization": "peak_0db",
++            "rmse_db_max": 0.05,
++            "peak_angle_err_deg_max": 0.1,
++            "peak_db_err_max": 0.1,
++        }
++        with tempfile.TemporaryDirectory() as tmpdir:
++            base_dir = Path(tmpdir)
++            config_path = self._write_config(base_dir, "fixture-pass", thresholds)
++            output_dir = validate_ris_lab(str(config_path), str(self._fixture_path()))
++            metrics = json.loads((output_dir / "metrics.json").read_text(encoding="utf-8"))
++
++        self.assertTrue(metrics["passed"])
++        self.assertLess(metrics["rmse_db"], 1e-6)
++        self.assertLess(metrics["peak_angle_error_deg"], 1e-6)
++        self.assertLess(metrics["peak_db_error"], 1e-6)
++        self.assertEqual(metrics["thresholds"]["rmse_db_max"], thresholds["rmse_db_max"])
++
++    def test_validation_fixture_fails_with_perturbed_data(self) -> None:
++        thresholds = {
++            "normalization": "peak_0db",
++            "rmse_db_max": 0.05,
++            "peak_angle_err_deg_max": 0.1,
++            "peak_db_err_max": 0.1,
++        }
++        with tempfile.TemporaryDirectory() as tmpdir:
++            base_dir = Path(tmpdir)
++            config_path = self._write_config(base_dir, "fixture-fail", thresholds)
++            perturbed_path = base_dir / "fixture_perturbed.csv"
++            rows = self._load_fixture_rows()
++            header, data_rows = rows[0], rows[1:]
++            data_rows[-1][1] = "1.000000"
++            with perturbed_path.open("w", newline="", encoding="utf-8") as handle:
++                writer = csv.writer(handle)
++                writer.writerow(header)
++                writer.writerows(data_rows)
++
++            output_dir = validate_ris_lab(str(config_path), str(perturbed_path))
++            metrics = json.loads((output_dir / "metrics.json").read_text(encoding="utf-8"))
++
++        self.assertFalse(metrics["passed"])
++        self.assertGreater(metrics["peak_angle_error_deg"], 1.0)
++
++
++if __name__ == "__main__":
++    unittest.main()
+
+
+
+thinking
+**Deciding on unrelated PRD JSON changes**
+
+The PRD JSON is already modified, likely from a previous run, and instructions forbid reverting unrelated changes or editing it now. Since staging all changes is required, including updates and logs, I'll include these existing PRD JSON modifications in the commit without reverting or altering them.
+thinking
+**Confirming to commit all changes including preexisting PRD JSON modifications**
+
+I'll include all current modifications in the commit, including preexisting changes to the PRD JSON and .ralph logs, without reverting anything since we didn't edit those files now. Next, I'll prepare to run the commit skill per instruction after final review.
+exec
+/usr/bin/zsh -lc 'cat /home/josh/Documents/Github/RIS_SIONNA/.codex/skills/commit/SKILL.md' in /home/josh/Documents/Github/RIS_SIONNA succeeded in 2ms:
+---
+name: commit
+description: Write conventional commit messages with type, scope, and subject when the user wants to commit changes or save work.
+---
+
+# Git Commit
+
+Creates git commits following Conventional Commits format with proper type, scope, and subject.
+
+## Quick Start
+
+```bash
+# 1. Stage changes
+git add <files>  # or: git add -A
+
+# 2. Create commit (branch commit format)
+git commit -m "type(scope): subject
+
+Body explaining HOW and WHY.
+Reference: Task X.Y, Req N"
+file update:
+diff --git a/tests/test_ris_lab_validation.py b/tests/test_ris_lab_validation.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..4320cbb2f85f6b6fced53765aea113dc159ff7e7
+--- /dev/null
++++ b/tests/test_ris_lab_validation.py
+@@ -0,0 +1,79 @@
++import csv
++import json
++import tempfile
++import unittest
++from pathlib import Path
++
++import yaml
++
++from app.ris.ris_lab import validate_ris_lab
++
++
++class TestRisLabValidationFixture(unittest.TestCase):
++    def _write_config(self, base_dir: Path, run_id: str, thresholds: dict) -> Path:
++        config = {
++            "geometry": {"nx": 2, "ny": 2, "dx": 0.5, "dy": 0.5},
++            "validation": thresholds,
++            "output": {"base_dir": str(base_dir), "run_id": run_id},
++        }
++        config_path = base_dir / f"{run_id}.yaml"
++        with config_path.open("w", encoding="utf-8") as handle:
++            yaml.safe_dump(config, handle, sort_keys=False)
++        return config_path
++
++    def _fixture_path(self) -> Path:
++        return Path(__file__).resolve().parent / "fixtures" / "ris_validation_fixture.csv"
++
++    def _load_fixture_rows(self) -> list[list[str]]:
++        with self._fixture_path().open("r", encoding="utf-8") as handle:
++            reader = csv.reader(handle)
++            rows = list(reader)
++        return rows
++
++    def test_validation_fixture_passes(self) -> None:
++        thresholds = {
++            "normalization": "peak_0db",
++            "rmse_db_max": 0.05,
++            "peak_angle_err_deg_max": 0.1,
++            "peak_db_err_max": 0.1,
++        }
++        with tempfile.TemporaryDirectory() as tmpdir:
++            base_dir = Path(tmpdir)
++            config_path = self._write_config(base_dir, "fixture-pass", thresholds)
++            output_dir = validate_ris_lab(str(config_path), str(self._fixture_path()))
++            metrics = json.loads((output_dir / "metrics.json").read_text(encoding="utf-8"))
++
++        self.assertTrue(metrics["passed"])
++        self.assertLess(metrics["rmse_db"], 1e-6)
++        self.assertLess(metrics["peak_angle_error_deg"], 1e-6)
++        self.assertLess(metrics["peak_db_error"], 1e-6)
++        self.assertEqual(metrics["thresholds"]["rmse_db_max"], thresholds["rmse_db_max"])
++
++    def test_validation_fixture_fails_with_perturbed_data(self) -> None:
++        thresholds = {
++            "normalization": "peak_0db",
++            "rmse_db_max": 0.05,
++            "peak_angle_err_deg_max": 0.1,
++            "peak_db_err_max": 0.1,
++        }
++        with tempfile.TemporaryDirectory() as tmpdir:
++            base_dir = Path(tmpdir)
++            config_path = self._write_config(base_dir, "fixture-fail", thresholds)
++            perturbed_path = base_dir / "fixture_perturbed.csv"
++            rows = self._load_fixture_rows()
++            header, data_rows = rows[0], rows[1:]
++            data_rows[-1][1] = "1.000000"
++            with perturbed_path.open("w", newline="", encoding="utf-8") as handle:
++                writer = csv.writer(handle)
++                writer.writerow(header)
++                writer.writerows(data_rows)
++
++            output_dir = validate_ris_lab(str(config_path), str(perturbed_path))
++            metrics = json.loads((output_dir / "metrics.json").read_text(encoding="utf-8"))
++
++        self.assertFalse(metrics["passed"])
++        self.assertGreater(metrics["peak_angle_error_deg"], 1.0)
++
++
++if __name__ == "__main__":
++    unittest.main()
+
+
+thinking
+**Reviewing unstaged changes before commit**
+
+I'm checking diffs on generated logs and modified JSON files to decide what should be staged and committed, ensuring only appropriate changes go in.
+exec
+/usr/bin/zsh -lc 'git diff --stat' in /home/josh/Documents/Github/RIS_SIONNA succeeded in 13ms:
+ .agents/tasks/prd-ris-lab.json                   |   13 +-
+ .ralph/activity.log                              |    6 +
+ .ralph/errors.log                                |    1 +
+ .ralph/runs/run-20260120-175122-20544-iter-9.log | 1112 +++++++++++++++++++++-
+ 4 files changed, 1126 insertions(+), 6 deletions(-)
+file update:
+diff --git a/tests/test_ris_lab_validation.py b/tests/test_ris_lab_validation.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..4320cbb2f85f6b6fced53765aea113dc159ff7e7
+--- /dev/null
++++ b/tests/test_ris_lab_validation.py
+@@ -0,0 +1,79 @@
++import csv
++import json
++import tempfile
++import unittest
++from pathlib import Path
++
++import yaml
++
++from app.ris.ris_lab import validate_ris_lab
++
++
++class TestRisLabValidationFixture(unittest.TestCase):
++    def _write_config(self, base_dir: Path, run_id: str, thresholds: dict) -> Path:
++        config = {
++            "geometry": {"nx": 2, "ny": 2, "dx": 0.5, "dy": 0.5},
++            "validation": thresholds,
++            "output": {"base_dir": str(base_dir), "run_id": run_id},
++        }
++        config_path = base_dir / f"{run_id}.yaml"
++        with config_path.open("w", encoding="utf-8") as handle:
++            yaml.safe_dump(config, handle, sort_keys=False)
++        return config_path
++
++    def _fixture_path(self) -> Path:
++        return Path(__file__).resolve().parent / "fixtures" / "ris_validation_fixture.csv"
++
++    def _load_fixture_rows(self) -> list[list[str]]:
++        with self._fixture_path().open("r", encoding="utf-8") as handle:
++            reader = csv.reader(handle)
++            rows = list(reader)
++        return rows
++
++    def test_validation_fixture_passes(self) -> None:
++        thresholds = {
++            "normalization": "peak_0db",
++            "rmse_db_max": 0.05,
++            "peak_angle_err_deg_max": 0.1,
++            "peak_db_err_max": 0.1,
++        }
++        with tempfile.TemporaryDirectory() as tmpdir:
++            base_dir = Path(tmpdir)
++            config_path = self._write_config(base_dir, "fixture-pass", thresholds)
++            output_dir = validate_ris_lab(str(config_path), str(self._fixture_path()))
++            metrics = json.loads((output_dir / "metrics.json").read_text(encoding="utf-8"))
++
++        self.assertTrue(metrics["passed"])
++        self.assertLess(metrics["rmse_db"], 1e-6)
++        self.assertLess(metrics["peak_angle_error_deg"], 1e-6)
++        self.assertLess(metrics["peak_db_error"], 1e-6)
++        self.assertEqual(metrics["thresholds"]["rmse_db_max"], thresholds["rmse_db_max"])
++
++    def test_validation_fixture_fails_with_perturbed_data(self) -> None:
++        thresholds = {
++            "normalization": "peak_0db",
++            "rmse_db_max": 0.05,
++            "peak_angle_err_deg_max": 0.1,
++            "peak_db_err_max": 0.1,
++        }
++        with tempfile.TemporaryDirectory() as tmpdir:
++            base_dir = Path(tmpdir)
++            config_path = self._write_config(base_dir, "fixture-fail", thresholds)
++            perturbed_path = base_dir / "fixture_perturbed.csv"
++            rows = self._load_fixture_rows()
++            header, data_rows = rows[0], rows[1:]
++            data_rows[-1][1] = "1.000000"
++            with perturbed_path.open("w", newline="", encoding="utf-8") as handle:
++                writer = csv.writer(handle)
++                writer.writerow(header)
++                writer.writerows(data_rows)
++
++            output_dir = validate_ris_lab(str(config_path), str(perturbed_path))
++            metrics = json.loads((output_dir / "metrics.json").read_text(encoding="utf-8"))
++
++        self.assertFalse(metrics["passed"])
++        self.assertGreater(metrics["peak_angle_error_deg"], 1.0)
++
++
++if __name__ == "__main__":
++    unittest.main()
+
+
+
+thinking
+**Reviewing fixture file line endings**
+
+The fixture CSV file created with Python's csv module likely uses Windows-style CRLF endings; this is probably acceptable, so no change is needed to enforce LF line endings.
+thinking
+**Confirming line endings preference**
+
+Considering rewriting the fixture file to enforce LF line endings, but it's likely unnecessary; using a line-inspection command will verify actual endings before deciding.
+exec
+/usr/bin/zsh -lc "sed -n '1,6l' tests/fixtures/ris_validation_fixture.csv" in /home/josh/Documents/Github/RIS_SIONNA succeeded in 3ms:
+theta_deg,pattern_db\r$
+-10.0,-0.521398\r$
+-5.0,-0.212255\r$
+0.0,0.000000\r$
+5.0,-0.212255\r$
+10.0,-0.521398\r$
+file update:
+diff --git a/tests/test_ris_lab_validation.py b/tests/test_ris_lab_validation.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..4320cbb2f85f6b6fced53765aea113dc159ff7e7
+--- /dev/null
++++ b/tests/test_ris_lab_validation.py
+@@ -0,0 +1,79 @@
++import csv
++import json
++import tempfile
++import unittest
++from pathlib import Path
++
++import yaml
++
++from app.ris.ris_lab import validate_ris_lab
++
++
++class TestRisLabValidationFixture(unittest.TestCase):
++    def _write_config(self, base_dir: Path, run_id: str, thresholds: dict) -> Path:
++        config = {
++            "geometry": {"nx": 2, "ny": 2, "dx": 0.5, "dy": 0.5},
++            "validation": thresholds,
++            "output": {"base_dir": str(base_dir), "run_id": run_id},
++        }
++        config_path = base_dir / f"{run_id}.yaml"
++        with config_path.open("w", encoding="utf-8") as handle:
++            yaml.safe_dump(config, handle, sort_keys=False)
++        return config_path
++
++    def _fixture_path(self) -> Path:
++        return Path(__file__).resolve().parent / "fixtures" / "ris_validation_fixture.csv"
++
++    def _load_fixture_rows(self) -> list[list[str]]:
++        with self._fixture_path().open("r", encoding="utf-8") as handle:
++            reader = csv.reader(handle)
++            rows = list(reader)
++        return rows
++
++    def test_validation_fixture_passes(self) -> None:
++        thresholds = {
++            "normalization": "peak_0db",
++            "rmse_db_max": 0.05,
++            "peak_angle_err_deg_max": 0.1,
++            "peak_db_err_max": 0.1,
++        }
++        with tempfile.TemporaryDirectory() as tmpdir:
++            base_dir = Path(tmpdir)
++            config_path = self._write_config(base_dir, "fixture-pass", thresholds)
++            output_dir = validate_ris_lab(str(config_path), str(self._fixture_path()))
++            metrics = json.loads((output_dir / "metrics.json").read_text(encoding="utf-8"))
++
++        self.assertTrue(metrics["passed"])
++        self.assertLess(metrics["rmse_db"], 1e-6)
++        self.assertLess(metrics["peak_angle_error_deg"], 1e-6)
++        self.assertLess(metrics["peak_db_error"], 1e-6)
++        self.assertEqual(metrics["thresholds"]["rmse_db_max"], thresholds["rmse_db_max"])
++
++    def test_validation_fixture_fails_with_perturbed_data(self) -> None:
++        thresholds = {
++            "normalization": "peak_0db",
++            "rmse_db_max": 0.05,
++            "peak_angle_err_deg_max": 0.1,
++            "peak_db_err_max": 0.1,
++        }
++        with tempfile.TemporaryDirectory() as tmpdir:
++            base_dir = Path(tmpdir)
++            config_path = self._write_config(base_dir, "fixture-fail", thresholds)
++            perturbed_path = base_dir / "fixture_perturbed.csv"
++            rows = self._load_fixture_rows()
++            header, data_rows = rows[0], rows[1:]
++            data_rows[-1][1] = "1.000000"
++            with perturbed_path.open("w", newline="", encoding="utf-8") as handle:
++                writer = csv.writer(handle)
++                writer.writerow(header)
++                writer.writerows(data_rows)
++
++            output_dir = validate_ris_lab(str(config_path), str(perturbed_path))
++            metrics = json.loads((output_dir / "metrics.json").read_text(encoding="utf-8"))
++
++        self.assertFalse(metrics["passed"])
++        self.assertGreater(metrics["peak_angle_error_deg"], 1.0)
++
++
++if __name__ == "__main__":
++    unittest.main()
+
+
+thinking
+**Converting line endings to LF**
+
+I'm planning to replace CRLF line endings with LF using apply_patch to ensure ASCII compatibility and meet the default encoding requirement.
+file update
+D /home/josh/Documents/Github/RIS_SIONNA/tests/fixtures/ris_validation_fixture.csv
+theta_deg,pattern_db
+-10.0,-0.521398
+-5.0,-0.212255
+0.0,0.000000
+5.0,-0.212255
+10.0,-0.521398
+apply_patch(auto_approved=true) exited 0 in 2ms:
+Success. Updated the following files:
+D tests/fixtures/ris_validation_fixture.csv
+file update:
+diff --git a/tests/fixtures/ris_validation_fixture.csv b/tests/fixtures/ris_validation_fixture.csv
+deleted file mode 100644
+index ba1a37c1d25d59e9450381ac195e42506fae3b9e..0000000000000000000000000000000000000000
+--- a/tests/fixtures/ris_validation_fixture.csv
++++ /dev/null
+@@ -1,6 +0,0 @@
+-theta_deg,pattern_db
+--10.0,-0.521398
+--5.0,-0.212255
+-0.0,0.000000
+-5.0,-0.212255
+-10.0,-0.521398
+diff --git a/tests/test_ris_lab_validation.py b/tests/test_ris_lab_validation.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..4320cbb2f85f6b6fced53765aea113dc159ff7e7
+--- /dev/null
++++ b/tests/test_ris_lab_validation.py
+@@ -0,0 +1,79 @@
++import csv
++import json
++import tempfile
++import unittest
++from pathlib import Path
++
++import yaml
++
++from app.ris.ris_lab import validate_ris_lab
++
++
++class TestRisLabValidationFixture(unittest.TestCase):
++    def _write_config(self, base_dir: Path, run_id: str, thresholds: dict) -> Path:
++        config = {
++            "geometry": {"nx": 2, "ny": 2, "dx": 0.5, "dy": 0.5},
++            "validation": thresholds,
++            "output": {"base_dir": str(base_dir), "run_id": run_id},
++        }
++        config_path = base_dir / f"{run_id}.yaml"
++        with config_path.open("w", encoding="utf-8") as handle:
++            yaml.safe_dump(config, handle, sort_keys=False)
++        return config_path
++
++    def _fixture_path(self) -> Path:
++        return Path(__file__).resolve().parent / "fixtures" / "ris_validation_fixture.csv"
++
++    def _load_fixture_rows(self) -> list[list[str]]:
++        with self._fixture_path().open("r", encoding="utf-8") as handle:
++            reader = csv.reader(handle)
++            rows = list(reader)
++        return rows
++
++    def test_validation_fixture_passes(self) -> None:
++        thresholds = {
++            "normalization": "peak_0db",
++            "rmse_db_max": 0.05,
++            "peak_angle_err_deg_max": 0.1,
++            "peak_db_err_max": 0.1,
++        }
++        with tempfile.TemporaryDirectory() as tmpdir:
++            base_dir = Path(tmpdir)
++            config_path = self._write_config(base_dir, "fixture-pass", thresholds)
++            output_dir = validate_ris_lab(str(config_path), str(self._fixture_path()))
++            metrics = json.loads((output_dir / "metrics.json").read_text(encoding="utf-8"))
++
++        self.assertTrue(metrics["passed"])
++        self.assertLess(metrics["rmse_db"], 1e-6)
++        self.assertLess(metrics["peak_angle_error_deg"], 1e-6)
++        self.assertLess(metrics["peak_db_error"], 1e-6)
++        self.assertEqual(metrics["thresholds"]["rmse_db_max"], thresholds["rmse_db_max"])
++
++    def test_validation_fixture_fails_with_perturbed_data(self) -> None:
++        thresholds = {
++            "normalization": "peak_0db",
++            "rmse_db_max": 0.05,
++            "peak_angle_err_deg_max": 0.1,
++            "peak_db_err_max": 0.1,
++        }
++        with tempfile.TemporaryDirectory() as tmpdir:
++            base_dir = Path(tmpdir)
++            config_path = self._write_config(base_dir, "fixture-fail", thresholds)
++            perturbed_path = base_dir / "fixture_perturbed.csv"
++            rows = self._load_fixture_rows()
++            header, data_rows = rows[0], rows[1:]
++            data_rows[-1][1] = "1.000000"
++            with perturbed_path.open("w", newline="", encoding="utf-8") as handle:
++                writer = csv.writer(handle)
++                writer.writerow(header)
++                writer.writerows(data_rows)
++
++            output_dir = validate_ris_lab(str(config_path), str(perturbed_path))
++            metrics = json.loads((output_dir / "metrics.json").read_text(encoding="utf-8"))
++
++        self.assertFalse(metrics["passed"])
++        self.assertGreater(metrics["peak_angle_error_deg"], 1.0)
++
++
++if __name__ == "__main__":
++    unittest.main()
+
+file update:
+diff --git a/tests/fixtures/ris_validation_fixture.csv b/tests/fixtures/ris_validation_fixture.csv
+deleted file mode 100644
+index ba1a37c1d25d59e9450381ac195e42506fae3b9e..0000000000000000000000000000000000000000
+--- a/tests/fixtures/ris_validation_fixture.csv
++++ /dev/null
+@@ -1,6 +0,0 @@
+-theta_deg,pattern_db
+--10.0,-0.521398
+--5.0,-0.212255
+-0.0,0.000000
+-5.0,-0.212255
+-10.0,-0.521398
+diff --git a/tests/test_ris_lab_validation.py b/tests/test_ris_lab_validation.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..4320cbb2f85f6b6fced53765aea113dc159ff7e7
+--- /dev/null
++++ b/tests/test_ris_lab_validation.py
+@@ -0,0 +1,79 @@
++import csv
++import json
++import tempfile
++import unittest
++from pathlib import Path
++
++import yaml
++
++from app.ris.ris_lab import validate_ris_lab
++
++
++class TestRisLabValidationFixture(unittest.TestCase):
++    def _write_config(self, base_dir: Path, run_id: str, thresholds: dict) -> Path:
++        config = {
++            "geometry": {"nx": 2, "ny": 2, "dx": 0.5, "dy": 0.5},
++            "validation": thresholds,
++            "output": {"base_dir": str(base_dir), "run_id": run_id},
++        }
++        config_path = base_dir / f"{run_id}.yaml"
++        with config_path.open("w", encoding="utf-8") as handle:
++            yaml.safe_dump(config, handle, sort_keys=False)
++        return config_path
++
++    def _fixture_path(self) -> Path:
++        return Path(__file__).resolve().parent / "fixtures" / "ris_validation_fixture.csv"
++
++    def _load_fixture_rows(self) -> list[list[str]]:
++        with self._fixture_path().open("r", encoding="utf-8") as handle:
++            reader = csv.reader(handle)
++            rows = list(reader)
++        return rows
++
++    def test_validation_fixture_passes(self) -> None:
++        thresholds = {
++            "normalization": "peak_0db",
++            "rmse_db_max": 0.05,
++            "peak_angle_err_deg_max": 0.1,
++            "peak_db_err_max": 0.1,
++        }
++        with tempfile.TemporaryDirectory() as tmpdir:
++            base_dir = Path(tmpdir)
++            config_path = self._write_config(base_dir, "fixture-pass", thresholds)
++            output_dir = validate_ris_lab(str(config_path), str(self._fixture_path()))
++            metrics = json.loads((output_dir / "metrics.json").read_text(encoding="utf-8"))
++
++        self.assertTrue(metrics["passed"])
++        self.assertLess(metrics["rmse_db"], 1e-6)
++        self.assertLess(metrics["peak_angle_error_deg"], 1e-6)
++        self.assertLess(metrics["peak_db_error"], 1e-6)
++        self.assertEqual(metrics["thresholds"]["rmse_db_max"], thresholds["rmse_db_max"])
++
++    def test_validation_fixture_fails_with_perturbed_data(self) -> None:
++        thresholds = {
++            "normalization": "peak_0db",
++            "rmse_db_max": 0.05,
++            "peak_angle_err_deg_max": 0.1,
++            "peak_db_err_max": 0.1,
++        }
++        with tempfile.TemporaryDirectory() as tmpdir:
++            base_dir = Path(tmpdir)
++            config_path = self._write_config(base_dir, "fixture-fail", thresholds)
++            perturbed_path = base_dir / "fixture_perturbed.csv"
++            rows = self._load_fixture_rows()
++            header, data_rows = rows[0], rows[1:]
++            data_rows[-1][1] = "1.000000"
++            with perturbed_path.open("w", newline="", encoding="utf-8") as handle:
++                writer = csv.writer(handle)
++                writer.writerow(header)
++                writer.writerows(data_rows)
++
++            output_dir = validate_ris_lab(str(config_path), str(perturbed_path))
++            metrics = json.loads((output_dir / "metrics.json").read_text(encoding="utf-8"))
++
++        self.assertFalse(metrics["passed"])
++        self.assertGreater(metrics["peak_angle_error_deg"], 1.0)
++
++
++if __name__ == "__main__":
++    unittest.main()
+
+
+thinking
+**Reapplying patch with LF line endings**
+file update
+A /home/josh/Documents/Github/RIS_SIONNA/tests/fixtures/ris_validation_fixture.csv
+theta_deg,pattern_db
+-10.0,-0.521398
+-5.0,-0.212255
+0.0,0.000000
+5.0,-0.212255
+10.0,-0.521398
+apply_patch(auto_approved=true) exited 0 in 9ms:
+Success. Updated the following files:
+A tests/fixtures/ris_validation_fixture.csv
+file update:
+diff --git a/tests/fixtures/ris_validation_fixture.csv b/tests/fixtures/ris_validation_fixture.csv
+index ba1a37c1d25d59e9450381ac195e42506fae3b9e..3aedeb0876fcd440160dc2403ea7c4509904d755
+--- a/tests/fixtures/ris_validation_fixture.csv
++++ b/tests/fixtures/ris_validation_fixture.csv
+@@ -1,6 +1,6 @@
+-theta_deg,pattern_db
+--10.0,-0.521398
+--5.0,-0.212255
+-0.0,0.000000
+-5.0,-0.212255
+-10.0,-0.521398
++theta_deg,pattern_db
++-10.0,-0.521398
++-5.0,-0.212255
++0.0,0.000000
++5.0,-0.212255
++10.0,-0.521398
+diff --git a/tests/test_ris_lab_validation.py b/tests/test_ris_lab_validation.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..4320cbb2f85f6b6fced53765aea113dc159ff7e7
+--- /dev/null
++++ b/tests/test_ris_lab_validation.py
+@@ -0,0 +1,79 @@
++import csv
++import json
++import tempfile
++import unittest
++from pathlib import Path
++
++import yaml
++
++from app.ris.ris_lab import validate_ris_lab
++
++
++class TestRisLabValidationFixture(unittest.TestCase):
++    def _write_config(self, base_dir: Path, run_id: str, thresholds: dict) -> Path:
++        config = {
++            "geometry": {"nx": 2, "ny": 2, "dx": 0.5, "dy": 0.5},
++            "validation": thresholds,
++            "output": {"base_dir": str(base_dir), "run_id": run_id},
++        }
++        config_path = base_dir / f"{run_id}.yaml"
++        with config_path.open("w", encoding="utf-8") as handle:
++            yaml.safe_dump(config, handle, sort_keys=False)
++        return config_path
++
++    def _fixture_path(self) -> Path:
++        return Path(__file__).resolve().parent / "fixtures" / "ris_validation_fixture.csv"
++
++    def _load_fixture_rows(self) -> list[list[str]]:
++        with self._fixture_path().open("r", encoding="utf-8") as handle:
++            reader = csv.reader(handle)
++            rows = list(reader)
++        return rows
++
++    def test_validation_fixture_passes(self) -> None:
++        thresholds = {
++            "normalization": "peak_0db",
++            "rmse_db_max": 0.05,
++            "peak_angle_err_deg_max": 0.1,
++            "peak_db_err_max": 0.1,
++        }
++        with tempfile.TemporaryDirectory() as tmpdir:
++            base_dir = Path(tmpdir)
++            config_path = self._write_config(base_dir, "fixture-pass", thresholds)
++            output_dir = validate_ris_lab(str(config_path), str(self._fixture_path()))
++            metrics = json.loads((output_dir / "metrics.json").read_text(encoding="utf-8"))
++
++        self.assertTrue(metrics["passed"])
++        self.assertLess(metrics["rmse_db"], 1e-6)
++        self.assertLess(metrics["peak_angle_error_deg"], 1e-6)
++        self.assertLess(metrics["peak_db_error"], 1e-6)
++        self.assertEqual(metrics["thresholds"]["rmse_db_max"], thresholds["rmse_db_max"])
++
++    def test_validation_fixture_fails_with_perturbed_data(self) -> None:
++        thresholds = {
++            "normalization": "peak_0db",
++            "rmse_db_max": 0.05,
++            "peak_angle_err_deg_max": 0.1,
++            "peak_db_err_max": 0.1,
++        }
++        with tempfile.TemporaryDirectory() as tmpdir:
++            base_dir = Path(tmpdir)
++            config_path = self._write_config(base_dir, "fixture-fail", thresholds)
++            perturbed_path = base_dir / "fixture_perturbed.csv"
++            rows = self._load_fixture_rows()
++            header, data_rows = rows[0], rows[1:]
++            data_rows[-1][1] = "1.000000"
++            with perturbed_path.open("w", newline="", encoding="utf-8") as handle:
++                writer = csv.writer(handle)
++                writer.writerow(header)
++                writer.writerows(data_rows)
++
++            output_dir = validate_ris_lab(str(config_path), str(perturbed_path))
++            metrics = json.loads((output_dir / "metrics.json").read_text(encoding="utf-8"))
++
++        self.assertFalse(metrics["passed"])
++        self.assertGreater(metrics["peak_angle_error_deg"], 1.0)
++
++
++if __name__ == "__main__":
++    unittest.main()
+
+file update:
+diff --git a/tests/fixtures/ris_validation_fixture.csv b/tests/fixtures/ris_validation_fixture.csv
+index ba1a37c1d25d59e9450381ac195e42506fae3b9e..3aedeb0876fcd440160dc2403ea7c4509904d755
+--- a/tests/fixtures/ris_validation_fixture.csv
++++ b/tests/fixtures/ris_validation_fixture.csv
+@@ -1,6 +1,6 @@
+-theta_deg,pattern_db
+--10.0,-0.521398
+--5.0,-0.212255
+-0.0,0.000000
+-5.0,-0.212255
+-10.0,-0.521398
++theta_deg,pattern_db
++-10.0,-0.521398
++-5.0,-0.212255
++0.0,0.000000
++5.0,-0.212255
++10.0,-0.521398
+diff --git a/tests/test_ris_lab_validation.py b/tests/test_ris_lab_validation.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..4320cbb2f85f6b6fced53765aea113dc159ff7e7
+--- /dev/null
++++ b/tests/test_ris_lab_validation.py
+@@ -0,0 +1,79 @@
++import csv
++import json
++import tempfile
++import unittest
++from pathlib import Path
++
++import yaml
++
++from app.ris.ris_lab import validate_ris_lab
++
++
++class TestRisLabValidationFixture(unittest.TestCase):
++    def _write_config(self, base_dir: Path, run_id: str, thresholds: dict) -> Path:
++        config = {
++            "geometry": {"nx": 2, "ny": 2, "dx": 0.5, "dy": 0.5},
++            "validation": thresholds,
++            "output": {"base_dir": str(base_dir), "run_id": run_id},
++        }
++        config_path = base_dir / f"{run_id}.yaml"
++        with config_path.open("w", encoding="utf-8") as handle:
++            yaml.safe_dump(config, handle, sort_keys=False)
++        return config_path
++
++    def _fixture_path(self) -> Path:
++        return Path(__file__).resolve().parent / "fixtures" / "ris_validation_fixture.csv"
++
++    def _load_fixture_rows(self) -> list[list[str]]:
++        with self._fixture_path().open("r", encoding="utf-8") as handle:
++            reader = csv.reader(handle)
++            rows = list(reader)
++        return rows
++
++    def test_validation_fixture_passes(self) -> None:
++        thresholds = {
++            "normalization": "peak_0db",
++            "rmse_db_max": 0.05,
++            "peak_angle_err_deg_max": 0.1,
++            "peak_db_err_max": 0.1,
++        }
++        with tempfile.TemporaryDirectory() as tmpdir:
++            base_dir = Path(tmpdir)
++            config_path = self._write_config(base_dir, "fixture-pass", thresholds)
++            output_dir = validate_ris_lab(str(config_path), str(self._fixture_path()))
++            metrics = json.loads((output_dir / "metrics.json").read_text(encoding="utf-8"))
++
++        self.assertTrue(metrics["passed"])
++        self.assertLess(metrics["rmse_db"], 1e-6)
++        self.assertLess(metrics["peak_angle_error_deg"], 1e-6)
++        self.assertLess(metrics["peak_db_error"], 1e-6)
++        self.assertEqual(metrics["thresholds"]["rmse_db_max"], thresholds["rmse_db_max"])
++
++    def test_validation_fixture_fails_with_perturbed_data(self) -> None:
++        thresholds = {
++            "normalization": "peak_0db",
++            "rmse_db_max": 0.05,
++            "peak_angle_err_deg_max": 0.1,
++            "peak_db_err_max": 0.1,
++        }
++        with tempfile.TemporaryDirectory() as tmpdir:
++            base_dir = Path(tmpdir)
++            config_path = self._write_config(base_dir, "fixture-fail", thresholds)
++            perturbed_path = base_dir / "fixture_perturbed.csv"
++            rows = self._load_fixture_rows()
++            header, data_rows = rows[0], rows[1:]
++            data_rows[-1][1] = "1.000000"
++            with perturbed_path.open("w", newline="", encoding="utf-8") as handle:
++                writer = csv.writer(handle)
++                writer.writerow(header)
++                writer.writerows(data_rows)
++
++            output_dir = validate_ris_lab(str(config_path), str(perturbed_path))
++            metrics = json.loads((output_dir / "metrics.json").read_text(encoding="utf-8"))
++
++        self.assertFalse(metrics["passed"])
++        self.assertGreater(metrics["peak_angle_error_deg"], 1.0)
++
++
++if __name__ == "__main__":
++    unittest.main()
+
+
+thinking
+**Deciding to add activity logging**
+
+I determined the fixture change counts as a major update and will add logging to capture this activity accordingly.
+exec
+/usr/bin/zsh -lc 'ralph log "Normalized RIS validation CSV fixture line endings"' in /home/josh/Documents/Github/RIS_SIONNA succeeded in 87ms:
+Using local templates: /home/josh/Documents/Github/RIS_SIONNA/.agents/ralph
+file update:
+diff --git a/tests/fixtures/ris_validation_fixture.csv b/tests/fixtures/ris_validation_fixture.csv
+index ba1a37c1d25d59e9450381ac195e42506fae3b9e..3aedeb0876fcd440160dc2403ea7c4509904d755
+--- a/tests/fixtures/ris_validation_fixture.csv
++++ b/tests/fixtures/ris_validation_fixture.csv
+@@ -1,6 +1,6 @@
+-theta_deg,pattern_db
+--10.0,-0.521398
+--5.0,-0.212255
+-0.0,0.000000
+-5.0,-0.212255
+-10.0,-0.521398
++theta_deg,pattern_db
++-10.0,-0.521398
++-5.0,-0.212255
++0.0,0.000000
++5.0,-0.212255
++10.0,-0.521398
+diff --git a/tests/test_ris_lab_validation.py b/tests/test_ris_lab_validation.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..4320cbb2f85f6b6fced53765aea113dc159ff7e7
+--- /dev/null
++++ b/tests/test_ris_lab_validation.py
+@@ -0,0 +1,79 @@
++import csv
++import json
++import tempfile
++import unittest
++from pathlib import Path
++
++import yaml
++
++from app.ris.ris_lab import validate_ris_lab
++
++
++class TestRisLabValidationFixture(unittest.TestCase):
++    def _write_config(self, base_dir: Path, run_id: str, thresholds: dict) -> Path:
++        config = {
++            "geometry": {"nx": 2, "ny": 2, "dx": 0.5, "dy": 0.5},
++            "validation": thresholds,
++            "output": {"base_dir": str(base_dir), "run_id": run_id},
++        }
++        config_path = base_dir / f"{run_id}.yaml"
++        with config_path.open("w", encoding="utf-8") as handle:
++            yaml.safe_dump(config, handle, sort_keys=False)
++        return config_path
++
++    def _fixture_path(self) -> Path:
++        return Path(__file__).resolve().parent / "fixtures" / "ris_validation_fixture.csv"
++
++    def _load_fixture_rows(self) -> list[list[str]]:
++        with self._fixture_path().open("r", encoding="utf-8") as handle:
++            reader = csv.reader(handle)
++            rows = list(reader)
++        return rows
++
++    def test_validation_fixture_passes(self) -> None:
++        thresholds = {
++            "normalization": "peak_0db",
++            "rmse_db_max": 0.05,
++            "peak_angle_err_deg_max": 0.1,
++            "peak_db_err_max": 0.1,
++        }
++        with tempfile.TemporaryDirectory() as tmpdir:
++            base_dir = Path(tmpdir)
++            config_path = self._write_config(base_dir, "fixture-pass", thresholds)
++            output_dir = validate_ris_lab(str(config_path), str(self._fixture_path()))
++            metrics = json.loads((output_dir / "metrics.json").read_text(encoding="utf-8"))
++
++        self.assertTrue(metrics["passed"])
++        self.assertLess(metrics["rmse_db"], 1e-6)
++        self.assertLess(metrics["peak_angle_error_deg"], 1e-6)
++        self.assertLess(metrics["peak_db_error"], 1e-6)
++        self.assertEqual(metrics["thresholds"]["rmse_db_max"], thresholds["rmse_db_max"])
++
++    def test_validation_fixture_fails_with_perturbed_data(self) -> None:
++        thresholds = {
++            "normalization": "peak_0db",
++            "rmse_db_max": 0.05,
++            "peak_angle_err_deg_max": 0.1,
++            "peak_db_err_max": 0.1,
++        }
++        with tempfile.TemporaryDirectory() as tmpdir:
++            base_dir = Path(tmpdir)
++            config_path = self._write_config(base_dir, "fixture-fail", thresholds)
++            perturbed_path = base_dir / "fixture_perturbed.csv"
++            rows = self._load_fixture_rows()
++            header, data_rows = rows[0], rows[1:]
++            data_rows[-1][1] = "1.000000"
++            with perturbed_path.open("w", newline="", encoding="utf-8") as handle:
++                writer = csv.writer(handle)
++                writer.writerow(header)
++                writer.writerows(data_rows)
++
++            output_dir = validate_ris_lab(str(config_path), str(perturbed_path))
++            metrics = json.loads((output_dir / "metrics.json").read_text(encoding="utf-8"))
++
++        self.assertFalse(metrics["passed"])
++        self.assertGreater(metrics["peak_angle_error_deg"], 1.0)
++
++
++if __name__ == "__main__":
++    unittest.main()
+
+
+thinking
+**Rerunning tests to verify fixture change**
+
+I'll run tests again to ensure the fixture modification doesn't break anything and to satisfy the "Test Before Commit" requirement.
+exec
+/usr/bin/zsh -lc '.venv/bin/python -m pytest' in /home/josh/Documents/Github/RIS_SIONNA succeeded in 921ms:
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.0.2, pluggy-1.6.0
+rootdir: /home/josh/Documents/Github/RIS_SIONNA
+configfile: pyproject.toml
+collected 19 items
+
+tests/test_alignment.py ..                                               [ 10%]
+tests/test_ris_config.py ...                                             [ 26%]
+tests/test_ris_core.py ......                                            [ 57%]
+tests/test_ris_lab_pattern.py ..                                         [ 68%]
+tests/test_ris_lab_reference.py ....                                     [ 89%]
+tests/test_ris_lab_validation.py ..                                      [100%]
+
+============================== 19 passed in 0.75s ==============================
+file update:
+diff --git a/tests/fixtures/ris_validation_fixture.csv b/tests/fixtures/ris_validation_fixture.csv
+index ba1a37c1d25d59e9450381ac195e42506fae3b9e..3aedeb0876fcd440160dc2403ea7c4509904d755
+--- a/tests/fixtures/ris_validation_fixture.csv
++++ b/tests/fixtures/ris_validation_fixture.csv
+@@ -1,6 +1,6 @@
+-theta_deg,pattern_db
+--10.0,-0.521398
+--5.0,-0.212255
+-0.0,0.000000
+-5.0,-0.212255
+-10.0,-0.521398
++theta_deg,pattern_db
++-10.0,-0.521398
++-5.0,-0.212255
++0.0,0.000000
++5.0,-0.212255
++10.0,-0.521398
+diff --git a/tests/test_ris_lab_validation.py b/tests/test_ris_lab_validation.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..4320cbb2f85f6b6fced53765aea113dc159ff7e7
+--- /dev/null
++++ b/tests/test_ris_lab_validation.py
+@@ -0,0 +1,79 @@
++import csv
++import json
++import tempfile
++import unittest
++from pathlib import Path
++
++import yaml
++
++from app.ris.ris_lab import validate_ris_lab
++
++
++class TestRisLabValidationFixture(unittest.TestCase):
++    def _write_config(self, base_dir: Path, run_id: str, thresholds: dict) -> Path:
++        config = {
++            "geometry": {"nx": 2, "ny": 2, "dx": 0.5, "dy": 0.5},
++            "validation": thresholds,
++            "output": {"base_dir": str(base_dir), "run_id": run_id},
++        }
++        config_path = base_dir / f"{run_id}.yaml"
++        with config_path.open("w", encoding="utf-8") as handle:
++            yaml.safe_dump(config, handle, sort_keys=False)
++        return config_path
++
++    def _fixture_path(self) -> Path:
++        return Path(__file__).resolve().parent / "fixtures" / "ris_validation_fixture.csv"
++
++    def _load_fixture_rows(self) -> list[list[str]]:
++        with self._fixture_path().open("r", encoding="utf-8") as handle:
++            reader = csv.reader(handle)
++            rows = list(reader)
++        return rows
++
++    def test_validation_fixture_passes(self) -> None:
++        thresholds = {
++            "normalization": "peak_0db",
++            "rmse_db_max": 0.05,
++            "peak_angle_err_deg_max": 0.1,
++            "peak_db_err_max": 0.1,
++        }
++        with tempfile.TemporaryDirectory() as tmpdir:
++            base_dir = Path(tmpdir)
++            config_path = self._write_config(base_dir, "fixture-pass", thresholds)
++            output_dir = validate_ris_lab(str(config_path), str(self._fixture_path()))
++            metrics = json.loads((output_dir / "metrics.json").read_text(encoding="utf-8"))
++
++        self.assertTrue(metrics["passed"])
++        self.assertLess(metrics["rmse_db"], 1e-6)
++        self.assertLess(metrics["peak_angle_error_deg"], 1e-6)
++        self.assertLess(metrics["peak_db_error"], 1e-6)
++        self.assertEqual(metrics["thresholds"]["rmse_db_max"], thresholds["rmse_db_max"])
++
++    def test_validation_fixture_fails_with_perturbed_data(self) -> None:
++        thresholds = {
++            "normalization": "peak_0db",
++            "rmse_db_max": 0.05,
++            "peak_angle_err_deg_max": 0.1,
++            "peak_db_err_max": 0.1,
++        }
++        with tempfile.TemporaryDirectory() as tmpdir:
++            base_dir = Path(tmpdir)
++            config_path = self._write_config(base_dir, "fixture-fail", thresholds)
++            perturbed_path = base_dir / "fixture_perturbed.csv"
++            rows = self._load_fixture_rows()
++            header, data_rows = rows[0], rows[1:]
++            data_rows[-1][1] = "1.000000"
++            with perturbed_path.open("w", newline="", encoding="utf-8") as handle:
++                writer = csv.writer(handle)
++                writer.writerow(header)
++                writer.writerows(data_rows)
++
++            output_dir = validate_ris_lab(str(config_path), str(perturbed_path))
++            metrics = json.loads((output_dir / "metrics.json").read_text(encoding="utf-8"))
++
++        self.assertFalse(metrics["passed"])
++        self.assertGreater(metrics["peak_angle_error_deg"], 1.0)
++
++
++if __name__ == "__main__":
++    unittest.main()
+
+
+thinking
+**Adding test activity logging**
+exec
+/usr/bin/zsh -lc 'ralph log "Re-ran pytest after fixture update"' in /home/josh/Documents/Github/RIS_SIONNA succeeded in 87ms:
+Using local templates: /home/josh/Documents/Github/RIS_SIONNA/.agents/ralph
+file update:
+diff --git a/tests/fixtures/ris_validation_fixture.csv b/tests/fixtures/ris_validation_fixture.csv
+index ba1a37c1d25d59e9450381ac195e42506fae3b9e..3aedeb0876fcd440160dc2403ea7c4509904d755
+--- a/tests/fixtures/ris_validation_fixture.csv
++++ b/tests/fixtures/ris_validation_fixture.csv
+@@ -1,6 +1,6 @@
+-theta_deg,pattern_db
+--10.0,-0.521398
+--5.0,-0.212255
+-0.0,0.000000
+-5.0,-0.212255
+-10.0,-0.521398
++theta_deg,pattern_db
++-10.0,-0.521398
++-5.0,-0.212255
++0.0,0.000000
++5.0,-0.212255
++10.0,-0.521398
+diff --git a/tests/test_ris_lab_validation.py b/tests/test_ris_lab_validation.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..4320cbb2f85f6b6fced53765aea113dc159ff7e7
+--- /dev/null
++++ b/tests/test_ris_lab_validation.py
+@@ -0,0 +1,79 @@
++import csv
++import json
++import tempfile
++import unittest
++from pathlib import Path
++
++import yaml
++
++from app.ris.ris_lab import validate_ris_lab
++
++
++class TestRisLabValidationFixture(unittest.TestCase):
++    def _write_config(self, base_dir: Path, run_id: str, thresholds: dict) -> Path:
++        config = {
++            "geometry": {"nx": 2, "ny": 2, "dx": 0.5, "dy": 0.5},
++            "validation": thresholds,
++            "output": {"base_dir": str(base_dir), "run_id": run_id},
++        }
++        config_path = base_dir / f"{run_id}.yaml"
++        with config_path.open("w", encoding="utf-8") as handle:
++            yaml.safe_dump(config, handle, sort_keys=False)
++        return config_path
++
++    def _fixture_path(self) -> Path:
++        return Path(__file__).resolve().parent / "fixtures" / "ris_validation_fixture.csv"
++
++    def _load_fixture_rows(self) -> list[list[str]]:
++        with self._fixture_path().open("r", encoding="utf-8") as handle:
++            reader = csv.reader(handle)
++            rows = list(reader)
++        return rows
++
++    def test_validation_fixture_passes(self) -> None:
++        thresholds = {
++            "normalization": "peak_0db",
++            "rmse_db_max": 0.05,
++            "peak_angle_err_deg_max": 0.1,
++            "peak_db_err_max": 0.1,
++        }
++        with tempfile.TemporaryDirectory() as tmpdir:
++            base_dir = Path(tmpdir)
++            config_path = self._write_config(base_dir, "fixture-pass", thresholds)
++            output_dir = validate_ris_lab(str(config_path), str(self._fixture_path()))
++            metrics = json.loads((output_dir / "metrics.json").read_text(encoding="utf-8"))
++
++        self.assertTrue(metrics["passed"])
++        self.assertLess(metrics["rmse_db"], 1e-6)
++        self.assertLess(metrics["peak_angle_error_deg"], 1e-6)
++        self.assertLess(metrics["peak_db_error"], 1e-6)
++        self.assertEqual(metrics["thresholds"]["rmse_db_max"], thresholds["rmse_db_max"])
++
++    def test_validation_fixture_fails_with_perturbed_data(self) -> None:
++        thresholds = {
++            "normalization": "peak_0db",
++            "rmse_db_max": 0.05,
++            "peak_angle_err_deg_max": 0.1,
++            "peak_db_err_max": 0.1,
++        }
++        with tempfile.TemporaryDirectory() as tmpdir:
++            base_dir = Path(tmpdir)
++            config_path = self._write_config(base_dir, "fixture-fail", thresholds)
++            perturbed_path = base_dir / "fixture_perturbed.csv"
++            rows = self._load_fixture_rows()
++            header, data_rows = rows[0], rows[1:]
++            data_rows[-1][1] = "1.000000"
++            with perturbed_path.open("w", newline="", encoding="utf-8") as handle:
++                writer = csv.writer(handle)
++                writer.writerow(header)
++                writer.writerows(data_rows)
++
++            output_dir = validate_ris_lab(str(config_path), str(perturbed_path))
++            metrics = json.loads((output_dir / "metrics.json").read_text(encoding="utf-8"))
++
++        self.assertFalse(metrics["passed"])
++        self.assertGreater(metrics["peak_angle_error_deg"], 1.0)
++
++
++if __name__ == "__main__":
++    unittest.main()
+
+
+thinking
+**Checking git status**
+exec
+/usr/bin/zsh -lc 'git status --porcelain' in /home/josh/Documents/Github/RIS_SIONNA succeeded in 5ms:
+ M .agents/tasks/prd-ris-lab.json
+ M .ralph/activity.log
+ M .ralph/errors.log
+ M .ralph/runs/run-20260120-175122-20544-iter-9.log
+?? .ralph/.tmp/prompt-20260120-175122-20544-10.md
+?? .ralph/.tmp/story-20260120-175122-20544-10.json
+?? .ralph/.tmp/story-20260120-175122-20544-10.md
+?? .ralph/runs/run-20260120-175122-20544-iter-10.log
+?? .ralph/runs/run-20260120-175122-20544-iter-9.md
+?? tests/fixtures/
+?? tests/test_ris_lab_validation.py
+file update:
+diff --git a/tests/fixtures/ris_validation_fixture.csv b/tests/fixtures/ris_validation_fixture.csv
+index ba1a37c1d25d59e9450381ac195e42506fae3b9e..3aedeb0876fcd440160dc2403ea7c4509904d755
+--- a/tests/fixtures/ris_validation_fixture.csv
++++ b/tests/fixtures/ris_validation_fixture.csv
+@@ -1,6 +1,6 @@
+-theta_deg,pattern_db
+--10.0,-0.521398
+--5.0,-0.212255
+-0.0,0.000000
+-5.0,-0.212255
+-10.0,-0.521398
++theta_deg,pattern_db
++-10.0,-0.521398
++-5.0,-0.212255
++0.0,0.000000
++5.0,-0.212255
++10.0,-0.521398
+diff --git a/tests/test_ris_lab_validation.py b/tests/test_ris_lab_validation.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..4320cbb2f85f6b6fced53765aea113dc159ff7e7
+--- /dev/null
++++ b/tests/test_ris_lab_validation.py
+@@ -0,0 +1,79 @@
++import csv
++import json
++import tempfile
++import unittest
++from pathlib import Path
++
++import yaml
++
++from app.ris.ris_lab import validate_ris_lab
++
++
++class TestRisLabValidationFixture(unittest.TestCase):
++    def _write_config(self, base_dir: Path, run_id: str, thresholds: dict) -> Path:
++        config = {
++            "geometry": {"nx": 2, "ny": 2, "dx": 0.5, "dy": 0.5},
++            "validation": thresholds,
++            "output": {"base_dir": str(base_dir), "run_id": run_id},
++        }
++        config_path = base_dir / f"{run_id}.yaml"
++        with config_path.open("w", encoding="utf-8") as handle:
++            yaml.safe_dump(config, handle, sort_keys=False)
++        return config_path
++
++    def _fixture_path(self) -> Path:
++        return Path(__file__).resolve().parent / "fixtures" / "ris_validation_fixture.csv"
++
++    def _load_fixture_rows(self) -> list[list[str]]:
++        with self._fixture_path().open("r", encoding="utf-8") as handle:
++            reader = csv.reader(handle)
++            rows = list(reader)
++        return rows
++
++    def test_validation_fixture_passes(self) -> None:
++        thresholds = {
++            "normalization": "peak_0db",
++            "rmse_db_max": 0.05,
++            "peak_angle_err_deg_max": 0.1,
++            "peak_db_err_max": 0.1,
++        }
++        with tempfile.TemporaryDirectory() as tmpdir:
++            base_dir = Path(tmpdir)
++            config_path = self._write_config(base_dir, "fixture-pass", thresholds)
++            output_dir = validate_ris_lab(str(config_path), str(self._fixture_path()))
++            metrics = json.loads((output_dir / "metrics.json").read_text(encoding="utf-8"))
++
++        self.assertTrue(metrics["passed"])
++        self.assertLess(metrics["rmse_db"], 1e-6)
++        self.assertLess(metrics["peak_angle_error_deg"], 1e-6)
++        self.assertLess(metrics["peak_db_error"], 1e-6)
++        self.assertEqual(metrics["thresholds"]["rmse_db_max"], thresholds["rmse_db_max"])
++
++    def test_validation_fixture_fails_with_perturbed_data(self) -> None:
++        thresholds = {
++            "normalization": "peak_0db",
++            "rmse_db_max": 0.05,
++            "peak_angle_err_deg_max": 0.1,
++            "peak_db_err_max": 0.1,
++        }
++        with tempfile.TemporaryDirectory() as tmpdir:
++            base_dir = Path(tmpdir)
++            config_path = self._write_config(base_dir, "fixture-fail", thresholds)
++            perturbed_path = base_dir / "fixture_perturbed.csv"
++            rows = self._load_fixture_rows()
++            header, data_rows = rows[0], rows[1:]
++            data_rows[-1][1] = "1.000000"
++            with perturbed_path.open("w", newline="", encoding="utf-8") as handle:
++                writer = csv.writer(handle)
++                writer.writerow(header)
++                writer.writerows(data_rows)
++
++            output_dir = validate_ris_lab(str(config_path), str(perturbed_path))
++            metrics = json.loads((output_dir / "metrics.json").read_text(encoding="utf-8"))
++
++        self.assertFalse(metrics["passed"])
++        self.assertGreater(metrics["peak_angle_error_deg"], 1.0)
++
++
++if __name__ == "__main__":
++    unittest.main()
+
+
+thinking
+**Preparing to commit test addition**
+
+I'm finalizing the commit message for adding RIS lab fixture tests, confirming scope and length, and staging all files after verifying no sensitive info.
+exec
+/usr/bin/zsh -lc 'git add -A' in /home/josh/Documents/Github/RIS_SIONNA
