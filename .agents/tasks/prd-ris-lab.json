@@ -1,0 +1,314 @@
+{
+  "version": 1,
+  "project": "RIS Lab (Validation First)",
+  "overview": "Add a RIS Lab module to design and validate RIS behaviors against MATLAB and paper-style references with reproducible CLI and Simulator-UI runs, saving full artifacts for regression testing.",
+  "goals": [
+    "Provide deterministic RIS math, control synthesis, and pattern/link validation via CLI and Simulator UI",
+    "Reproduce MATLAB reference patterns within configurable RMSE + peak-angle thresholds",
+    "Persist all run artifacts under outputs/<run_id>/ for regression tracking"
+  ],
+  "nonGoals": [
+    "Ray tracing or Sionna RT RIS integration (no ray-traced RIS scattering)",
+    "RIS optimization, auto-tuning, or search algorithms",
+    "GIS or map ingestion"
+  ],
+  "successMetrics": [
+    "A validation run matches MATLAB pattern within RMSE threshold and peak-angle error threshold",
+    "A run produces all required artifacts under outputs/<run_id>/"
+  ],
+  "openQuestions": [],
+  "defaults": {
+    "validation": {
+      "normalization": "peak_0db",
+      "rmse_db_max": 2.0,
+      "peak_angle_err_deg_max": 2.0,
+      "peak_db_err_max": 1.5
+    },
+    "experiment": {
+      "frequency_hz": 28000000000,
+      "tx_incident_angle_deg": -30,
+      "rx_sweep_deg": {
+        "start": -90,
+        "stop": 90,
+        "step": 2
+      }
+    },
+    "platform": {
+      "primary": "native_ubuntu_24_04_gpu",
+      "wsl": "cpu_only_unsupported_for_optix"
+    }
+  },
+  "stack": {
+    "framework": "Python 3.10\u20133.12 with existing app CLI and Simulator UI (sim_server + sim_web)",
+    "hosting": "Local app execution",
+    "database": "None (filesystem outputs)",
+    "auth": "None"
+  },
+  "routes": [
+    {
+      "path": "/sim",
+      "name": "Simulator",
+      "purpose": "Host RIS Lab tab with Config/Run/Results sub-tabs"
+    }
+  ],
+  "uiNotes": [
+    "RIS Lab tab contains sub-tabs: Config, Run, Results",
+    "UI must show progress and logs and remain responsive during runs (background jobs only)",
+    "All UI actions must be reproducible via CLI using the same config schema",
+    "UI must be hosted in the Simulator surface (sim_server/sim_web), not Streamlit dashboard"
+  ],
+  "dataModel": [
+    {
+      "entity": "RisLabConfig",
+      "fields": [
+        "id",
+        "ris_geometry",
+        "control_synthesis",
+        "quantization",
+        "pattern_mode",
+        "link_mode",
+        "validation",
+        "output"
+      ]
+    },
+    {
+      "entity": "RisRun",
+      "fields": [
+        "run_id",
+        "started_at",
+        "status",
+        "mode",
+        "artifacts",
+        "metrics",
+        "errors"
+      ]
+    },
+    {
+      "entity": "ReferenceData",
+      "fields": [
+        "theta_deg",
+        "pattern_db",
+        "pattern_linear",
+        "meta"
+      ]
+    }
+  ],
+  "importFormat": {
+    "description": "Reference data with theta sweep and pattern in CSV (required), NPZ (optional), MAT (optional/stretch).",
+    "priority": [
+      "CSV",
+      "NPZ",
+      "MAT"
+    ],
+    "requiredFields": {
+      "theta_deg": "1D array of Rx sweep angles in degrees",
+      "pattern_db_or_linear": "Either pattern_db (dB) or pattern_linear (linear), same length as theta_deg"
+    },
+    "example": {
+      "csv": {
+        "columns": [
+          "theta_deg",
+          "pattern_db"
+        ],
+        "meta": {
+          "frequency_hz": 28000000000,
+          "tx_angle_deg": -30,
+          "ris_shape": [
+            20,
+            20
+          ],
+          "dx_m": 0.0046,
+          "dy_m": 0.0046,
+          "quantization_bits": 1,
+          "normalization": "peak_0db"
+        }
+      }
+    }
+  },
+  "rules": [
+    "Pattern mode supports normalized pattern vs Rx angle sweep and produces both linear and dB arrays",
+    "Default normalization is peak_0db (peak=0 dB); unit_power normalization is supported as an option",
+    "Link mode supports a canonical coherent sum with 1/(rt*rr) weighting and explicit phase convention; do not implement multiple competing equation variants in this PRD",
+    "Quantization supports continuous, 1-bit (0/pi), and 2-bit (0/pi/2/pi/3pi/2)",
+    "All run artifacts must be written to outputs/<run_id>/ with both config.yaml and config.json snapshots",
+    "No silent fallback: validation and run modes must log conventions and clearly report failures"
+  ],
+  "qualityGates": [
+    "python -m pytest"
+  ],
+  "stories": [
+    {
+      "id": "US-001",
+      "title": "Add ris_core math primitives and unit tests",
+      "status": "in_progress",
+      "dependsOn": [],
+      "description": "As a developer, I want deterministic RIS geometry, phase synthesis, and quantization functions so validation runs are reproducible.",
+      "acceptanceCriteria": [
+        "Add a ris_core module under app/ris/ with geometry (element centers + local frame), phase synthesis (uniform, steering, focusing, custom), and quantization utilities",
+        "Example: for a known 2x2 RIS with dx=dy, geometry returns four element centers with expected spacing and stable ordering",
+        "Negative case: invalid quantization bits (e.g., 3) raises a clear validation error",
+        "Add unit tests covering geometry, frame construction, and quantization edge cases",
+        "python -m pytest passes"
+      ],
+      "startedAt": "2026-01-20T17:51:22.599335+00:00",
+      "completedAt": null,
+      "updatedAt": "2026-01-20T17:51:22.599343+00:00"
+    },
+    {
+      "id": "US-002",
+      "title": "Define RIS Lab config schema and snapshot outputs",
+      "status": "open",
+      "dependsOn": [
+        "US-001"
+      ],
+      "description": "As a user, I want a YAML config for RIS Lab that resolves into canonical YAML+JSON snapshots in each run output.",
+      "acceptanceCriteria": [
+        "Add a RIS Lab config schema with defaults for geometry, control synthesis, quantization, pattern/link modes, and validation thresholds",
+        "Example: a minimal YAML config runs with defaults and writes outputs/<run_id>/config.yaml and outputs/<run_id>/config.json",
+        "Negative case: missing required fields (e.g., N/M or dx/dy) produces a clear error listing required fields",
+        "Config resolution is deterministic and recorded in run metadata (metrics.json or summary.json)"
+      ]
+    },
+    {
+      "id": "US-003",
+      "title": "Add CLI entrypoint for RIS Lab runs and validation",
+      "status": "open",
+      "dependsOn": [
+        "US-001",
+        "US-002"
+      ],
+      "description": "As a user, I want to run RIS Lab headlessly via python -m app ris so runs are reproducible.",
+      "acceptanceCriteria": [
+        "Add CLI commands: python -m app ris run --config <path> --mode pattern|link and python -m app ris validate --config <path> --ref <file>",
+        "Example: pattern run creates outputs/<run_id>/ with required artifacts (phase_map.png, pattern plots, metrics.json)",
+        "Negative case: invalid mode selection returns a non-zero exit and a usage hint",
+        "CLI logs include run_id, mode, and output directory"
+      ]
+    },
+    {
+      "id": "US-003A",
+      "title": "Wire RIS Lab into sim_jobs and sim_server for non-blocking UI runs",
+      "status": "open",
+      "dependsOn": [
+        "US-003"
+      ],
+      "description": "As a user, I want the Simulator UI to run RIS Lab jobs in the background using the existing job system.",
+      "acceptanceCriteria": [
+        "Add a ris_lab job type to the existing job runner (sim_jobs) with progress updates to progress.json",
+        "Expose an API endpoint in sim_server to start RIS Lab jobs and query status",
+        "Example: UI can start a RIS job and receive progress/log updates without blocking",
+        "Negative case: job failure surfaces an error message and preserves partial artifacts in outputs/<run_id>/"
+      ]
+    },
+    {
+      "id": "US-004",
+      "title": "Implement pattern mode artifacts and metrics",
+      "status": "open",
+      "dependsOn": [
+        "US-001",
+        "US-002",
+        "US-003"
+      ],
+      "description": "As a user, I want pattern mode to compute normalized patterns and save required artifacts and metrics.",
+      "acceptanceCriteria": [
+        "Pattern mode produces phase map, pattern arrays, and plots (Cartesian + polar) under outputs/<run_id>/",
+        "Artifacts include raw arrays (phase_map.npy, pattern_linear.npy, pattern_db.npy, theta_deg.npy or csv) and images",
+        "metrics.json includes peak angle, peak value, and a simple sidelobe metric (documented definition)",
+        "Negative case: mismatched theta array lengths are rejected with a clear error"
+      ]
+    },
+    {
+      "id": "US-005",
+      "title": "Add validation harness for CSV reference data",
+      "status": "open",
+      "dependsOn": [
+        "US-004"
+      ],
+      "description": "As a user, I want to validate pattern mode outputs against MATLAB CSV exports with PASS/FAIL metrics.",
+      "acceptanceCriteria": [
+        "Validation loads CSV with theta_deg + (pattern_db or pattern_linear) columns",
+        "Validation run creates overlay plot (reference vs sim) and error report containing RMSE and peak angle error",
+        "Negative case: CSV missing theta_deg or pattern column fails with a clear field list",
+        "PASS/FAIL result is written to metrics.json (or pass_fail.json) with threshold values used"
+      ]
+    },
+    {
+      "id": "US-006",
+      "title": "Add NPZ reference import support",
+      "status": "open",
+      "dependsOn": [
+        "US-005"
+      ],
+      "description": "As a user, I want to validate against NPZ exports when available.",
+      "acceptanceCriteria": [
+        "NPZ loader supports keys theta_deg + (pattern_db or pattern_linear)",
+        "NPZ validation produces the same overlay outputs as CSV validation",
+        "Negative case: missing keys cause a clear error listing expected keys"
+      ]
+    },
+    {
+      "id": "US-007",
+      "title": "Add MAT reference import (stretch)",
+      "status": "open",
+      "dependsOn": [
+        "US-005"
+      ],
+      "description": "As a user, I want optional MAT import support when easy to enable.",
+      "acceptanceCriteria": [
+        "If MAT import is enabled, document and add scipy as an optional dependency (extras)",
+        "Example: MAT file containing theta_deg + pattern_db validates and generates overlay plots",
+        "Negative case: when scipy is missing, CLI returns an actionable install message"
+      ]
+    },
+    {
+      "id": "US-008",
+      "title": "Add RIS Lab UI tab with Config/Run/Results",
+      "status": "open",
+      "dependsOn": [
+        "US-003A",
+        "US-004",
+        "US-005"
+      ],
+      "description": "As a user, I want a RIS Lab tab with sub-tabs for config, running, and results.",
+      "acceptanceCriteria": [
+        "RIS Lab tab appears in the existing Simulator UI with Config/Run/Results sub-tabs",
+        "Run tab starts a background job and updates progress/logs without blocking the UI",
+        "Results tab can load a completed run directory and display plots + metrics",
+        "Negative case: if a run fails, Results shows the error and preserves partial artifacts"
+      ]
+    },
+    {
+      "id": "US-009",
+      "title": "Add regression test fixture and validation tests",
+      "status": "open",
+      "dependsOn": [
+        "US-005"
+      ],
+      "description": "As a developer, I want a small golden fixture to keep validation metrics stable in CI.",
+      "acceptanceCriteria": [
+        "Add a small reference fixture (CSV) and a test that runs validation with known thresholds",
+        "Validation test asserts PASS and expected metric ranges",
+        "Negative case: intentionally perturbed data fails thresholds and reports FAIL",
+        "python -m pytest passes"
+      ]
+    },
+    {
+      "id": "US-010",
+      "title": "Document RIS Lab usage and config examples",
+      "status": "open",
+      "dependsOn": [
+        "US-003",
+        "US-004",
+        "US-005",
+        "US-008"
+      ],
+      "description": "As a user, I want clear docs and example configs to run RIS Lab from CLI and UI.",
+      "acceptanceCriteria": [
+        "README includes a RIS Lab section with CLI examples and required artifacts list",
+        "Add example configs under configs/ris/ (steer_1bit.yaml, focus_point.yaml, validate_vs_csv.yaml)",
+        "Docs warn that ray tracing RIS integration is out of scope and not enabled",
+        "Documentation describes CSV reference format and required fields"
+      ]
+    }
+  ]
+}

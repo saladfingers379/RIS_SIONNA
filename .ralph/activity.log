@@ -1,0 +1,12 @@
+# Activity Log
+
+## Run Summary
+
+## Events
+
+[2026-01-20 17:51:22] ITERATION 1 start (mode=build story=US-001)
+2026-01-20T17:51:51Z Start US-001 work
+2026-01-20T17:53:30Z Added ris_core module and tests
+2026-01-20T17:53:42Z Ran tests (python missing, pytest missing for python3)
+2026-01-20T17:54:24Z Refined local frame fallback and phase quantization
+2026-01-20T17:54:36Z Re-ran tests (python/pytest missing)

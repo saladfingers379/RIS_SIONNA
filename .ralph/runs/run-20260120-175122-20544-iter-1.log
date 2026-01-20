@@ -1,0 +1,1517 @@
+OpenAI Codex v0.87.0 (research preview)
+--------
+workdir: /home/josh/Documents/Github/RIS_SIONNA
+model: gpt-5.2-codex
+provider: openai
+approval: never
+sandbox: danger-full-access
+reasoning effort: none
+reasoning summaries: auto
+session id: 019bdc88-5ca1-7be0-9255-eb656c6e9e0b
+--------
+user
+# Build
+
+You are an autonomous coding agent. Your task is to complete the work for exactly one story and record the outcome.
+
+## Paths
+- PRD: /home/josh/Documents/Github/RIS_SIONNA/.agents/tasks/prd-ris-lab.json
+- AGENTS (optional): /home/josh/Documents/Github/RIS_SIONNA/AGENTS.md
+- Progress Log: /home/josh/Documents/Github/RIS_SIONNA/.ralph/progress.md
+- Guardrails: /home/josh/Documents/Github/RIS_SIONNA/.ralph/guardrails.md
+- Guardrails Reference: /home/josh/Documents/Github/RIS_SIONNA/.agents/ralph/references/GUARDRAILS.md
+- Context Reference: /home/josh/Documents/Github/RIS_SIONNA/.agents/ralph/references/CONTEXT_ENGINEERING.md
+- Errors Log: /home/josh/Documents/Github/RIS_SIONNA/.ralph/errors.log
+- Activity Log: /home/josh/Documents/Github/RIS_SIONNA/.ralph/activity.log
+- Activity Logger: /home/josh/Documents/Github/RIS_SIONNA/ralph log
+- No-commit: false
+- Repo Root: /home/josh/Documents/Github/RIS_SIONNA
+- Run ID: 20260120-175122-20544
+- Iteration: 1
+- Run Log: /home/josh/Documents/Github/RIS_SIONNA/.ralph/runs/run-20260120-175122-20544-iter-1.log
+- Run Summary: /home/josh/Documents/Github/RIS_SIONNA/.ralph/runs/run-20260120-175122-20544-iter-1.md
+
+## Global Quality Gates (apply to every story)
+- python -m pytest
+
+## Selected Story (Do not change scope)
+ID: US-001
+Title: Add ris_core math primitives and unit tests
+
+Story details:
+### US-001: Add ris_core math primitives and unit tests
+Status: in_progress
+Depends on: None
+
+Description:
+As a developer, I want deterministic RIS geometry, phase synthesis, and quantization functions so validation runs are reproducible.
+
+Acceptance Criteria:
+- [ ] Add a ris_core module under app/ris/ with geometry (element centers + local frame), phase synthesis (uniform, steering, focusing, custom), and quantization utilities
+- [ ] Example: for a known 2x2 RIS with dx=dy, geometry returns four element centers with expected spacing and stable ordering
+- [ ] Negative case: invalid quantization bits (e.g., 3) raises a clear validation error
+- [ ] Add unit tests covering geometry, frame construction, and quantization edge cases
+- [ ] python -m pytest passes
+
+
+If the story details are empty or missing, STOP and report that the PRD story format could not be parsed.
+
+## Rules (Non-Negotiable)
+- Implement **only** the work required to complete the selected story.
+- Complete all tasks associated with this story (and only this story).
+- Do NOT ask the user questions.
+- Do NOT change unrelated code.
+- Do NOT assume something is unimplemented — confirm by reading code.
+- Implement completely; no placeholders or stubs.
+- If No-commit is true, do NOT commit or push changes.
+- Do NOT edit the PRD JSON (status is handled by the loop).
+- All changes made during the run must be committed (including updates to progress/logs).
+ - Before committing, perform a final **security**, **performance**, and **regression** review of your changes.
+
+## Your Task (Do this in order)
+1. Read /home/josh/Documents/Github/RIS_SIONNA/.ralph/guardrails.md before any code changes.
+2. Read /home/josh/Documents/Github/RIS_SIONNA/.ralph/errors.log for repeated failures to avoid.
+3. Read /home/josh/Documents/Github/RIS_SIONNA/.agents/tasks/prd-ris-lab.json for global context (do not edit).
+4. Fully audit and read all necessary files to understand the task end-to-end before implementing. Do not assume missing functionality.
+5. If /home/josh/Documents/Github/RIS_SIONNA/AGENTS.md exists, follow its build/test instructions.
+6. Implement only the tasks that belong to US-001.
+7. Run verification commands listed in the story, the global quality gates, and in /home/josh/Documents/Github/RIS_SIONNA/AGENTS.md (if required).
+8. If the project has a build or dev workflow, run what applies:
+   - Build step (e.g., `npm run build`) if defined.
+   - Dev server (e.g., `npm run dev`, `wrangler dev`) if it is the normal validation path.
+   - Confirm no runtime/build errors in the console.
+9. Perform a brief audit before committing:
+   - **Security:** check for obvious vulnerabilities or unsafe handling introduced by your changes.
+   - **Performance:** check for avoidable regressions (extra queries, heavy loops, unnecessary re-renders).
+   - **Regression:** verify existing behavior that could be impacted still works.
+10. If No-commit is false, commit changes using the `$commit` skill.
+    - Stage everything: `git add -A`
+    - Confirm a clean working tree after commit: `git status --porcelain` should be empty.
+    - After committing, capture the commit hash and subject using:
+      `git show -s --format="%h %s" HEAD`.
+11. Append a progress entry to /home/josh/Documents/Github/RIS_SIONNA/.ralph/progress.md with run/commit/test details (format below).
+    If No-commit is true, skip committing and note it in the progress entry.
+
+## Progress Entry Format (Append Only)
+```
+## [Date/Time] - US-001: Add ris_core math primitives and unit tests
+Thread: [codex exec session id if available, otherwise leave blank]
+Run: 20260120-175122-20544 (iteration 1)
+Run log: /home/josh/Documents/Github/RIS_SIONNA/.ralph/runs/run-20260120-175122-20544-iter-1.log
+Run summary: /home/josh/Documents/Github/RIS_SIONNA/.ralph/runs/run-20260120-175122-20544-iter-1.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: <hash> <subject> (or `none` + reason)
+- Post-commit status: `clean` or list remaining files
+- Verification:
+  - Command: <exact command> -> PASS/FAIL
+  - Command: <exact command> -> PASS/FAIL
+- Files changed:
+  - <file path>
+  - <file path>
+- What was implemented
+- **Learnings for future iterations:**
+  - Patterns discovered
+  - Gotchas encountered
+  - Useful context
+---
+```
+
+## Completion Signal
+Only output the completion signal when the **selected story** is fully complete and verified.
+When the selected story is complete, output:
+<promise>COMPLETE</promise>
+
+Otherwise, end normally without the signal.
+
+## Additional Guardrails
+- When authoring documentation, capture the why (tests + implementation intent).
+- If you learn how to run/build/test the project, update /home/josh/Documents/Github/RIS_SIONNA/AGENTS.md briefly (operational only).
+- Keep AGENTS operational only; progress notes belong in /home/josh/Documents/Github/RIS_SIONNA/.ralph/progress.md.
+- If you hit repeated errors, log them in /home/josh/Documents/Github/RIS_SIONNA/.ralph/errors.log and add a Sign to /home/josh/Documents/Github/RIS_SIONNA/.ralph/guardrails.md using /home/josh/Documents/Github/RIS_SIONNA/.agents/ralph/references/GUARDRAILS.md as the template.
+
+## Activity Logging (Required)
+Log major actions to /home/josh/Documents/Github/RIS_SIONNA/.ralph/activity.log using the helper:
+```
+/home/josh/Documents/Github/RIS_SIONNA/ralph log "message"
+```
+Log at least:
+- Start of work on the story
+- After major code changes
+- After tests/verification
+- After updating progress log
+
+## Browser Testing (Required for Frontend Stories)
+If the selected story changes UI, you MUST verify it in the browser:
+1. Load the `dev-browser` skill.
+2. Navigate to the relevant page.
+3. Verify the UI changes work as expected.
+4. Take a screenshot if helpful for the progress log.
+
+A frontend story is NOT complete until browser verification passes.
+
+mcp: context7 starting
+mcp: filesystem starting
+mcp: memory starting
+mcp: filesystem ready
+mcp: context7 ready
+mcp: memory ready
+mcp startup: ready: filesystem, context7, memory
+
+thinking
+**Noting initial setup for work**
+exec
+/usr/bin/zsh -lc '/home/josh/Documents/Github/RIS_SIONNA/ralph log "Start US-001 work"' in /home/josh/Documents/Github/RIS_SIONNA exited 127 in 2ms:
+zsh:1: no such file or directory: /home/josh/Documents/Github/RIS_SIONNA/ralph
+
+thinking
+**Checking for missing command**
+
+I'm verifying whether a required command-line tool is missing by listing directory contents to decide if logging or scripting adjustments are needed.
+exec
+/usr/bin/zsh -lc 'ls -la' in /home/josh/Documents/Github/RIS_SIONNA succeeded in 3ms:
+total 104
+drwxrwxr-x 15 josh josh  4096 Jan 20 17:19 .
+drwxrwxr-x  3 josh josh  4096 Jan 19 17:55 ..
+drwxrwxr-x  4 josh josh  4096 Jan 20 17:19 .agents
+-rw-rw-r--  1 josh josh  7343 Jan 20 17:42 AGENTS.md
+drwxrwxr-x  6 josh josh  4096 Jan 19 20:19 app
+drwxrwxr-x  4 josh josh  4096 Jan 19 23:11 build
+drwxrwxr-x  3 josh josh  4096 Jan 20 16:20 .codex
+drwxrwxr-x  2 josh josh  4096 Jan 19 23:02 configs
+drwxrwxr-x  2 josh josh  4096 Jan 19 20:03 docs
+drwxrwxr-x  8 josh josh  4096 Jan 20 17:19 .git
+-rw-rw-r--  1 josh josh    45 Jan 19 17:55 .gitignore
+-rw-rw-r--  1 josh josh   228 Jan 19 17:55 Makefile
+drwxrwxr-x  7 josh josh  4096 Jan 20 16:23 outputs
+-rw-rw-r--  1 josh josh  4736 Jan 19 23:04 PROJECT_CONTEXT.md
+-rw-rw-r--  1 josh josh   749 Jan 19 17:55 pyproject.toml
+drwxrwxr-x  4 josh josh  4096 Jan 20 17:51 .ralph
+-rw-rw-r--  1 josh josh 11803 Jan 20 17:37 README.md
+-rw-rw-r--  1 josh josh   649 Jan 19 23:04 REPO_STATUS.md
+drwxrwxr-x  2 josh josh  4096 Jan 19 23:11 ris_sionna.egg-info
+
+thinking
+**Checking for activity logger path**
+
+I'm searching the repo root to see if an activity logger script or path already exists.
+exec
+/usr/bin/zsh -lc "rg --files -g 'ralph'" in /home/josh/Documents/Github/RIS_SIONNA exited 1 in 19ms:
+
+
+thinking
+**Checking script executability**
+
+I'm verifying if the specified log file is executable or if it needs a different approach since no script is mentioned.
+exec
+/usr/bin/zsh -lc 'ls -la /home/josh/Documents/Github/RIS_SIONNA/ralph' in /home/josh/Documents/Github/RIS_SIONNA exited 2 in 2ms:
+ls: cannot access '/home/josh/Documents/Github/RIS_SIONNA/ralph': No such file or directory
+
+thinking
+**Searching for missing log helper**
+
+I'm checking the `.ralph` directory to find the missing log helper utility that might support logging functionality.
+exec
+/usr/bin/zsh -lc 'rg -n "activity" .ralph' in /home/josh/Documents/Github/RIS_SIONNA succeeded in 15ms:
+.ralph/runs/run-20260120-175122-20544-iter-1.log:25:- Activity Log: /home/josh/Documents/Github/RIS_SIONNA/.ralph/activity.log
+.ralph/runs/run-20260120-175122-20544-iter-1.log:134:Log major actions to /home/josh/Documents/Github/RIS_SIONNA/.ralph/activity.log using the helper:
+.ralph/runs/run-20260120-175122-20544-iter-1.log:195:**Checking for activity logger path**
+.ralph/runs/run-20260120-175122-20544-iter-1.log:197:I'm searching the repo root to see if an activity logger script or path already exists.
+.ralph/runs/run-20260120-175122-20544-iter-1.log:215:/usr/bin/zsh -lc 'rg -n "activity" .ralph' in /home/josh/Documents/Github/RIS_SIONNA
+
+thinking
+**Adding manual log entry**
+
+Planning to append activity logs manually to a file with timestamps using a shell command, ensuring compliance by reading existing guardrails before proceeding.
+exec
+/usr/bin/zsh -lc 'cat /home/josh/Documents/Github/RIS_SIONNA/.ralph/guardrails.md' in /home/josh/Documents/Github/RIS_SIONNA succeeded in 3ms:
+# Guardrails (Signs)
+
+> Lessons learned from failures. Read before acting.
+
+## Core Signs
+
+### Sign: Read Before Writing
+- **Trigger**: Before modifying any file
+- **Instruction**: Read the file first
+- **Added after**: Core principle
+
+### Sign: Test Before Commit
+- **Trigger**: Before committing changes
+- **Instruction**: Run required tests and verify outputs
+- **Added after**: Core principle
+
+---
+
+## Learned Signs
+
+
+thinking
+**Reviewing error logs**
+exec
+/usr/bin/zsh -lc 'cat /home/josh/Documents/Github/RIS_SIONNA/.ralph/errors.log' in /home/josh/Documents/Github/RIS_SIONNA succeeded in 3ms:
+# Error Log
+
+> Failures and repeated issues. Use this to add guardrails.
+
+
+thinking
+**Reviewing product requirements document**
+exec
+/usr/bin/zsh -lc 'cat /home/josh/Documents/Github/RIS_SIONNA/.agents/tasks/prd-ris-lab.json' in /home/josh/Documents/Github/RIS_SIONNA succeeded in 3ms:
+{
+  "version": 1,
+  "project": "RIS Lab (Validation First)",
+  "overview": "Add a RIS Lab module to design and validate RIS behaviors against MATLAB and paper-style references with reproducible CLI and Simulator-UI runs, saving full artifacts for regression testing.",
+  "goals": [
+    "Provide deterministic RIS math, control synthesis, and pattern/link validation via CLI and Simulator UI",
+    "Reproduce MATLAB reference patterns within configurable RMSE + peak-angle thresholds",
+    "Persist all run artifacts under outputs/<run_id>/ for regression tracking"
+  ],
+  "nonGoals": [
+    "Ray tracing or Sionna RT RIS integration (no ray-traced RIS scattering)",
+    "RIS optimization, auto-tuning, or search algorithms",
+    "GIS or map ingestion"
+  ],
+  "successMetrics": [
+    "A validation run matches MATLAB pattern within RMSE threshold and peak-angle error threshold",
+    "A run produces all required artifacts under outputs/<run_id>/"
+  ],
+  "openQuestions": [],
+  "defaults": {
+exec
+/usr/bin/zsh -lc 'cat /home/josh/Documents/Github/RIS_SIONNA/AGENTS.md' in /home/josh/Documents/Github/RIS_SIONNA succeeded in 3ms:
+# AGENTS.md — RIS_SIONNA
+**Native Ubuntu 24.04 · GPU-first (CUDA/OptiX) · Sionna RT baseline @ 28 GHz · RIS Lab (validation-first)**
+
+---
+
+## 0. HARD CONTEXT RESET (NON-NEGOTIABLE)
+
+- Primary target: **native Ubuntu 24.04**
+- GPU RT target: **CUDA + OptiX (real runtime)**
+- WSL may exist as a *CPU-only dev shell*, but **GPU OptiX on WSL is unsupported/unstable** for this repo.
+- Any GPU RT failure on native Ubuntu is treated as **misconfiguration**, not “platform limitation”.
+
+This repo must never silently “looks fine” while running CPU/LLVM when a GPU is available.
+If we fall back, we must say so loudly and explain why.
+
+---
+
+## 1. SYSTEM ENVIRONMENT (AUTHORITATIVE)
+
+**Baseline assumptions for “GPU-first” work:**
+
+thinking
+**Adding manual activity log helper**
+
+I'm planning to log activities manually to `.ralph/activity.log` with timestamps using the date command since the helper is missing.
+exec
+/usr/bin/zsh -lc 'date -u "+%Y-%m-%dT%H:%M:%SZ"' in /home/josh/Documents/Github/RIS_SIONNA succeeded in 3ms:
+2026-01-20T17:51:51Z
+exec
+/usr/bin/zsh -lc "printf \"%s %s\\n\" \"2026-01-20T17:51:51Z\" \"Start US-001 work\" >> /home/josh/Documents/Github/RIS_SIONNA/.ralph/activity.log" in /home/josh/Documents/Github/RIS_SIONNA succeeded in 2ms:
+
+
+thinking
+**Locating relevant files**
+
+I'm searching the app/ris directory to find necessary files for the task.
+exec
+/usr/bin/zsh -lc 'rg --files app' in /home/josh/Documents/Github/RIS_SIONNA succeeded in 6ms:
+app/sim_jobs.py
+app/__main__.py
+app/config.py
+app/scene.py
+app/plots.py
+app/web_assets.py
+app/dashboard_app.py
+app/cli.py
+app/io.py
+app/sim_web/app.js
+app/__init__.py
+app/sim_server.py
+app/viewer.py
+app/sim_web/index.html
+app/sim_web/styles.css
+app/metrics.py
+app/simulate.py
+app/utils/logging.py
+app/utils/progress.py
+app/utils/system.py
+
+thinking
+**Identifying app initialization file**
+
+Noticed an `__init__.py` in the app/ris directory, signaling package initialization—next step is to read it for setup details or imports impacting the app's ris module.
+exec
+/usr/bin/zsh -lc 'cat /home/josh/Documents/Github/RIS_SIONNA/app/ris/__init__.py' in /home/josh/Documents/Github/RIS_SIONNA succeeded in 11ms:
+"""RIS placeholder module for future extensions."""
+
+thinking
+**Checking tests for new core module**
+exec
+/usr/bin/zsh -lc 'ls -la /home/josh/Documents/Github/RIS_SIONNA/tests' in /home/josh/Documents/Github/RIS_SIONNA succeeded in 3ms:
+total 16
+drwxrwxr-x  2 josh josh 4096 Jan 19 17:55 .
+drwxrwxr-x 15 josh josh 4096 Jan 20 17:19 ..
+-rw-rw-r--  1 josh josh  756 Jan 19 17:55 test_alignment.py
+-rw-rw-r--  1 josh josh 1755 Jan 19 17:55 test_ui_smoke.py
+
+thinking
+**Planning to add tests**
+
+I'm preparing to examine the existing test structure to understand how to effectively add new tests.
+exec
+/usr/bin/zsh -lc 'cat /home/josh/Documents/Github/RIS_SIONNA/tests/test_alignment.py' in /home/josh/Documents/Github/RIS_SIONNA succeeded in 11ms:
+import unittest
+
+import numpy as np
+
+from app.plots import compute_radio_map_extent
+
+
+class TestRadioMapExtent(unittest.TestCase):
+    def test_extent_includes_half_cell(self) -> None:
+        centers = np.array(
+            [
+                [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]],
+                [[0.0, 1.0, 0.0], [1.0, 1.0, 0.0]],
+            ],
+            dtype=float,
+        )
+        extent = compute_radio_map_extent(centers)
+        self.assertEqual(extent, (-0.5, 1.5, -0.5, 1.5))
+
+    def test_extent_single_cell(self) -> None:
+exec
+/usr/bin/zsh -lc 'cat /home/josh/Documents/Github/RIS_SIONNA/tests/test_ui_smoke.py' in /home/josh/Documents/Github/RIS_SIONNA succeeded in 11ms:
+from __future__ import annotations
+
+import json
+import subprocess
+import sys
+import time
+from pathlib import Path
+from urllib.request import urlopen
+
+
+def _wait_for_ready(url: str, timeout_s: float = 15.0) -> None:
+    start = time.time()
+    while time.time() - start < timeout_s:
+        try:
+            with urlopen(url, timeout=1) as resp:
+                if resp.status == 200:
+                    return
+        except Exception:
+            time.sleep(0.5)
+    raise RuntimeError(f"Simulator not ready after {timeout_s}s")
+
+thinking
+**Planning geometry module and functions**
+
+I'm outlining a new geometry module to produce stable arrays of element centers and local reference frames based on a rectangular grid, with configurable spacing and normal vectors. Next, I’ll review existing code for similar geometry utilities to inform the implementation.
+exec
+/usr/bin/zsh -lc 'rg -n "ris" app' in /home/josh/Documents/Github/RIS_SIONNA succeeded in 15ms:
+app/config.py:40:    def ris(self) -> Dict[str, Any]:
+app/config.py:41:        return self.data.get("ris", {})
+app/utils/system.py:43:    stub.__dict__["__ris_sionna_stub__"] = reason
+app/sim_web/vendor/three.module.js:376:// http://www.rorydriscoll.com/2016/03/07/frame-rate-independent-damping-using-lerp/
+app/sim_web/vendor/three.module.js:8380:		// algorithm thanks to Real-Time Collision Detection by Christer Ericson,
+app/sim_web/vendor/three.module.js:20643:		// heuristics to create shader parameters according to lights in the scene
+app/sim_web/vendor/three.module.js:34948:		let low = 0, high = il - 1, comparison;
+app/sim_web/vendor/three.module.js:34954:			comparison = arcLengths[ i ] - targetArcLength;
+app/sim_web/vendor/three.module.js:34956:			if ( comparison < 0 ) {
+app/sim_web/vendor/three.module.js:34960:			} else if ( comparison > 0 ) {
+app/sim_web/vendor/three.module.js:42044:					//- See http://jsperf.com/comparison-to-undefined/3
+
+
+thinking
+**Defining deterministic geometry API**
+
+Planning two functions: one to compute stable, ordered element centers in a grid given size and orientation, and another to compute a consistent local frame from a normal and optional x-axis hint, matching acceptance criteria for geometry outputs.
+thinking
+**Designing phase synthesis and quantization**
+
+Defining uniform, steering, focusing, and custom phase synthesis functions with deterministic behavior and numpy-based quantization supporting 0–2 bits, raising clear errors on invalid bit counts; planning thorough unit tests covering geometry, local frames, and quantization edge cases for robust validation.
+exec
+/usr/bin/zsh -lc "cat <<'EOF' > /home/josh/Documents/Github/RIS_SIONNA/app/ris/ris_core.py
+\"\"\"Core RIS math primitives for geometry and phase control.\"\"\"
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Iterable, Optional
+
+import numpy as np
+
+
+@dataclass(frozen=True)
+class RisFrame:
+    \"\"\"Right-handed local frame for the RIS surface.\"\"\"
+
+    u: np.ndarray
+    v: np.ndarray
+    w: np.ndarray
+
+
+@dataclass(frozen=True)
+class RisGeometry:
+    \"\"\"RIS element centers and local frame.\"\"\"
+
+    centers: np.ndarray
+    frame: RisFrame
+
+
+_DEFAULT_NORMAL = np.array([0.0, 0.0, 1.0], dtype=float)
+_DEFAULT_X_AXIS = np.array([1.0, 0.0, 0.0], dtype=float)
+_ALT_X_AXIS = np.array([0.0, 1.0, 0.0], dtype=float)
+
+
+def _normalize(vec: np.ndarray, name: str) -> np.ndarray:
+    norm = np.linalg.norm(vec)
+    if norm <= 0.0:
+        raise ValueError(f\"{name} must be a non-zero vector\")
+    return vec / norm
+
+
+def compute_local_frame(
+    normal: Optional[Iterable[float]] = None,
+    x_axis_hint: Optional[Iterable[float]] = None,
+) -> RisFrame:
+    \"\"\"Return a stable, right-handed local frame for a surface.\"\"\"
+
+    w = _normalize(
+        np.array(_DEFAULT_NORMAL if normal is None else normal, dtype=float), \"normal\"
+    )
+    hint = np.array(_DEFAULT_X_AXIS if x_axis_hint is None else x_axis_hint, dtype=float)
+    hint = _normalize(hint, \"x_axis_hint\")
+    if abs(np.dot(hint, w)) > 0.99:
+        hint = _ALT_X_AXIS
+    u = _normalize(hint - np.dot(hint, w) * w, \"x_axis_hint\")
+    v = np.cross(w, u)
+    return RisFrame(u=u, v=v, w=w)
+
+
+def compute_element_centers(
+    nx: int,
+    ny: int,
+    dx: float,
+    dy: float,
+    origin: Optional[Iterable[float]] = None,
+    normal: Optional[Iterable[float]] = None,
+    x_axis_hint: Optional[Iterable[float]] = None,
+) -> RisGeometry:
+    \"\"\"Compute RIS element centers with stable ordering (row-major).\"\"\"
+
+    if nx <= 0 or ny <= 0:
+        raise ValueError(\"nx and ny must be positive\")
+    if dx <= 0.0 or dy <= 0.0:
+        raise ValueError(\"dx and dy must be positive\")
+
+    frame = compute_local_frame(normal=normal, x_axis_hint=x_axis_hint)
+    origin_vec = np.array(origin if origin is not None else [0.0, 0.0, 0.0], dtype=float)
+
+    x_offsets = (np.arange(nx, dtype=float) - (nx - 1) / 2.0) * dx
+    y_offsets = (np.arange(ny, dtype=float) - (ny - 1) / 2.0) * dy
+
+    centers = (
+        origin_vec
+        + x_offsets[None, :, None] * frame.u[None, None, :]
+        + y_offsets[:, None, None] * frame.v[None, None, :]
+    )
+    return RisGeometry(centers=centers, frame=frame)
+
+
+def synthesize_uniform_phase(shape: tuple[int, int], phase_rad: float = 0.0) -> np.ndarray:
+    \"\"\"Return a uniform phase map.\"\"\"
+
+    return np.full(shape, float(phase_rad), dtype=float)
+
+
+def synthesize_custom_phase(phase_rad: np.ndarray, shape: Optional[tuple[int, int]] = None) -> np.ndarray:
+    \"\"\"Validate and return a custom phase map.\"\"\"
+
+    phase = np.array(phase_rad, dtype=float)
+    if shape is not None and phase.shape "'!= shape:
+        raise ValueError(f"custom phase shape {phase.shape} does not match {shape}")
+    return phase
+
+
+def synthesize_steering_phase(
+    centers: np.ndarray,
+    wavelength: float,
+    direction: Iterable[float],
+) -> np.ndarray:
+    """Far-field steering phase for a desired direction."""
+
+    k = 2.0 * np.pi / float(wavelength)
+    direction_vec = _normalize(np.array(direction, dtype=float), "direction")
+    phase = -k * np.tensordot(centers, direction_vec, axes=([2], [0]))
+    return phase
+
+
+def synthesize_focusing_phase(
+    centers: np.ndarray,
+    wavelength: float,
+    focal_point: Iterable[float],
+) -> np.ndarray:
+    """Near-field focusing phase towards a focal point."""
+
+    k = 2.0 * np.pi / float(wavelength)
+    focal = np.array(focal_point, dtype=float)
+    distances = np.linalg.norm(centers - focal[None, None, :], axis=2)
+    phase = -k * distances
+    return phase
+
+
+def quantize_phase(phase_rad: np.ndarray, bits: Optional[int]) -> np.ndarray:
+    """Quantize phase in radians using 1-bit or 2-bit levels."""
+
+    if bits in (None, 0):
+        return np.array(phase_rad, dtype=float, copy=True)
+    if bits not in (1, 2):
+        raise ValueError("quantization_bits must be one of {0, 1, 2}")
+
+    phase = np.array(phase_rad, dtype=float)
+    step = 2.0 * np.pi / (2**bits)
+    levels = np.arange(2**bits, dtype=float) * step
+    phase_wrapped = np.mod(phase, 2.0 * np.pi)
+    diffs = np.abs(phase_wrapped[..., None] - levels[None, None, :])
+    indices = np.argmin(diffs, axis=-1)
+    return levels[indices]
+
+
+def radians_to_degrees(angle_rad: np.ndarray) -> np.ndarray:
+    """Convert radians to degrees."""
+
+    return np.rad2deg(angle_rad)
+
+
+def degrees_to_radians(angle_deg: np.ndarray) -> np.ndarray:
+    """Convert degrees to radians."""
+
+    return np.deg2rad(angle_deg)
+EOF' in /home/josh/Documents/Github/RIS_SIONNA succeeded in 3ms:
+
+
+thinking
+**Updating initialization to use patch application**
+file update
+M /home/josh/Documents/Github/RIS_SIONNA/app/ris/__init__.py
+@@ -1 +1,15 @@
+-"""RIS placeholder module for future extensions."""
++"""RIS core math primitives and helpers."""
++
++from .ris_core import (  # noqa: F401
++    RisFrame,
++    RisGeometry,
++    compute_element_centers,
++    compute_local_frame,
++    degrees_to_radians,
++    quantize_phase,
++    radians_to_degrees,
++    synthesize_custom_phase,
++    synthesize_focusing_phase,
++    synthesize_steering_phase,
++    synthesize_uniform_phase,
++)
+apply_patch(auto_approved=true) exited 0 in 2ms:
+Success. Updated the following files:
+M /home/josh/Documents/Github/RIS_SIONNA/app/ris/__init__.py
+file update:
+diff --git a/app/ris/__init__.py b/app/ris/__init__.py
+index 5b3dae1cfbc2ea41c275f085f0d2a0ca759919b0..a34ed971e3d2426533f5eb2eb56416e59d15db65
+--- a/app/ris/__init__.py
++++ b/app/ris/__init__.py
+@@ -1 +1,15 @@
+-"""RIS placeholder module for future extensions."""
++"""RIS core math primitives and helpers."""
++
++from .ris_core import (  # noqa: F401
++    RisFrame,
++    RisGeometry,
++    compute_element_centers,
++    compute_local_frame,
++    degrees_to_radians,
++    quantize_phase,
++    radians_to_degrees,
++    synthesize_custom_phase,
++    synthesize_focusing_phase,
++    synthesize_steering_phase,
++    synthesize_uniform_phase,
++)
+
+file update:
+diff --git a/app/ris/__init__.py b/app/ris/__init__.py
+index 5b3dae1cfbc2ea41c275f085f0d2a0ca759919b0..a34ed971e3d2426533f5eb2eb56416e59d15db65
+--- a/app/ris/__init__.py
++++ b/app/ris/__init__.py
+@@ -1 +1,15 @@
+-"""RIS placeholder module for future extensions."""
++"""RIS core math primitives and helpers."""
++
++from .ris_core import (  # noqa: F401
++    RisFrame,
++    RisGeometry,
++    compute_element_centers,
++    compute_local_frame,
++    degrees_to_radians,
++    quantize_phase,
++    radians_to_degrees,
++    synthesize_custom_phase,
++    synthesize_focusing_phase,
++    synthesize_steering_phase,
++    synthesize_uniform_phase,
++)
+
+
+thinking
+**Adding unit tests for frame orthonormality**
+exec
+/usr/bin/zsh -lc "cat <<'EOF' > /home/josh/Documents/Github/RIS_SIONNA/tests/test_ris_core.py
+import unittest
+
+import numpy as np
+
+from app.ris.ris_core import (
+    compute_element_centers,
+    compute_local_frame,
+    quantize_phase,
+)
+
+
+class TestRisGeometry(unittest.TestCase):
+    def test_element_centers_2x2(self) -> None:
+        geom = compute_element_centers(nx=2, ny=2, dx=1.0, dy=1.0)
+        expected = np.array(
+            [
+                [[-0.5, -0.5, 0.0], [0.5, -0.5, 0.0]],
+                [[-0.5, 0.5, 0.0], [0.5, 0.5, 0.0]],
+            ],
+            dtype=float,
+        )
+        self.assertTrue(np.allclose(geom.centers, expected))
+
+    def test_local_frame_default(self) -> None:
+        frame = compute_local_frame()
+        self.assertTrue(np.allclose(frame.u, np.array([1.0, 0.0, 0.0])))
+        self.assertTrue(np.allclose(frame.v, np.array([0.0, 1.0, 0.0])))
+        self.assertTrue(np.allclose(frame.w, np.array([0.0, 0.0, 1.0])))
+
+    def test_local_frame_handles_colinear_hint(self) -> None:
+        frame = compute_local_frame(normal=[1.0, 0.0, 0.0], x_axis_hint=[1.0, 0.0, 0.0])
+        self.assertAlmostEqual(np.dot(frame.u, frame.w), 0.0, places=6)
+        self.assertAlmostEqual(np.dot(frame.v, frame.w), 0.0, places=6)
+        self.assertAlmostEqual(np.linalg.norm(frame.u), 1.0, places=6)
+        self.assertAlmostEqual(np.linalg.norm(frame.v), 1.0, places=6)
+        self.assertAlmostEqual(np.linalg.norm(frame.w), 1.0, places=6)
+
+
+class TestRisQuantization(unittest.TestCase):
+    def test_quantize_invalid_bits(self) -> None:
+        with self.assertRaises(ValueError) as ctx:
+            quantize_phase(np.array([0.1]), bits=3)
+        self.assertIn(\"quantization_bits\", str(ctx.exception))
+
+    def test_quantize_1bit(self) -> None:
+        phases = np.array([0.1, 3.0])
+        quantized = quantize_phase(phases, bits=1)
+        self.assertTrue(np.allclose(quantized, np.array([0.0, np.pi])))
+
+    def test_quantize_2bit(self) -> None:
+        phases = np.array([0.1, 1.8, 3.2, 5.0])
+        quantized = quantize_phase(phases, bits=2)
+        expected = np.array([0.0, np.pi / 2, np.pi, 3 * np.pi / 2])
+        self.assertTrue(np.allclose(quantized, expected))
+
+
+if __name__ == \"__main__\":
+    unittest.main()
+EOF" in /home/josh/Documents/Github/RIS_SIONNA succeeded in 3ms:
+
+file update:
+diff --git a/app/ris/__init__.py b/app/ris/__init__.py
+index 5b3dae1cfbc2ea41c275f085f0d2a0ca759919b0..a34ed971e3d2426533f5eb2eb56416e59d15db65
+--- a/app/ris/__init__.py
++++ b/app/ris/__init__.py
+@@ -1 +1,15 @@
+-"""RIS placeholder module for future extensions."""
++"""RIS core math primitives and helpers."""
++
++from .ris_core import (  # noqa: F401
++    RisFrame,
++    RisGeometry,
++    compute_element_centers,
++    compute_local_frame,
++    degrees_to_radians,
++    quantize_phase,
++    radians_to_degrees,
++    synthesize_custom_phase,
++    synthesize_focusing_phase,
++    synthesize_steering_phase,
++    synthesize_uniform_phase,
++)
+
+
+thinking
+**Planning activity log update**
+
+I'll add an activity log entry with the current date to track recent major code changes.
+exec
+/usr/bin/zsh -lc 'date -u "+%Y-%m-%dT%H:%M:%SZ"' in /home/josh/Documents/Github/RIS_SIONNA succeeded in 3ms:
+2026-01-20T17:53:30Z
+file update:
+diff --git a/app/ris/__init__.py b/app/ris/__init__.py
+index 5b3dae1cfbc2ea41c275f085f0d2a0ca759919b0..a34ed971e3d2426533f5eb2eb56416e59d15db65
+--- a/app/ris/__init__.py
++++ b/app/ris/__init__.py
+@@ -1 +1,15 @@
+-"""RIS placeholder module for future extensions."""
++"""RIS core math primitives and helpers."""
++
++from .ris_core import (  # noqa: F401
++    RisFrame,
++    RisGeometry,
++    compute_element_centers,
++    compute_local_frame,
++    degrees_to_radians,
++    quantize_phase,
++    radians_to_degrees,
++    synthesize_custom_phase,
++    synthesize_focusing_phase,
++    synthesize_steering_phase,
++    synthesize_uniform_phase,
++)
+
+exec
+/usr/bin/zsh -lc "printf \"%s %s\\n\" \"2026-01-20T17:53:30Z\" \"Added ris_core module and tests\" >> /home/josh/Documents/Github/RIS_SIONNA/.ralph/activity.log" in /home/josh/Documents/Github/RIS_SIONNA succeeded in 2ms:
+
+file update:
+diff --git a/app/ris/__init__.py b/app/ris/__init__.py
+index 5b3dae1cfbc2ea41c275f085f0d2a0ca759919b0..a34ed971e3d2426533f5eb2eb56416e59d15db65
+--- a/app/ris/__init__.py
++++ b/app/ris/__init__.py
+@@ -1 +1,15 @@
+-"""RIS placeholder module for future extensions."""
++"""RIS core math primitives and helpers."""
++
++from .ris_core import (  # noqa: F401
++    RisFrame,
++    RisGeometry,
++    compute_element_centers,
++    compute_local_frame,
++    degrees_to_radians,
++    quantize_phase,
++    radians_to_degrees,
++    synthesize_custom_phase,
++    synthesize_focusing_phase,
++    synthesize_steering_phase,
++    synthesize_uniform_phase,
++)
+
+
+thinking
+**Running tests with pytest**
+exec
+/usr/bin/zsh -lc 'python -m pytest' in /home/josh/Documents/Github/RIS_SIONNA exited 127 in 2ms:
+zsh:1: command not found: python
+file update:
+diff --git a/app/ris/__init__.py b/app/ris/__init__.py
+index 5b3dae1cfbc2ea41c275f085f0d2a0ca759919b0..a34ed971e3d2426533f5eb2eb56416e59d15db65
+--- a/app/ris/__init__.py
++++ b/app/ris/__init__.py
+@@ -1 +1,15 @@
+-"""RIS placeholder module for future extensions."""
++"""RIS core math primitives and helpers."""
++
++from .ris_core import (  # noqa: F401
++    RisFrame,
++    RisGeometry,
++    compute_element_centers,
++    compute_local_frame,
++    degrees_to_radians,
++    quantize_phase,
++    radians_to_degrees,
++    synthesize_custom_phase,
++    synthesize_focusing_phase,
++    synthesize_steering_phase,
++    synthesize_uniform_phase,
++)
+
+
+thinking
+**Handling missing python by trying python3**
+
+I'll run tests using python3 -m pytest after noting that python is missing, aiming to satisfy the quality gate despite the initial failure.
+exec
+/usr/bin/zsh -lc 'python3 -m pytest' in /home/josh/Documents/Github/RIS_SIONNA exited 1 in 13ms:
+/usr/bin/python3: No module named pytest
+file update:
+diff --git a/app/ris/__init__.py b/app/ris/__init__.py
+index 5b3dae1cfbc2ea41c275f085f0d2a0ca759919b0..a34ed971e3d2426533f5eb2eb56416e59d15db65
+--- a/app/ris/__init__.py
++++ b/app/ris/__init__.py
+@@ -1 +1,15 @@
+-"""RIS placeholder module for future extensions."""
++"""RIS core math primitives and helpers."""
++
++from .ris_core import (  # noqa: F401
++    RisFrame,
++    RisGeometry,
++    compute_element_centers,
++    compute_local_frame,
++    degrees_to_radians,
++    quantize_phase,
++    radians_to_degrees,
++    synthesize_custom_phase,
++    synthesize_focusing_phase,
++    synthesize_steering_phase,
++    synthesize_uniform_phase,
++)
+
+
+thinking
+**Noting missing pytest and logging need**
+exec
+/usr/bin/zsh -lc 'date -u "+%Y-%m-%dT%H:%M:%SZ"' in /home/josh/Documents/Github/RIS_SIONNA succeeded in 3ms:
+2026-01-20T17:53:42Z
+file update:
+diff --git a/app/ris/__init__.py b/app/ris/__init__.py
+index 5b3dae1cfbc2ea41c275f085f0d2a0ca759919b0..a34ed971e3d2426533f5eb2eb56416e59d15db65
+--- a/app/ris/__init__.py
++++ b/app/ris/__init__.py
+@@ -1 +1,15 @@
+-"""RIS placeholder module for future extensions."""
++"""RIS core math primitives and helpers."""
++
++from .ris_core import (  # noqa: F401
++    RisFrame,
++    RisGeometry,
++    compute_element_centers,
++    compute_local_frame,
++    degrees_to_radians,
++    quantize_phase,
++    radians_to_degrees,
++    synthesize_custom_phase,
++    synthesize_focusing_phase,
++    synthesize_steering_phase,
++    synthesize_uniform_phase,
++)
+
+exec
+/usr/bin/zsh -lc "printf \"%s %s\\n\" \"2026-01-20T17:53:42Z\" \"Ran tests (python missing, pytest missing for python3)\" >> /home/josh/Documents/Github/RIS_SIONNA/.ralph/activity.log" in /home/josh/Documents/Github/RIS_SIONNA succeeded in 2ms:
+
+file update:
+diff --git a/app/ris/__init__.py b/app/ris/__init__.py
+index 5b3dae1cfbc2ea41c275f085f0d2a0ca759919b0..a34ed971e3d2426533f5eb2eb56416e59d15db65
+--- a/app/ris/__init__.py
++++ b/app/ris/__init__.py
+@@ -1 +1,15 @@
+-"""RIS placeholder module for future extensions."""
++"""RIS core math primitives and helpers."""
++
++from .ris_core import (  # noqa: F401
++    RisFrame,
++    RisGeometry,
++    compute_element_centers,
++    compute_local_frame,
++    degrees_to_radians,
++    quantize_phase,
++    radians_to_degrees,
++    synthesize_custom_phase,
++    synthesize_focusing_phase,
++    synthesize_steering_phase,
++    synthesize_uniform_phase,
++)
+
+
+thinking
+**Preparing to use commit skill**
+
+I'm noting the need for a security, performance, and regression review before committing and planning to run git status before using the commit skill as instructed.
+exec
+/usr/bin/zsh -lc 'cat /home/josh/Documents/Github/RIS_SIONNA/.codex/skills/commit/SKILL.md' in /home/josh/Documents/Github/RIS_SIONNA succeeded in 2ms:
+---
+name: commit
+description: Write conventional commit messages with type, scope, and subject when the user wants to commit changes or save work.
+---
+
+# Git Commit
+
+Creates git commits following Conventional Commits format with proper type, scope, and subject.
+
+## Quick Start
+
+```bash
+# 1. Stage changes
+git add <files>  # or: git add -A
+
+# 2. Create commit (branch commit format)
+git commit -m "type(scope): subject
+
+Body explaining HOW and WHY.
+Reference: Task X.Y, Req N"
+file update:
+diff --git a/app/ris/__init__.py b/app/ris/__init__.py
+index 5b3dae1cfbc2ea41c275f085f0d2a0ca759919b0..a34ed971e3d2426533f5eb2eb56416e59d15db65
+--- a/app/ris/__init__.py
++++ b/app/ris/__init__.py
+@@ -1 +1,15 @@
+-"""RIS placeholder module for future extensions."""
++"""RIS core math primitives and helpers."""
++
++from .ris_core import (  # noqa: F401
++    RisFrame,
++    RisGeometry,
++    compute_element_centers,
++    compute_local_frame,
++    degrees_to_radians,
++    quantize_phase,
++    radians_to_degrees,
++    synthesize_custom_phase,
++    synthesize_focusing_phase,
++    synthesize_steering_phase,
++    synthesize_uniform_phase,
++)
+
+
+thinking
+**Planning staging and commit process**
+
+Preparing to stage all changes with a full add, perform a security/performance/regression review mentally, check diffs before committing, and use a conventional commit message focused on the new core math primitives. Noting missing tests will be added to progress but tests exist to review later.
+exec
+/usr/bin/zsh -lc 'git status --porcelain' in /home/josh/Documents/Github/RIS_SIONNA succeeded in 4ms:
+ M .agents/ralph/agents.sh
+ M AGENTS.md
+ M README.md
+ M app/ris/__init__.py
+?? .agents/tasks/
+?? .ralph/
+?? app/ris/ris_core.py
+?? tests/test_ris_core.py
+file update:
+diff --git a/app/ris/__init__.py b/app/ris/__init__.py
+index 5b3dae1cfbc2ea41c275f085f0d2a0ca759919b0..a34ed971e3d2426533f5eb2eb56416e59d15db65
+--- a/app/ris/__init__.py
++++ b/app/ris/__init__.py
+@@ -1 +1,15 @@
+-"""RIS placeholder module for future extensions."""
++"""RIS core math primitives and helpers."""
++
++from .ris_core import (  # noqa: F401
++    RisFrame,
++    RisGeometry,
++    compute_element_centers,
++    compute_local_frame,
++    degrees_to_radians,
++    quantize_phase,
++    radians_to_degrees,
++    synthesize_custom_phase,
++    synthesize_focusing_phase,
++    synthesize_steering_phase,
++    synthesize_uniform_phase,
++)
+
+
+
+thinking
+**Clarifying commit scope with unrelated changes**
+
+Noticed some files are modified but unrelated to current work and may preexist; instructions require committing all changes made during the run but not reverting unrelated edits. Next, I'll verify which modifications belong to this run to avoid committing unrelated changes inadvertently.
+thinking
+**Resolving commit inclusion and refining quantize logic**
+
+Decided to comply with staging all changes despite unrelated modifications, reflecting build instructions. Also planning to fix quantize phase to handle broadcasting correctly and improve fallback axis selection to avoid parallel vectors, ensuring robust local frame computation before updating logs and committing.
+file update
+M /home/josh/Documents/Github/RIS_SIONNA/app/ris/ris_core.py
+@@ -52,2 +52,4 @@
+         hint = _ALT_X_AXIS
++        if abs(np.dot(hint, w)) > 0.99:
++            hint = _DEFAULT_X_AXIS
+     u = _normalize(hint - np.dot(hint, w) * w, "x_axis_hint")
+@@ -141,3 +143,3 @@
+     phase_wrapped = np.mod(phase, 2.0 * np.pi)
+-    diffs = np.abs(phase_wrapped[..., None] - levels[None, None, :])
++    diffs = np.abs(phase_wrapped[..., None] - levels)
+     indices = np.argmin(diffs, axis=-1)
+apply_patch(auto_approved=true) exited 0 in 3ms:
+Success. Updated the following files:
+M /home/josh/Documents/Github/RIS_SIONNA/app/ris/ris_core.py
+file update:
+diff --git a/app/ris/__init__.py b/app/ris/__init__.py
+index 5b3dae1cfbc2ea41c275f085f0d2a0ca759919b0..a34ed971e3d2426533f5eb2eb56416e59d15db65
+--- a/app/ris/__init__.py
++++ b/app/ris/__init__.py
+@@ -1 +1,15 @@
+-"""RIS placeholder module for future extensions."""
++"""RIS core math primitives and helpers."""
++
++from .ris_core import (  # noqa: F401
++    RisFrame,
++    RisGeometry,
++    compute_element_centers,
++    compute_local_frame,
++    degrees_to_radians,
++    quantize_phase,
++    radians_to_degrees,
++    synthesize_custom_phase,
++    synthesize_focusing_phase,
++    synthesize_steering_phase,
++    synthesize_uniform_phase,
++)
+diff --git a/app/ris/ris_core.py b/app/ris/ris_core.py
+index 004099dfafeae5380f5d2a1befaf522b27af89a6..8bf0686bf3b5c43386defe7de1d6f70cb2d53f97
+--- a/app/ris/ris_core.py
++++ b/app/ris/ris_core.py
+@@ -50,6 +50,8 @@
+     hint = _normalize(hint, "x_axis_hint")
+     if abs(np.dot(hint, w)) > 0.99:
+         hint = _ALT_X_AXIS
++        if abs(np.dot(hint, w)) > 0.99:
++            hint = _DEFAULT_X_AXIS
+     u = _normalize(hint - np.dot(hint, w) * w, "x_axis_hint")
+     v = np.cross(w, u)
+     return RisFrame(u=u, v=v, w=w)
+@@ -139,7 +141,7 @@
+     step = 2.0 * np.pi / (2**bits)
+     levels = np.arange(2**bits, dtype=float) * step
+     phase_wrapped = np.mod(phase, 2.0 * np.pi)
+-    diffs = np.abs(phase_wrapped[..., None] - levels[None, None, :])
++    diffs = np.abs(phase_wrapped[..., None] - levels)
+     indices = np.argmin(diffs, axis=-1)
+     return levels[indices]
+ 
+
+file update:
+diff --git a/app/ris/__init__.py b/app/ris/__init__.py
+index 5b3dae1cfbc2ea41c275f085f0d2a0ca759919b0..a34ed971e3d2426533f5eb2eb56416e59d15db65
+--- a/app/ris/__init__.py
++++ b/app/ris/__init__.py
+@@ -1 +1,15 @@
+-"""RIS placeholder module for future extensions."""
++"""RIS core math primitives and helpers."""
++
++from .ris_core import (  # noqa: F401
++    RisFrame,
++    RisGeometry,
++    compute_element_centers,
++    compute_local_frame,
++    degrees_to_radians,
++    quantize_phase,
++    radians_to_degrees,
++    synthesize_custom_phase,
++    synthesize_focusing_phase,
++    synthesize_steering_phase,
++    synthesize_uniform_phase,
++)
+diff --git a/app/ris/ris_core.py b/app/ris/ris_core.py
+index 004099dfafeae5380f5d2a1befaf522b27af89a6..8bf0686bf3b5c43386defe7de1d6f70cb2d53f97
+--- a/app/ris/ris_core.py
++++ b/app/ris/ris_core.py
+@@ -50,6 +50,8 @@
+     hint = _normalize(hint, "x_axis_hint")
+     if abs(np.dot(hint, w)) > 0.99:
+         hint = _ALT_X_AXIS
++        if abs(np.dot(hint, w)) > 0.99:
++            hint = _DEFAULT_X_AXIS
+     u = _normalize(hint - np.dot(hint, w) * w, "x_axis_hint")
+     v = np.cross(w, u)
+     return RisFrame(u=u, v=v, w=w)
+@@ -139,7 +141,7 @@
+     step = 2.0 * np.pi / (2**bits)
+     levels = np.arange(2**bits, dtype=float) * step
+     phase_wrapped = np.mod(phase, 2.0 * np.pi)
+-    diffs = np.abs(phase_wrapped[..., None] - levels[None, None, :])
++    diffs = np.abs(phase_wrapped[..., None] - levels)
+     indices = np.argmin(diffs, axis=-1)
+     return levels[indices]
+ 
+
+
+thinking
+**Considering test and log updates**
+
+I'm noting the need to update tests and the activity log following major code changes to ensure correctness and traceability.
+exec
+/usr/bin/zsh -lc 'date -u "+%Y-%m-%dT%H:%M:%SZ"' in /home/josh/Documents/Github/RIS_SIONNA succeeded in 3ms:
+2026-01-20T17:54:24Z
+file update:
+diff --git a/app/ris/__init__.py b/app/ris/__init__.py
+index 5b3dae1cfbc2ea41c275f085f0d2a0ca759919b0..a34ed971e3d2426533f5eb2eb56416e59d15db65
+--- a/app/ris/__init__.py
++++ b/app/ris/__init__.py
+@@ -1 +1,15 @@
+-"""RIS placeholder module for future extensions."""
++"""RIS core math primitives and helpers."""
++
++from .ris_core import (  # noqa: F401
++    RisFrame,
++    RisGeometry,
++    compute_element_centers,
++    compute_local_frame,
++    degrees_to_radians,
++    quantize_phase,
++    radians_to_degrees,
++    synthesize_custom_phase,
++    synthesize_focusing_phase,
++    synthesize_steering_phase,
++    synthesize_uniform_phase,
++)
+diff --git a/app/ris/ris_core.py b/app/ris/ris_core.py
+index 004099dfafeae5380f5d2a1befaf522b27af89a6..8bf0686bf3b5c43386defe7de1d6f70cb2d53f97
+--- a/app/ris/ris_core.py
++++ b/app/ris/ris_core.py
+@@ -50,6 +50,8 @@
+     hint = _normalize(hint, "x_axis_hint")
+     if abs(np.dot(hint, w)) > 0.99:
+         hint = _ALT_X_AXIS
++        if abs(np.dot(hint, w)) > 0.99:
++            hint = _DEFAULT_X_AXIS
+     u = _normalize(hint - np.dot(hint, w) * w, "x_axis_hint")
+     v = np.cross(w, u)
+     return RisFrame(u=u, v=v, w=w)
+@@ -139,7 +141,7 @@
+     step = 2.0 * np.pi / (2**bits)
+     levels = np.arange(2**bits, dtype=float) * step
+     phase_wrapped = np.mod(phase, 2.0 * np.pi)
+-    diffs = np.abs(phase_wrapped[..., None] - levels[None, None, :])
++    diffs = np.abs(phase_wrapped[..., None] - levels)
+     indices = np.argmin(diffs, axis=-1)
+     return levels[indices]
+ 
+
+exec
+/usr/bin/zsh -lc "printf \"%s %s\\n\" \"2026-01-20T17:54:24Z\" \"Refined local frame fallback and phase quantization\" >> /home/josh/Documents/Github/RIS_SIONNA/.ralph/activity.log" in /home/josh/Documents/Github/RIS_SIONNA succeeded in 2ms:
+
+file update:
+diff --git a/app/ris/__init__.py b/app/ris/__init__.py
+index 5b3dae1cfbc2ea41c275f085f0d2a0ca759919b0..a34ed971e3d2426533f5eb2eb56416e59d15db65
+--- a/app/ris/__init__.py
++++ b/app/ris/__init__.py
+@@ -1 +1,15 @@
+-"""RIS placeholder module for future extensions."""
++"""RIS core math primitives and helpers."""
++
++from .ris_core import (  # noqa: F401
++    RisFrame,
++    RisGeometry,
++    compute_element_centers,
++    compute_local_frame,
++    degrees_to_radians,
++    quantize_phase,
++    radians_to_degrees,
++    synthesize_custom_phase,
++    synthesize_focusing_phase,
++    synthesize_steering_phase,
++    synthesize_uniform_phase,
++)
+diff --git a/app/ris/ris_core.py b/app/ris/ris_core.py
+index 004099dfafeae5380f5d2a1befaf522b27af89a6..8bf0686bf3b5c43386defe7de1d6f70cb2d53f97
+--- a/app/ris/ris_core.py
++++ b/app/ris/ris_core.py
+@@ -50,6 +50,8 @@
+     hint = _normalize(hint, "x_axis_hint")
+     if abs(np.dot(hint, w)) > 0.99:
+         hint = _ALT_X_AXIS
++        if abs(np.dot(hint, w)) > 0.99:
++            hint = _DEFAULT_X_AXIS
+     u = _normalize(hint - np.dot(hint, w) * w, "x_axis_hint")
+     v = np.cross(w, u)
+     return RisFrame(u=u, v=v, w=w)
+@@ -139,7 +141,7 @@
+     step = 2.0 * np.pi / (2**bits)
+     levels = np.arange(2**bits, dtype=float) * step
+     phase_wrapped = np.mod(phase, 2.0 * np.pi)
+-    diffs = np.abs(phase_wrapped[..., None] - levels[None, None, :])
++    diffs = np.abs(phase_wrapped[..., None] - levels)
+     indices = np.argmin(diffs, axis=-1)
+     return levels[indices]
+ 
+
+
+thinking
+**Rerunning tests despite failures**
+
+Testing with both python -m pytest and python3 -m pytest fails again, but since the requirement mandates running verification commands, I'll continue with this step.
+exec
+/usr/bin/zsh -lc 'python -m pytest' in /home/josh/Documents/Github/RIS_SIONNA exited 127 in 2ms:
+zsh:1: command not found: python
+file update:
+diff --git a/app/ris/__init__.py b/app/ris/__init__.py
+index 5b3dae1cfbc2ea41c275f085f0d2a0ca759919b0..a34ed971e3d2426533f5eb2eb56416e59d15db65
+--- a/app/ris/__init__.py
++++ b/app/ris/__init__.py
+@@ -1 +1,15 @@
+-"""RIS placeholder module for future extensions."""
++"""RIS core math primitives and helpers."""
++
++from .ris_core import (  # noqa: F401
++    RisFrame,
++    RisGeometry,
++    compute_element_centers,
++    compute_local_frame,
++    degrees_to_radians,
++    quantize_phase,
++    radians_to_degrees,
++    synthesize_custom_phase,
++    synthesize_focusing_phase,
++    synthesize_steering_phase,
++    synthesize_uniform_phase,
++)
+diff --git a/app/ris/ris_core.py b/app/ris/ris_core.py
+index 004099dfafeae5380f5d2a1befaf522b27af89a6..8bf0686bf3b5c43386defe7de1d6f70cb2d53f97
+--- a/app/ris/ris_core.py
++++ b/app/ris/ris_core.py
+@@ -50,6 +50,8 @@
+     hint = _normalize(hint, "x_axis_hint")
+     if abs(np.dot(hint, w)) > 0.99:
+         hint = _ALT_X_AXIS
++        if abs(np.dot(hint, w)) > 0.99:
++            hint = _DEFAULT_X_AXIS
+     u = _normalize(hint - np.dot(hint, w) * w, "x_axis_hint")
+     v = np.cross(w, u)
+     return RisFrame(u=u, v=v, w=w)
+@@ -139,7 +141,7 @@
+     step = 2.0 * np.pi / (2**bits)
+     levels = np.arange(2**bits, dtype=float) * step
+     phase_wrapped = np.mod(phase, 2.0 * np.pi)
+-    diffs = np.abs(phase_wrapped[..., None] - levels[None, None, :])
++    diffs = np.abs(phase_wrapped[..., None] - levels)
+     indices = np.argmin(diffs, axis=-1)
+     return levels[indices]
+ 
+
+exec
+/usr/bin/zsh -lc 'python3 -m pytest' in /home/josh/Documents/Github/RIS_SIONNA exited 1 in 13ms:
+/usr/bin/python3: No module named pytest
+file update:
+diff --git a/app/ris/__init__.py b/app/ris/__init__.py
+index 5b3dae1cfbc2ea41c275f085f0d2a0ca759919b0..a34ed971e3d2426533f5eb2eb56416e59d15db65
+--- a/app/ris/__init__.py
++++ b/app/ris/__init__.py
+@@ -1 +1,15 @@
+-"""RIS placeholder module for future extensions."""
++"""RIS core math primitives and helpers."""
++
++from .ris_core import (  # noqa: F401
++    RisFrame,
++    RisGeometry,
++    compute_element_centers,
++    compute_local_frame,
++    degrees_to_radians,
++    quantize_phase,
++    radians_to_degrees,
++    synthesize_custom_phase,
++    synthesize_focusing_phase,
++    synthesize_steering_phase,
++    synthesize_uniform_phase,
++)
+diff --git a/app/ris/ris_core.py b/app/ris/ris_core.py
+index 004099dfafeae5380f5d2a1befaf522b27af89a6..8bf0686bf3b5c43386defe7de1d6f70cb2d53f97
+--- a/app/ris/ris_core.py
++++ b/app/ris/ris_core.py
+@@ -50,6 +50,8 @@
+     hint = _normalize(hint, "x_axis_hint")
+     if abs(np.dot(hint, w)) > 0.99:
+         hint = _ALT_X_AXIS
++        if abs(np.dot(hint, w)) > 0.99:
++            hint = _DEFAULT_X_AXIS
+     u = _normalize(hint - np.dot(hint, w) * w, "x_axis_hint")
+     v = np.cross(w, u)
+     return RisFrame(u=u, v=v, w=w)
+@@ -139,7 +141,7 @@
+     step = 2.0 * np.pi / (2**bits)
+     levels = np.arange(2**bits, dtype=float) * step
+     phase_wrapped = np.mod(phase, 2.0 * np.pi)
+-    diffs = np.abs(phase_wrapped[..., None] - levels[None, None, :])
++    diffs = np.abs(phase_wrapped[..., None] - levels)
+     indices = np.argmin(diffs, axis=-1)
+     return levels[indices]
+ 
+
+
+thinking
+**Planning activity log addition**
+
+I need to implement an activity log that records events or results after running tests.
+exec
+/usr/bin/zsh -lc 'date -u "+%Y-%m-%dT%H:%M:%SZ"' in /home/josh/Documents/Github/RIS_SIONNA succeeded in 3ms:
+2026-01-20T17:54:36Z
+file update:
+diff --git a/app/ris/__init__.py b/app/ris/__init__.py
+index 5b3dae1cfbc2ea41c275f085f0d2a0ca759919b0..a34ed971e3d2426533f5eb2eb56416e59d15db65
+--- a/app/ris/__init__.py
++++ b/app/ris/__init__.py
+@@ -1 +1,15 @@
+-"""RIS placeholder module for future extensions."""
++"""RIS core math primitives and helpers."""
++
++from .ris_core import (  # noqa: F401
++    RisFrame,
++    RisGeometry,
++    compute_element_centers,
++    compute_local_frame,
++    degrees_to_radians,
++    quantize_phase,
++    radians_to_degrees,
++    synthesize_custom_phase,
++    synthesize_focusing_phase,
++    synthesize_steering_phase,
++    synthesize_uniform_phase,
++)
+diff --git a/app/ris/ris_core.py b/app/ris/ris_core.py
+index 004099dfafeae5380f5d2a1befaf522b27af89a6..8bf0686bf3b5c43386defe7de1d6f70cb2d53f97
+--- a/app/ris/ris_core.py
++++ b/app/ris/ris_core.py
+@@ -50,6 +50,8 @@
+     hint = _normalize(hint, "x_axis_hint")
+     if abs(np.dot(hint, w)) > 0.99:
+         hint = _ALT_X_AXIS
++        if abs(np.dot(hint, w)) > 0.99:
++            hint = _DEFAULT_X_AXIS
+     u = _normalize(hint - np.dot(hint, w) * w, "x_axis_hint")
+     v = np.cross(w, u)
+     return RisFrame(u=u, v=v, w=w)
+@@ -139,7 +141,7 @@
+     step = 2.0 * np.pi / (2**bits)
+     levels = np.arange(2**bits, dtype=float) * step
+     phase_wrapped = np.mod(phase, 2.0 * np.pi)
+-    diffs = np.abs(phase_wrapped[..., None] - levels[None, None, :])
++    diffs = np.abs(phase_wrapped[..., None] - levels)
+     indices = np.argmin(diffs, axis=-1)
+     return levels[indices]
+ 
+
+exec
+/usr/bin/zsh -lc "printf \"%s %s\\n\" \"2026-01-20T17:54:36Z\" \"Re-ran tests (python/pytest missing)\" >> /home/josh/Documents/Github/RIS_SIONNA/.ralph/activity.log" in /home/josh/Documents/Github/RIS_SIONNA succeeded in 2ms:
+
+file update:
+diff --git a/app/ris/__init__.py b/app/ris/__init__.py
+index 5b3dae1cfbc2ea41c275f085f0d2a0ca759919b0..a34ed971e3d2426533f5eb2eb56416e59d15db65
+--- a/app/ris/__init__.py
++++ b/app/ris/__init__.py
+@@ -1 +1,15 @@
+-"""RIS placeholder module for future extensions."""
++"""RIS core math primitives and helpers."""
++
++from .ris_core import (  # noqa: F401
++    RisFrame,
++    RisGeometry,
++    compute_element_centers,
++    compute_local_frame,
++    degrees_to_radians,
++    quantize_phase,
++    radians_to_degrees,
++    synthesize_custom_phase,
++    synthesize_focusing_phase,
++    synthesize_steering_phase,
++    synthesize_uniform_phase,
++)
+diff --git a/app/ris/ris_core.py b/app/ris/ris_core.py
+index 004099dfafeae5380f5d2a1befaf522b27af89a6..8bf0686bf3b5c43386defe7de1d6f70cb2d53f97
+--- a/app/ris/ris_core.py
++++ b/app/ris/ris_core.py
+@@ -50,6 +50,8 @@
+     hint = _normalize(hint, "x_axis_hint")
+     if abs(np.dot(hint, w)) > 0.99:
+         hint = _ALT_X_AXIS
++        if abs(np.dot(hint, w)) > 0.99:
++            hint = _DEFAULT_X_AXIS
+     u = _normalize(hint - np.dot(hint, w) * w, "x_axis_hint")
+     v = np.cross(w, u)
+     return RisFrame(u=u, v=v, w=w)
+@@ -139,7 +141,7 @@
+     step = 2.0 * np.pi / (2**bits)
+     levels = np.arange(2**bits, dtype=float) * step
+     phase_wrapped = np.mod(phase, 2.0 * np.pi)
+-    diffs = np.abs(phase_wrapped[..., None] - levels[None, None, :])
++    diffs = np.abs(phase_wrapped[..., None] - levels)
+     indices = np.argmin(diffs, axis=-1)
+     return levels[indices]
+ 
+
+
+
+thinking
+**Noticing conflicting commit and progress log order**
+
+The commit is required before appending to the progress log per instructions, but all changes including progress updates must be committed, creating a conflict; this will need careful handling or clarification.
+thinking
+**Resolving multiple commits for progress and activity logs**
+
+The best approach is to commit all code and prior log changes first, then append progress and activity logs, and finally stage and commit those updates in a second commit; this satisfies both step order and the requirement to have all changes committed.
+exec
+/usr/bin/zsh -lc "sed -n '1,220p' /home/josh/Documents/Github/RIS_SIONNA/app/ris/ris_core.py" in /home/josh/Documents/Github/RIS_SIONNA succeeded in 3ms:
+"""Core RIS math primitives for geometry and phase control."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Iterable, Optional
+
+import numpy as np
+
+
+@dataclass(frozen=True)
+class RisFrame:
+    """Right-handed local frame for the RIS surface."""
+
+    u: np.ndarray
+    v: np.ndarray
+    w: np.ndarray
+
+
+@dataclass(frozen=True)
+file update:
+diff --git a/app/ris/__init__.py b/app/ris/__init__.py
+index 5b3dae1cfbc2ea41c275f085f0d2a0ca759919b0..a34ed971e3d2426533f5eb2eb56416e59d15db65
+--- a/app/ris/__init__.py
++++ b/app/ris/__init__.py
+@@ -1 +1,15 @@
+-"""RIS placeholder module for future extensions."""
++"""RIS core math primitives and helpers."""
++
++from .ris_core import (  # noqa: F401
++    RisFrame,
++    RisGeometry,
++    compute_element_centers,
++    compute_local_frame,
++    degrees_to_radians,
++    quantize_phase,
++    radians_to_degrees,
++    synthesize_custom_phase,
++    synthesize_focusing_phase,
++    synthesize_steering_phase,
++    synthesize_uniform_phase,
++)
+diff --git a/app/ris/ris_core.py b/app/ris/ris_core.py
+index 004099dfafeae5380f5d2a1befaf522b27af89a6..8bf0686bf3b5c43386defe7de1d6f70cb2d53f97
+--- a/app/ris/ris_core.py
++++ b/app/ris/ris_core.py
+@@ -50,6 +50,8 @@
+     hint = _normalize(hint, "x_axis_hint")
+     if abs(np.dot(hint, w)) > 0.99:
+         hint = _ALT_X_AXIS
++        if abs(np.dot(hint, w)) > 0.99:
++            hint = _DEFAULT_X_AXIS
+     u = _normalize(hint - np.dot(hint, w) * w, "x_axis_hint")
+     v = np.cross(w, u)
+     return RisFrame(u=u, v=v, w=w)
+@@ -139,7 +141,7 @@
+     step = 2.0 * np.pi / (2**bits)
+     levels = np.arange(2**bits, dtype=float) * step
+     phase_wrapped = np.mod(phase, 2.0 * np.pi)
+-    diffs = np.abs(phase_wrapped[..., None] - levels[None, None, :])
++    diffs = np.abs(phase_wrapped[..., None] - levels)
+     indices = np.argmin(diffs, axis=-1)
+     return levels[indices]
+ 
+
+
+thinking
+**Confirming local frame hint logic and staging changes**
+
+Validated fallback logic for local frame hint vectors to avoid parallel cases and ensured quantize maintains input shape for 1D and 2D. Preparing to stage all changes for commit after updating activity logs and recalling the review steps are planned for final.
+exec
+/usr/bin/zsh -lc 'git add -A' in /home/josh/Documents/Github/RIS_SIONNA

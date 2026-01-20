@@ -256,3 +256,15 @@ TensorFlow:
 - TensorFlow and Dr.Jit docs do not publish explicit version numbers on the landing pages.
   For reproducibility, this repo records the **current PyPI versions** in `summary.json` and
   uses those versions in these references.
+
+
+
+## Platform support (important)
+
+Supported & tested
+- Native Ubuntu 24.04 + NVIDIA GPU: CUDA/OptiX ray tracing works (see `python -m app diagnose` → outputs/<run_id>/summary.json)
+- CPU-only runs: Linux/macOS/WSL
+
+WSL2 note
+- NVIDIA OptiX is not officially supported on WSL2, so GPU ray tracing is considered unsupported/experimental in this repo.
+- There are community/workaround guides for getting OptiX running in WSL2 (use at your own risk). See Mitsuba’s WSL2 OptiX notes.
