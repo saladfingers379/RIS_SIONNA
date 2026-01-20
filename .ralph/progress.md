@@ -260,3 +260,32 @@ Run summary: /home/josh/Documents/Github/RIS_SIONNA/.ralph/runs/run-20260120-175
   - Gotchas encountered: `python` may not be on PATH; use the repo venv for pytest.
   - Useful context: mock `__import__` to assert actionable missing-scipy errors.
 ---
+## [2026-01-20 19:11:38] - US-008: Add RIS Lab UI tab with Config/Run/Results
+Thread: 
+Run: 20260120-175122-20544 (iteration 9)
+Run log: /home/josh/Documents/Github/RIS_SIONNA/.ralph/runs/run-20260120-175122-20544-iter-9.log
+Run summary: /home/josh/Documents/Github/RIS_SIONNA/.ralph/runs/run-20260120-175122-20544-iter-9.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: f4e8260 feat(sim-ui): add RIS Lab tabs and results
+- Post-commit status: clean
+- Verification:
+  - Command: /home/josh/Documents/Github/RIS_SIONNA/.venv/bin/python -m pytest -> PASS
+  - Command: npx --yes tsx tmp/ris-check.ts -> PASS
+- Files changed:
+  - .agents/tasks/prd-ris-lab.json
+  - .ralph/activity.log
+  - .ralph/errors.log
+  - .ralph/progress.md
+  - .ralph/runs/run-20260120-175122-20544-iter-8.log
+  - .ralph/runs/run-20260120-175122-20544-iter-8.md
+  - .ralph/runs/run-20260120-175122-20544-iter-9.log
+  - app/sim_web/app.js
+  - app/sim_web/index.html
+  - app/sim_web/styles.css
+- What was implemented: added RIS Lab UI tab with Config/Run/Results panels, wired RIS job submission/progress/log polling, and rendered metrics + plots from output runs with failure messaging.
+- **Learnings for future iterations:**
+  - Patterns discovered: use `/api/ris/jobs` for background RIS runs and `/api/progress/<run_id>` for status.
+  - Gotchas encountered: `python` was not on PATH; use the repo venv to run the simulator and tests.
+  - Useful context: RIS Lab artifacts live under `/runs/<run_id>/plots` and `metrics.json` for UI rendering.
+---
