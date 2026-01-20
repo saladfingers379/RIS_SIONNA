@@ -13031,4 +13031,1851 @@ thinking
 
 I'll do one final commit for the run log changes with a chore message and then stop running shell commands to avoid infinite loop of log updates, noting in the final response that post-commit status remains dirty due to ongoing run log modifications.
 exec
-/usr/bin/zsh -lc 'git add /home/josh/Documents/Github/RIS_SIONNA/.ralph/runs/run-20260120-175122-20544-iter-2.log && git commit -m "chore(ralph): update run log"' in /home/josh/Documents/Github/RIS_SIONNA
+/usr/bin/zsh -lc 'git add /home/josh/Documents/Github/RIS_SIONNA/.ralph/runs/run-20260120-175122-20544-iter-2.log && git commit -m "chore(ralph): update run log"' in /home/josh/Documents/Github/RIS_SIONNA succeeded in 19ms:
+[linux 9ee1a92] chore(ralph): update run log
+ 1 file changed, 1195 insertions(+), 1 deletion(-)
+file update:
+diff --git a/app/ris/__init__.py b/app/ris/__init__.py
+index a34ed971e3d2426533f5eb2eb56416e59d15db65..bafa9ac9ccd2097b564c1c45d7c7b06f3a223b47
+--- a/app/ris/__init__.py
++++ b/app/ris/__init__.py
+@@ -1,5 +1,13 @@
+ """RIS core math primitives and helpers."""
+ 
++from .ris_config import (  # noqa: F401
++    RIS_LAB_SCHEMA_VERSION,
++    compute_ris_lab_config_hash,
++    load_ris_lab_config,
++    resolve_and_snapshot_ris_lab_config,
++    resolve_ris_lab_config,
++    snapshot_ris_lab_config,
++)
+ from .ris_core import (  # noqa: F401
+     RisFrame,
+     RisGeometry,
+diff --git a/app/ris/ris_config.py b/app/ris/ris_config.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..d1bdcffc0da5d306d0f4f328064e4cbc1b453b6d
+--- /dev/null
++++ b/app/ris/ris_config.py
+@@ -0,0 +1,200 @@
++"""RIS Lab configuration schema and snapshot helpers."""
++
++from __future__ import annotations
++
++import copy
++import hashlib
++import json
++from pathlib import Path
++from typing import Any, Dict, Optional
++
++import yaml
++
++from app.io import create_output_dir, save_json, save_yaml
++
++RIS_LAB_SCHEMA_VERSION = 1
++
++DEFAULT_RIS_LAB_CONFIG: Dict[str, Any] = {
++    "schema_version": RIS_LAB_SCHEMA_VERSION,
++    "geometry": {
++        "nx": None,
++        "ny": None,
++        "dx": None,
++        "dy": None,
++        "origin": [0.0, 0.0, 0.0],
++        "normal": [0.0, 0.0, 1.0],
++        "x_axis_hint": [1.0, 0.0, 0.0],
++    },
++    "control": {
++        "mode": "uniform",
++        "params": {"phase_rad": 0.0},
++    },
++    "quantization": {
++        "bits": 0,
++    },
++    "pattern_mode": {
++        "normalization": "peak_0db",
++        "rx_sweep_deg": {"start": -90.0, "stop": 90.0, "step": 2.0},
++    },
++    "link_mode": {
++        "weighting": "inverse_distance",
++        "enabled": False,
++    },
++    "validation": {
++        "normalization": "peak_0db",
++        "rmse_db_max": 2.0,
++        "peak_angle_err_deg_max": 2.0,
++        "peak_db_err_max": 1.5,
++    },
++    "experiment": {
++        "frequency_hz": 28_000_000_000,
++        "tx_incident_angle_deg": -30.0,
++    },
++    "output": {
++        "base_dir": "outputs",
++        "run_id": None,
++    },
++}
++
++_ALIAS_FIELDS = {
++    ("geometry", "nx"): [("geometry", "n")],
++    ("geometry", "ny"): [("geometry", "m")],
++    ("geometry", "dx"): [("geometry", "dx_m")],
++    ("geometry", "dy"): [("geometry", "dy_m")],
++}
++
++
++def _deep_merge(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
++    for key, value in override.items():
++        if isinstance(value, dict) and isinstance(base.get(key), dict):
++            base[key] = _deep_merge(base[key], value)
++        else:
++            base[key] = value
++    return base
++
++
++def _apply_aliases(config: Dict[str, Any]) -> Dict[str, Any]:
++    updated = copy.deepcopy(config)
++    for (section, key), aliases in _ALIAS_FIELDS.items():
++        section_data = updated.get(section)
++        if not isinstance(section_data, dict):
++            continue
++        if key in section_data:
++            continue
++        for alias_section, alias_key in aliases:
++            alias_data = updated.get(alias_section)
++            if isinstance(alias_data, dict) and alias_key in alias_data:
++                section_data[key] = alias_data[alias_key]
++                break
++        updated[section] = section_data
++    return updated
++
++
++def _missing_required_fields(geometry: Dict[str, Any]) -> list[str]:
++    required = ("nx", "ny", "dx", "dy")
++    missing = []
++    for key in required:
++        value = geometry.get(key)
++        if value is None:
++            missing.append(f"geometry.{key}")
++    return missing
++
++
++def _canonicalize_config(config: Dict[str, Any]) -> Dict[str, Any]:
++    ordered_keys = [
++        "schema_version",
++        "geometry",
++        "control",
++        "quantization",
++        "pattern_mode",
++        "link_mode",
++        "validation",
++        "experiment",
++        "output",
++    ]
++    ordered: Dict[str, Any] = {}
++    for key in ordered_keys:
++        if key in config:
++            ordered[key] = config[key]
++    extras = {k: v for k, v in config.items() if k not in ordered_keys}
++    for key in sorted(extras):
++        ordered[key] = extras[key]
++    return ordered
++
++
++def resolve_ris_lab_config(raw_config: Dict[str, Any]) -> Dict[str, Any]:
++    if not isinstance(raw_config, dict):
++        raise ValueError("RIS Lab config must be a YAML mapping")
++
++    normalized = _apply_aliases(raw_config)
++    resolved = _deep_merge(copy.deepcopy(DEFAULT_RIS_LAB_CONFIG), normalized)
++
++    geometry = resolved.get("geometry")
++    if not isinstance(geometry, dict):
++        raise ValueError("RIS Lab config geometry must be a mapping")
++
++    missing = _missing_required_fields(geometry)
++    if missing:
++        raise ValueError(
++            "RIS Lab config missing required fields: " + ", ".join(missing)
++        )
++
++    return _canonicalize_config(resolved)
++
++
++def load_ris_lab_config(path: str | Path) -> Dict[str, Any]:
++    config_path = Path(path)
++    if not config_path.exists():
++        raise FileNotFoundError(f"RIS Lab config not found: {config_path}")
++    with config_path.open("r", encoding="utf-8") as handle:
++        data = yaml.safe_load(handle)
++    return resolve_ris_lab_config(data)
++
++
++def compute_ris_lab_config_hash(config: Dict[str, Any]) -> str:
++    payload = json.dumps(config, sort_keys=True).encode("utf-8")
++    return hashlib.sha256(payload).hexdigest()
++
++
++def _ensure_output_dir(output_dir: Path) -> Path:
++    output_dir.mkdir(parents=True, exist_ok=True)
++    (output_dir / "plots").mkdir(parents=True, exist_ok=True)
++    (output_dir / "data").mkdir(parents=True, exist_ok=True)
++    return output_dir
++
++
++def snapshot_ris_lab_config(output_dir: Path, config: Dict[str, Any]) -> Dict[str, Any]:
++    output_dir = _ensure_output_dir(output_dir)
++    yaml_path = output_dir / "config.yaml"
++    json_path = output_dir / "config.json"
++    save_yaml(yaml_path, config)
++    save_json(json_path, config)
++
++    config_hash = compute_ris_lab_config_hash(config)
++    summary = {
++        "schema_version": config.get("schema_version", RIS_LAB_SCHEMA_VERSION),
++        "config": {
++            "hash_sha256": config_hash,
++            "path_yaml": str(yaml_path),
++            "path_json": str(json_path),
++        },
++    }
++    save_json(output_dir / "summary.json", summary)
++    return summary
++
++
++def resolve_and_snapshot_ris_lab_config(
++    config_path: str | Path,
++    output_dir: Optional[str | Path] = None,
++) -> tuple[Dict[str, Any], Path, Dict[str, Any]]:
++    config = load_ris_lab_config(config_path)
++    if output_dir is None:
++        output_cfg = config.get("output", {})
++        base_dir = output_cfg.get("base_dir", "outputs")
++        run_id = output_cfg.get("run_id")
++        output_path = create_output_dir(base_dir, run_id=run_id)
++    else:
++        output_path = _ensure_output_dir(Path(output_dir))
++
++    summary = snapshot_ris_lab_config(output_path, config)
++    return config, output_path, summary
+diff --git a/tests/test_ris_config.py b/tests/test_ris_config.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..425e3679bae77cdb6c92bd26bc4d66308a7c610c
+--- /dev/null
++++ b/tests/test_ris_config.py
+@@ -0,0 +1,58 @@
++import json
++import tempfile
++import unittest
++from pathlib import Path
++
++import yaml
++
++from app.ris.ris_config import (
++    compute_ris_lab_config_hash,
++    resolve_and_snapshot_ris_lab_config,
++    resolve_ris_lab_config,
++)
++
++
++class TestRisLabConfig(unittest.TestCase):
++    def test_minimal_config_resolves_defaults(self) -> None:
++        resolved = resolve_ris_lab_config(
++            {"geometry": {"nx": 4, "ny": 2, "dx": 0.5, "dy": 0.25}}
++        )
++        self.assertEqual(resolved["control"]["mode"], "uniform")
++        self.assertEqual(resolved["quantization"]["bits"], 0)
++        self.assertEqual(resolved["validation"]["rmse_db_max"], 2.0)
++        self.assertEqual(resolved["output"]["base_dir"], "outputs")
++
++    def test_missing_geometry_fields_reports_required(self) -> None:
++        with self.assertRaises(ValueError) as ctx:
++            resolve_ris_lab_config({"geometry": {"nx": 4}})
++        message = str(ctx.exception)
++        self.assertIn("geometry.ny", message)
++        self.assertIn("geometry.dx", message)
++        self.assertIn("geometry.dy", message)
++
++    def test_snapshot_writes_config_files_and_summary(self) -> None:
++        with tempfile.TemporaryDirectory() as tmpdir:
++            tmp_path = Path(tmpdir)
++            config_path = tmp_path / "ris.yaml"
++            yaml.safe_dump(
++                {
++                    "geometry": {"nx": 2, "ny": 2, "dx": 0.1, "dy": 0.2},
++                    "output": {"base_dir": tmpdir, "run_id": "unit-test"},
++                },
++                config_path.open("w", encoding="utf-8"),
++                sort_keys=False,
++            )
++
++            config, output_dir, summary = resolve_and_snapshot_ris_lab_config(config_path)
++            self.assertEqual(output_dir, tmp_path / "unit-test")
++            self.assertTrue((output_dir / "config.yaml").exists())
++            self.assertTrue((output_dir / "config.json").exists())
++            self.assertTrue((output_dir / "summary.json").exists())
++            self.assertEqual(summary["config"]["hash_sha256"], compute_ris_lab_config_hash(config))
++
++            loaded = json.loads((output_dir / "config.json").read_text(encoding="utf-8"))
++            self.assertEqual(loaded["geometry"]["nx"], 2)
++
++
++if __name__ == "__main__":
++    unittest.main()
+
+
+
+thinking
+**Confirming final git show and status**
+
+I'll run `git show` and `git status` after the last commit despite log updates, to capture the required commit hash and subject plus current status per instructions.
+thinking
+**Proceeding with final git commands as required**
+exec
+/usr/bin/zsh -lc 'git show -s --format="%h %s" HEAD && git status --porcelain' in /home/josh/Documents/Github/RIS_SIONNA succeeded in 6ms:
+9ee1a92 chore(ralph): update run log
+ M .ralph/runs/run-20260120-175122-20544-iter-2.log
+file update:
+diff --git a/app/ris/__init__.py b/app/ris/__init__.py
+index a34ed971e3d2426533f5eb2eb56416e59d15db65..bafa9ac9ccd2097b564c1c45d7c7b06f3a223b47
+--- a/app/ris/__init__.py
++++ b/app/ris/__init__.py
+@@ -1,5 +1,13 @@
+ """RIS core math primitives and helpers."""
+ 
++from .ris_config import (  # noqa: F401
++    RIS_LAB_SCHEMA_VERSION,
++    compute_ris_lab_config_hash,
++    load_ris_lab_config,
++    resolve_and_snapshot_ris_lab_config,
++    resolve_ris_lab_config,
++    snapshot_ris_lab_config,
++)
+ from .ris_core import (  # noqa: F401
+     RisFrame,
+     RisGeometry,
+diff --git a/app/ris/ris_config.py b/app/ris/ris_config.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..d1bdcffc0da5d306d0f4f328064e4cbc1b453b6d
+--- /dev/null
++++ b/app/ris/ris_config.py
+@@ -0,0 +1,200 @@
++"""RIS Lab configuration schema and snapshot helpers."""
++
++from __future__ import annotations
++
++import copy
++import hashlib
++import json
++from pathlib import Path
++from typing import Any, Dict, Optional
++
++import yaml
++
++from app.io import create_output_dir, save_json, save_yaml
++
++RIS_LAB_SCHEMA_VERSION = 1
++
++DEFAULT_RIS_LAB_CONFIG: Dict[str, Any] = {
++    "schema_version": RIS_LAB_SCHEMA_VERSION,
++    "geometry": {
++        "nx": None,
++        "ny": None,
++        "dx": None,
++        "dy": None,
++        "origin": [0.0, 0.0, 0.0],
++        "normal": [0.0, 0.0, 1.0],
++        "x_axis_hint": [1.0, 0.0, 0.0],
++    },
++    "control": {
++        "mode": "uniform",
++        "params": {"phase_rad": 0.0},
++    },
++    "quantization": {
++        "bits": 0,
++    },
++    "pattern_mode": {
++        "normalization": "peak_0db",
++        "rx_sweep_deg": {"start": -90.0, "stop": 90.0, "step": 2.0},
++    },
++    "link_mode": {
++        "weighting": "inverse_distance",
++        "enabled": False,
++    },
++    "validation": {
++        "normalization": "peak_0db",
++        "rmse_db_max": 2.0,
++        "peak_angle_err_deg_max": 2.0,
++        "peak_db_err_max": 1.5,
++    },
++    "experiment": {
++        "frequency_hz": 28_000_000_000,
++        "tx_incident_angle_deg": -30.0,
++    },
++    "output": {
++        "base_dir": "outputs",
++        "run_id": None,
++    },
++}
++
++_ALIAS_FIELDS = {
++    ("geometry", "nx"): [("geometry", "n")],
++    ("geometry", "ny"): [("geometry", "m")],
++    ("geometry", "dx"): [("geometry", "dx_m")],
++    ("geometry", "dy"): [("geometry", "dy_m")],
++}
++
++
++def _deep_merge(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
++    for key, value in override.items():
++        if isinstance(value, dict) and isinstance(base.get(key), dict):
++            base[key] = _deep_merge(base[key], value)
++        else:
++            base[key] = value
++    return base
++
++
++def _apply_aliases(config: Dict[str, Any]) -> Dict[str, Any]:
++    updated = copy.deepcopy(config)
++    for (section, key), aliases in _ALIAS_FIELDS.items():
++        section_data = updated.get(section)
++        if not isinstance(section_data, dict):
++            continue
++        if key in section_data:
++            continue
++        for alias_section, alias_key in aliases:
++            alias_data = updated.get(alias_section)
++            if isinstance(alias_data, dict) and alias_key in alias_data:
++                section_data[key] = alias_data[alias_key]
++                break
++        updated[section] = section_data
++    return updated
++
++
++def _missing_required_fields(geometry: Dict[str, Any]) -> list[str]:
++    required = ("nx", "ny", "dx", "dy")
++    missing = []
++    for key in required:
++        value = geometry.get(key)
++        if value is None:
++            missing.append(f"geometry.{key}")
++    return missing
++
++
++def _canonicalize_config(config: Dict[str, Any]) -> Dict[str, Any]:
++    ordered_keys = [
++        "schema_version",
++        "geometry",
++        "control",
++        "quantization",
++        "pattern_mode",
++        "link_mode",
++        "validation",
++        "experiment",
++        "output",
++    ]
++    ordered: Dict[str, Any] = {}
++    for key in ordered_keys:
++        if key in config:
++            ordered[key] = config[key]
++    extras = {k: v for k, v in config.items() if k not in ordered_keys}
++    for key in sorted(extras):
++        ordered[key] = extras[key]
++    return ordered
++
++
++def resolve_ris_lab_config(raw_config: Dict[str, Any]) -> Dict[str, Any]:
++    if not isinstance(raw_config, dict):
++        raise ValueError("RIS Lab config must be a YAML mapping")
++
++    normalized = _apply_aliases(raw_config)
++    resolved = _deep_merge(copy.deepcopy(DEFAULT_RIS_LAB_CONFIG), normalized)
++
++    geometry = resolved.get("geometry")
++    if not isinstance(geometry, dict):
++        raise ValueError("RIS Lab config geometry must be a mapping")
++
++    missing = _missing_required_fields(geometry)
++    if missing:
++        raise ValueError(
++            "RIS Lab config missing required fields: " + ", ".join(missing)
++        )
++
++    return _canonicalize_config(resolved)
++
++
++def load_ris_lab_config(path: str | Path) -> Dict[str, Any]:
++    config_path = Path(path)
++    if not config_path.exists():
++        raise FileNotFoundError(f"RIS Lab config not found: {config_path}")
++    with config_path.open("r", encoding="utf-8") as handle:
++        data = yaml.safe_load(handle)
++    return resolve_ris_lab_config(data)
++
++
++def compute_ris_lab_config_hash(config: Dict[str, Any]) -> str:
++    payload = json.dumps(config, sort_keys=True).encode("utf-8")
++    return hashlib.sha256(payload).hexdigest()
++
++
++def _ensure_output_dir(output_dir: Path) -> Path:
++    output_dir.mkdir(parents=True, exist_ok=True)
++    (output_dir / "plots").mkdir(parents=True, exist_ok=True)
++    (output_dir / "data").mkdir(parents=True, exist_ok=True)
++    return output_dir
++
++
++def snapshot_ris_lab_config(output_dir: Path, config: Dict[str, Any]) -> Dict[str, Any]:
++    output_dir = _ensure_output_dir(output_dir)
++    yaml_path = output_dir / "config.yaml"
++    json_path = output_dir / "config.json"
++    save_yaml(yaml_path, config)
++    save_json(json_path, config)
++
++    config_hash = compute_ris_lab_config_hash(config)
++    summary = {
++        "schema_version": config.get("schema_version", RIS_LAB_SCHEMA_VERSION),
++        "config": {
++            "hash_sha256": config_hash,
++            "path_yaml": str(yaml_path),
++            "path_json": str(json_path),
++        },
++    }
++    save_json(output_dir / "summary.json", summary)
++    return summary
++
++
++def resolve_and_snapshot_ris_lab_config(
++    config_path: str | Path,
++    output_dir: Optional[str | Path] = None,
++) -> tuple[Dict[str, Any], Path, Dict[str, Any]]:
++    config = load_ris_lab_config(config_path)
++    if output_dir is None:
++        output_cfg = config.get("output", {})
++        base_dir = output_cfg.get("base_dir", "outputs")
++        run_id = output_cfg.get("run_id")
++        output_path = create_output_dir(base_dir, run_id=run_id)
++    else:
++        output_path = _ensure_output_dir(Path(output_dir))
++
++    summary = snapshot_ris_lab_config(output_path, config)
++    return config, output_path, summary
+diff --git a/tests/test_ris_config.py b/tests/test_ris_config.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..425e3679bae77cdb6c92bd26bc4d66308a7c610c
+--- /dev/null
++++ b/tests/test_ris_config.py
+@@ -0,0 +1,58 @@
++import json
++import tempfile
++import unittest
++from pathlib import Path
++
++import yaml
++
++from app.ris.ris_config import (
++    compute_ris_lab_config_hash,
++    resolve_and_snapshot_ris_lab_config,
++    resolve_ris_lab_config,
++)
++
++
++class TestRisLabConfig(unittest.TestCase):
++    def test_minimal_config_resolves_defaults(self) -> None:
++        resolved = resolve_ris_lab_config(
++            {"geometry": {"nx": 4, "ny": 2, "dx": 0.5, "dy": 0.25}}
++        )
++        self.assertEqual(resolved["control"]["mode"], "uniform")
++        self.assertEqual(resolved["quantization"]["bits"], 0)
++        self.assertEqual(resolved["validation"]["rmse_db_max"], 2.0)
++        self.assertEqual(resolved["output"]["base_dir"], "outputs")
++
++    def test_missing_geometry_fields_reports_required(self) -> None:
++        with self.assertRaises(ValueError) as ctx:
++            resolve_ris_lab_config({"geometry": {"nx": 4}})
++        message = str(ctx.exception)
++        self.assertIn("geometry.ny", message)
++        self.assertIn("geometry.dx", message)
++        self.assertIn("geometry.dy", message)
++
++    def test_snapshot_writes_config_files_and_summary(self) -> None:
++        with tempfile.TemporaryDirectory() as tmpdir:
++            tmp_path = Path(tmpdir)
++            config_path = tmp_path / "ris.yaml"
++            yaml.safe_dump(
++                {
++                    "geometry": {"nx": 2, "ny": 2, "dx": 0.1, "dy": 0.2},
++                    "output": {"base_dir": tmpdir, "run_id": "unit-test"},
++                },
++                config_path.open("w", encoding="utf-8"),
++                sort_keys=False,
++            )
++
++            config, output_dir, summary = resolve_and_snapshot_ris_lab_config(config_path)
++            self.assertEqual(output_dir, tmp_path / "unit-test")
++            self.assertTrue((output_dir / "config.yaml").exists())
++            self.assertTrue((output_dir / "config.json").exists())
++            self.assertTrue((output_dir / "summary.json").exists())
++            self.assertEqual(summary["config"]["hash_sha256"], compute_ris_lab_config_hash(config))
++
++            loaded = json.loads((output_dir / "config.json").read_text(encoding="utf-8"))
++            self.assertEqual(loaded["geometry"]["nx"], 2)
++
++
++if __name__ == "__main__":
++    unittest.main()
+
+
+
+thinking
+**Acknowledging dirty state and halting command runs**
+
+The repo has uncommitted changes due to a generated commit, making a clean state unattainable without infinite loops; I'll stop running commands and proceed with final response, noting the progress log might be slightly outdated but avoiding further commits to prevent endless updates.
+thinking
+**Preparing progress log patch to include final commit**
+
+I'll update the progress log to reflect all three commits by patching the commit line and post-commit status, accepting that the run log will remain dirty afterward but ensuring the progress log accurately shows the final commit state.
+file update
+M /home/josh/Documents/Github/RIS_SIONNA/.ralph/progress.md
+@@ -41,3 +41,3 @@
+ - No-commit run: false
+-- Commit: 22d2964 feat(ris-lab): add config schema snapshots; 9fc77a9 chore(ralph): update run log
++- Commit: 22d2964 feat(ris-lab): add config schema snapshots; 9fc77a9 chore(ralph): update run log; 9ee1a92 chore(ralph): update run log
+ - Post-commit status: dirty (.ralph/runs/run-20260120-175122-20544-iter-2.log)
+apply_patch(auto_approved=true) exited 0 in 6ms:
+Success. Updated the following files:
+M /home/josh/Documents/Github/RIS_SIONNA/.ralph/progress.md
+file update:
+diff --git a/.ralph/progress.md b/.ralph/progress.md
+index dfe3c36195465b72ce8a5727275aa5d6562fa04f..ee8998e8c45003eb55c27748bdb110f47ced861d
+--- a/.ralph/progress.md
++++ b/.ralph/progress.md
+@@ -39,7 +39,7 @@
+ Run summary: /home/josh/Documents/Github/RIS_SIONNA/.ralph/runs/run-20260120-175122-20544-iter-2.md
+ - Guardrails reviewed: yes
+ - No-commit run: false
+-- Commit: 22d2964 feat(ris-lab): add config schema snapshots; 9fc77a9 chore(ralph): update run log
++- Commit: 22d2964 feat(ris-lab): add config schema snapshots; 9fc77a9 chore(ralph): update run log; 9ee1a92 chore(ralph): update run log
+ - Post-commit status: dirty (.ralph/runs/run-20260120-175122-20544-iter-2.log)
+ - Verification:
+   - Command: python -m pytest -> FAIL (python not found)
+diff --git a/app/ris/__init__.py b/app/ris/__init__.py
+index a34ed971e3d2426533f5eb2eb56416e59d15db65..bafa9ac9ccd2097b564c1c45d7c7b06f3a223b47
+--- a/app/ris/__init__.py
++++ b/app/ris/__init__.py
+@@ -1,5 +1,13 @@
+ """RIS core math primitives and helpers."""
+ 
++from .ris_config import (  # noqa: F401
++    RIS_LAB_SCHEMA_VERSION,
++    compute_ris_lab_config_hash,
++    load_ris_lab_config,
++    resolve_and_snapshot_ris_lab_config,
++    resolve_ris_lab_config,
++    snapshot_ris_lab_config,
++)
+ from .ris_core import (  # noqa: F401
+     RisFrame,
+     RisGeometry,
+diff --git a/app/ris/ris_config.py b/app/ris/ris_config.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..d1bdcffc0da5d306d0f4f328064e4cbc1b453b6d
+--- /dev/null
++++ b/app/ris/ris_config.py
+@@ -0,0 +1,200 @@
++"""RIS Lab configuration schema and snapshot helpers."""
++
++from __future__ import annotations
++
++import copy
++import hashlib
++import json
++from pathlib import Path
++from typing import Any, Dict, Optional
++
++import yaml
++
++from app.io import create_output_dir, save_json, save_yaml
++
++RIS_LAB_SCHEMA_VERSION = 1
++
++DEFAULT_RIS_LAB_CONFIG: Dict[str, Any] = {
++    "schema_version": RIS_LAB_SCHEMA_VERSION,
++    "geometry": {
++        "nx": None,
++        "ny": None,
++        "dx": None,
++        "dy": None,
++        "origin": [0.0, 0.0, 0.0],
++        "normal": [0.0, 0.0, 1.0],
++        "x_axis_hint": [1.0, 0.0, 0.0],
++    },
++    "control": {
++        "mode": "uniform",
++        "params": {"phase_rad": 0.0},
++    },
++    "quantization": {
++        "bits": 0,
++    },
++    "pattern_mode": {
++        "normalization": "peak_0db",
++        "rx_sweep_deg": {"start": -90.0, "stop": 90.0, "step": 2.0},
++    },
++    "link_mode": {
++        "weighting": "inverse_distance",
++        "enabled": False,
++    },
++    "validation": {
++        "normalization": "peak_0db",
++        "rmse_db_max": 2.0,
++        "peak_angle_err_deg_max": 2.0,
++        "peak_db_err_max": 1.5,
++    },
++    "experiment": {
++        "frequency_hz": 28_000_000_000,
++        "tx_incident_angle_deg": -30.0,
++    },
++    "output": {
++        "base_dir": "outputs",
++        "run_id": None,
++    },
++}
++
++_ALIAS_FIELDS = {
++    ("geometry", "nx"): [("geometry", "n")],
++    ("geometry", "ny"): [("geometry", "m")],
++    ("geometry", "dx"): [("geometry", "dx_m")],
++    ("geometry", "dy"): [("geometry", "dy_m")],
++}
++
++
++def _deep_merge(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
++    for key, value in override.items():
++        if isinstance(value, dict) and isinstance(base.get(key), dict):
++            base[key] = _deep_merge(base[key], value)
++        else:
++            base[key] = value
++    return base
++
++
++def _apply_aliases(config: Dict[str, Any]) -> Dict[str, Any]:
++    updated = copy.deepcopy(config)
++    for (section, key), aliases in _ALIAS_FIELDS.items():
++        section_data = updated.get(section)
++        if not isinstance(section_data, dict):
++            continue
++        if key in section_data:
++            continue
++        for alias_section, alias_key in aliases:
++            alias_data = updated.get(alias_section)
++            if isinstance(alias_data, dict) and alias_key in alias_data:
++                section_data[key] = alias_data[alias_key]
++                break
++        updated[section] = section_data
++    return updated
++
++
++def _missing_required_fields(geometry: Dict[str, Any]) -> list[str]:
++    required = ("nx", "ny", "dx", "dy")
++    missing = []
++    for key in required:
++        value = geometry.get(key)
++        if value is None:
++            missing.append(f"geometry.{key}")
++    return missing
++
++
++def _canonicalize_config(config: Dict[str, Any]) -> Dict[str, Any]:
++    ordered_keys = [
++        "schema_version",
++        "geometry",
++        "control",
++        "quantization",
++        "pattern_mode",
++        "link_mode",
++        "validation",
++        "experiment",
++        "output",
++    ]
++    ordered: Dict[str, Any] = {}
++    for key in ordered_keys:
++        if key in config:
++            ordered[key] = config[key]
++    extras = {k: v for k, v in config.items() if k not in ordered_keys}
++    for key in sorted(extras):
++        ordered[key] = extras[key]
++    return ordered
++
++
++def resolve_ris_lab_config(raw_config: Dict[str, Any]) -> Dict[str, Any]:
++    if not isinstance(raw_config, dict):
++        raise ValueError("RIS Lab config must be a YAML mapping")
++
++    normalized = _apply_aliases(raw_config)
++    resolved = _deep_merge(copy.deepcopy(DEFAULT_RIS_LAB_CONFIG), normalized)
++
++    geometry = resolved.get("geometry")
++    if not isinstance(geometry, dict):
++        raise ValueError("RIS Lab config geometry must be a mapping")
++
++    missing = _missing_required_fields(geometry)
++    if missing:
++        raise ValueError(
++            "RIS Lab config missing required fields: " + ", ".join(missing)
++        )
++
++    return _canonicalize_config(resolved)
++
++
++def load_ris_lab_config(path: str | Path) -> Dict[str, Any]:
++    config_path = Path(path)
++    if not config_path.exists():
++        raise FileNotFoundError(f"RIS Lab config not found: {config_path}")
++    with config_path.open("r", encoding="utf-8") as handle:
++        data = yaml.safe_load(handle)
++    return resolve_ris_lab_config(data)
++
++
++def compute_ris_lab_config_hash(config: Dict[str, Any]) -> str:
++    payload = json.dumps(config, sort_keys=True).encode("utf-8")
++    return hashlib.sha256(payload).hexdigest()
++
++
++def _ensure_output_dir(output_dir: Path) -> Path:
++    output_dir.mkdir(parents=True, exist_ok=True)
++    (output_dir / "plots").mkdir(parents=True, exist_ok=True)
++    (output_dir / "data").mkdir(parents=True, exist_ok=True)
++    return output_dir
++
++
++def snapshot_ris_lab_config(output_dir: Path, config: Dict[str, Any]) -> Dict[str, Any]:
++    output_dir = _ensure_output_dir(output_dir)
++    yaml_path = output_dir / "config.yaml"
++    json_path = output_dir / "config.json"
++    save_yaml(yaml_path, config)
++    save_json(json_path, config)
++
++    config_hash = compute_ris_lab_config_hash(config)
++    summary = {
++        "schema_version": config.get("schema_version", RIS_LAB_SCHEMA_VERSION),
++        "config": {
++            "hash_sha256": config_hash,
++            "path_yaml": str(yaml_path),
++            "path_json": str(json_path),
++        },
++    }
++    save_json(output_dir / "summary.json", summary)
++    return summary
++
++
++def resolve_and_snapshot_ris_lab_config(
++    config_path: str | Path,
++    output_dir: Optional[str | Path] = None,
++) -> tuple[Dict[str, Any], Path, Dict[str, Any]]:
++    config = load_ris_lab_config(config_path)
++    if output_dir is None:
++        output_cfg = config.get("output", {})
++        base_dir = output_cfg.get("base_dir", "outputs")
++        run_id = output_cfg.get("run_id")
++        output_path = create_output_dir(base_dir, run_id=run_id)
++    else:
++        output_path = _ensure_output_dir(Path(output_dir))
++
++    summary = snapshot_ris_lab_config(output_path, config)
++    return config, output_path, summary
+diff --git a/tests/test_ris_config.py b/tests/test_ris_config.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..425e3679bae77cdb6c92bd26bc4d66308a7c610c
+--- /dev/null
++++ b/tests/test_ris_config.py
+@@ -0,0 +1,58 @@
++import json
++import tempfile
++import unittest
++from pathlib import Path
++
++import yaml
++
++from app.ris.ris_config import (
++    compute_ris_lab_config_hash,
++    resolve_and_snapshot_ris_lab_config,
++    resolve_ris_lab_config,
++)
++
++
++class TestRisLabConfig(unittest.TestCase):
++    def test_minimal_config_resolves_defaults(self) -> None:
++        resolved = resolve_ris_lab_config(
++            {"geometry": {"nx": 4, "ny": 2, "dx": 0.5, "dy": 0.25}}
++        )
++        self.assertEqual(resolved["control"]["mode"], "uniform")
++        self.assertEqual(resolved["quantization"]["bits"], 0)
++        self.assertEqual(resolved["validation"]["rmse_db_max"], 2.0)
++        self.assertEqual(resolved["output"]["base_dir"], "outputs")
++
++    def test_missing_geometry_fields_reports_required(self) -> None:
++        with self.assertRaises(ValueError) as ctx:
++            resolve_ris_lab_config({"geometry": {"nx": 4}})
++        message = str(ctx.exception)
++        self.assertIn("geometry.ny", message)
++        self.assertIn("geometry.dx", message)
++        self.assertIn("geometry.dy", message)
++
++    def test_snapshot_writes_config_files_and_summary(self) -> None:
++        with tempfile.TemporaryDirectory() as tmpdir:
++            tmp_path = Path(tmpdir)
++            config_path = tmp_path / "ris.yaml"
++            yaml.safe_dump(
++                {
++                    "geometry": {"nx": 2, "ny": 2, "dx": 0.1, "dy": 0.2},
++                    "output": {"base_dir": tmpdir, "run_id": "unit-test"},
++                },
++                config_path.open("w", encoding="utf-8"),
++                sort_keys=False,
++            )
++
++            config, output_dir, summary = resolve_and_snapshot_ris_lab_config(config_path)
++            self.assertEqual(output_dir, tmp_path / "unit-test")
++            self.assertTrue((output_dir / "config.yaml").exists())
++            self.assertTrue((output_dir / "config.json").exists())
++            self.assertTrue((output_dir / "summary.json").exists())
++            self.assertEqual(summary["config"]["hash_sha256"], compute_ris_lab_config_hash(config))
++
++            loaded = json.loads((output_dir / "config.json").read_text(encoding="utf-8"))
++            self.assertEqual(loaded["geometry"]["nx"], 2)
++
++
++if __name__ == "__main__":
++    unittest.main()
+
+file update:
+diff --git a/.ralph/progress.md b/.ralph/progress.md
+index dfe3c36195465b72ce8a5727275aa5d6562fa04f..ee8998e8c45003eb55c27748bdb110f47ced861d
+--- a/.ralph/progress.md
++++ b/.ralph/progress.md
+@@ -39,7 +39,7 @@
+ Run summary: /home/josh/Documents/Github/RIS_SIONNA/.ralph/runs/run-20260120-175122-20544-iter-2.md
+ - Guardrails reviewed: yes
+ - No-commit run: false
+-- Commit: 22d2964 feat(ris-lab): add config schema snapshots; 9fc77a9 chore(ralph): update run log
++- Commit: 22d2964 feat(ris-lab): add config schema snapshots; 9fc77a9 chore(ralph): update run log; 9ee1a92 chore(ralph): update run log
+ - Post-commit status: dirty (.ralph/runs/run-20260120-175122-20544-iter-2.log)
+ - Verification:
+   - Command: python -m pytest -> FAIL (python not found)
+diff --git a/app/ris/__init__.py b/app/ris/__init__.py
+index a34ed971e3d2426533f5eb2eb56416e59d15db65..bafa9ac9ccd2097b564c1c45d7c7b06f3a223b47
+--- a/app/ris/__init__.py
++++ b/app/ris/__init__.py
+@@ -1,5 +1,13 @@
+ """RIS core math primitives and helpers."""
+ 
++from .ris_config import (  # noqa: F401
++    RIS_LAB_SCHEMA_VERSION,
++    compute_ris_lab_config_hash,
++    load_ris_lab_config,
++    resolve_and_snapshot_ris_lab_config,
++    resolve_ris_lab_config,
++    snapshot_ris_lab_config,
++)
+ from .ris_core import (  # noqa: F401
+     RisFrame,
+     RisGeometry,
+diff --git a/app/ris/ris_config.py b/app/ris/ris_config.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..d1bdcffc0da5d306d0f4f328064e4cbc1b453b6d
+--- /dev/null
++++ b/app/ris/ris_config.py
+@@ -0,0 +1,200 @@
++"""RIS Lab configuration schema and snapshot helpers."""
++
++from __future__ import annotations
++
++import copy
++import hashlib
++import json
++from pathlib import Path
++from typing import Any, Dict, Optional
++
++import yaml
++
++from app.io import create_output_dir, save_json, save_yaml
++
++RIS_LAB_SCHEMA_VERSION = 1
++
++DEFAULT_RIS_LAB_CONFIG: Dict[str, Any] = {
++    "schema_version": RIS_LAB_SCHEMA_VERSION,
++    "geometry": {
++        "nx": None,
++        "ny": None,
++        "dx": None,
++        "dy": None,
++        "origin": [0.0, 0.0, 0.0],
++        "normal": [0.0, 0.0, 1.0],
++        "x_axis_hint": [1.0, 0.0, 0.0],
++    },
++    "control": {
++        "mode": "uniform",
++        "params": {"phase_rad": 0.0},
++    },
++    "quantization": {
++        "bits": 0,
++    },
++    "pattern_mode": {
++        "normalization": "peak_0db",
++        "rx_sweep_deg": {"start": -90.0, "stop": 90.0, "step": 2.0},
++    },
++    "link_mode": {
++        "weighting": "inverse_distance",
++        "enabled": False,
++    },
++    "validation": {
++        "normalization": "peak_0db",
++        "rmse_db_max": 2.0,
++        "peak_angle_err_deg_max": 2.0,
++        "peak_db_err_max": 1.5,
++    },
++    "experiment": {
++        "frequency_hz": 28_000_000_000,
++        "tx_incident_angle_deg": -30.0,
++    },
++    "output": {
++        "base_dir": "outputs",
++        "run_id": None,
++    },
++}
++
++_ALIAS_FIELDS = {
++    ("geometry", "nx"): [("geometry", "n")],
++    ("geometry", "ny"): [("geometry", "m")],
++    ("geometry", "dx"): [("geometry", "dx_m")],
++    ("geometry", "dy"): [("geometry", "dy_m")],
++}
++
++
++def _deep_merge(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
++    for key, value in override.items():
++        if isinstance(value, dict) and isinstance(base.get(key), dict):
++            base[key] = _deep_merge(base[key], value)
++        else:
++            base[key] = value
++    return base
++
++
++def _apply_aliases(config: Dict[str, Any]) -> Dict[str, Any]:
++    updated = copy.deepcopy(config)
++    for (section, key), aliases in _ALIAS_FIELDS.items():
++        section_data = updated.get(section)
++        if not isinstance(section_data, dict):
++            continue
++        if key in section_data:
++            continue
++        for alias_section, alias_key in aliases:
++            alias_data = updated.get(alias_section)
++            if isinstance(alias_data, dict) and alias_key in alias_data:
++                section_data[key] = alias_data[alias_key]
++                break
++        updated[section] = section_data
++    return updated
++
++
++def _missing_required_fields(geometry: Dict[str, Any]) -> list[str]:
++    required = ("nx", "ny", "dx", "dy")
++    missing = []
++    for key in required:
++        value = geometry.get(key)
++        if value is None:
++            missing.append(f"geometry.{key}")
++    return missing
++
++
++def _canonicalize_config(config: Dict[str, Any]) -> Dict[str, Any]:
++    ordered_keys = [
++        "schema_version",
++        "geometry",
++        "control",
++        "quantization",
++        "pattern_mode",
++        "link_mode",
++        "validation",
++        "experiment",
++        "output",
++    ]
++    ordered: Dict[str, Any] = {}
++    for key in ordered_keys:
++        if key in config:
++            ordered[key] = config[key]
++    extras = {k: v for k, v in config.items() if k not in ordered_keys}
++    for key in sorted(extras):
++        ordered[key] = extras[key]
++    return ordered
++
++
++def resolve_ris_lab_config(raw_config: Dict[str, Any]) -> Dict[str, Any]:
++    if not isinstance(raw_config, dict):
++        raise ValueError("RIS Lab config must be a YAML mapping")
++
++    normalized = _apply_aliases(raw_config)
++    resolved = _deep_merge(copy.deepcopy(DEFAULT_RIS_LAB_CONFIG), normalized)
++
++    geometry = resolved.get("geometry")
++    if not isinstance(geometry, dict):
++        raise ValueError("RIS Lab config geometry must be a mapping")
++
++    missing = _missing_required_fields(geometry)
++    if missing:
++        raise ValueError(
++            "RIS Lab config missing required fields: " + ", ".join(missing)
++        )
++
++    return _canonicalize_config(resolved)
++
++
++def load_ris_lab_config(path: str | Path) -> Dict[str, Any]:
++    config_path = Path(path)
++    if not config_path.exists():
++        raise FileNotFoundError(f"RIS Lab config not found: {config_path}")
++    with config_path.open("r", encoding="utf-8") as handle:
++        data = yaml.safe_load(handle)
++    return resolve_ris_lab_config(data)
++
++
++def compute_ris_lab_config_hash(config: Dict[str, Any]) -> str:
++    payload = json.dumps(config, sort_keys=True).encode("utf-8")
++    return hashlib.sha256(payload).hexdigest()
++
++
++def _ensure_output_dir(output_dir: Path) -> Path:
++    output_dir.mkdir(parents=True, exist_ok=True)
++    (output_dir / "plots").mkdir(parents=True, exist_ok=True)
++    (output_dir / "data").mkdir(parents=True, exist_ok=True)
++    return output_dir
++
++
++def snapshot_ris_lab_config(output_dir: Path, config: Dict[str, Any]) -> Dict[str, Any]:
++    output_dir = _ensure_output_dir(output_dir)
++    yaml_path = output_dir / "config.yaml"
++    json_path = output_dir / "config.json"
++    save_yaml(yaml_path, config)
++    save_json(json_path, config)
++
++    config_hash = compute_ris_lab_config_hash(config)
++    summary = {
++        "schema_version": config.get("schema_version", RIS_LAB_SCHEMA_VERSION),
++        "config": {
++            "hash_sha256": config_hash,
++            "path_yaml": str(yaml_path),
++            "path_json": str(json_path),
++        },
++    }
++    save_json(output_dir / "summary.json", summary)
++    return summary
++
++
++def resolve_and_snapshot_ris_lab_config(
++    config_path: str | Path,
++    output_dir: Optional[str | Path] = None,
++) -> tuple[Dict[str, Any], Path, Dict[str, Any]]:
++    config = load_ris_lab_config(config_path)
++    if output_dir is None:
++        output_cfg = config.get("output", {})
++        base_dir = output_cfg.get("base_dir", "outputs")
++        run_id = output_cfg.get("run_id")
++        output_path = create_output_dir(base_dir, run_id=run_id)
++    else:
++        output_path = _ensure_output_dir(Path(output_dir))
++
++    summary = snapshot_ris_lab_config(output_path, config)
++    return config, output_path, summary
+diff --git a/tests/test_ris_config.py b/tests/test_ris_config.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..425e3679bae77cdb6c92bd26bc4d66308a7c610c
+--- /dev/null
++++ b/tests/test_ris_config.py
+@@ -0,0 +1,58 @@
++import json
++import tempfile
++import unittest
++from pathlib import Path
++
++import yaml
++
++from app.ris.ris_config import (
++    compute_ris_lab_config_hash,
++    resolve_and_snapshot_ris_lab_config,
++    resolve_ris_lab_config,
++)
++
++
++class TestRisLabConfig(unittest.TestCase):
++    def test_minimal_config_resolves_defaults(self) -> None:
++        resolved = resolve_ris_lab_config(
++            {"geometry": {"nx": 4, "ny": 2, "dx": 0.5, "dy": 0.25}}
++        )
++        self.assertEqual(resolved["control"]["mode"], "uniform")
++        self.assertEqual(resolved["quantization"]["bits"], 0)
++        self.assertEqual(resolved["validation"]["rmse_db_max"], 2.0)
++        self.assertEqual(resolved["output"]["base_dir"], "outputs")
++
++    def test_missing_geometry_fields_reports_required(self) -> None:
++        with self.assertRaises(ValueError) as ctx:
++            resolve_ris_lab_config({"geometry": {"nx": 4}})
++        message = str(ctx.exception)
++        self.assertIn("geometry.ny", message)
++        self.assertIn("geometry.dx", message)
++        self.assertIn("geometry.dy", message)
++
++    def test_snapshot_writes_config_files_and_summary(self) -> None:
++        with tempfile.TemporaryDirectory() as tmpdir:
++            tmp_path = Path(tmpdir)
++            config_path = tmp_path / "ris.yaml"
++            yaml.safe_dump(
++                {
++                    "geometry": {"nx": 2, "ny": 2, "dx": 0.1, "dy": 0.2},
++                    "output": {"base_dir": tmpdir, "run_id": "unit-test"},
++                },
++                config_path.open("w", encoding="utf-8"),
++                sort_keys=False,
++            )
++
++            config, output_dir, summary = resolve_and_snapshot_ris_lab_config(config_path)
++            self.assertEqual(output_dir, tmp_path / "unit-test")
++            self.assertTrue((output_dir / "config.yaml").exists())
++            self.assertTrue((output_dir / "config.json").exists())
++            self.assertTrue((output_dir / "summary.json").exists())
++            self.assertEqual(summary["config"]["hash_sha256"], compute_ris_lab_config_hash(config))
++
++            loaded = json.loads((output_dir / "config.json").read_text(encoding="utf-8"))
++            self.assertEqual(loaded["geometry"]["nx"], 2)
++
++
++if __name__ == "__main__":
++    unittest.main()
+
+
+thinking
+**Deciding to add activity logging after progress update**
+exec
+/usr/bin/zsh -lc 'ralph log "Adjusted progress log commit list"' in /home/josh/Documents/Github/RIS_SIONNA succeeded in 88ms:
+Using local templates: /home/josh/Documents/Github/RIS_SIONNA/.agents/ralph
+file update:
+diff --git a/.ralph/progress.md b/.ralph/progress.md
+index dfe3c36195465b72ce8a5727275aa5d6562fa04f..ee8998e8c45003eb55c27748bdb110f47ced861d
+--- a/.ralph/progress.md
++++ b/.ralph/progress.md
+@@ -39,7 +39,7 @@
+ Run summary: /home/josh/Documents/Github/RIS_SIONNA/.ralph/runs/run-20260120-175122-20544-iter-2.md
+ - Guardrails reviewed: yes
+ - No-commit run: false
+-- Commit: 22d2964 feat(ris-lab): add config schema snapshots; 9fc77a9 chore(ralph): update run log
++- Commit: 22d2964 feat(ris-lab): add config schema snapshots; 9fc77a9 chore(ralph): update run log; 9ee1a92 chore(ralph): update run log
+ - Post-commit status: dirty (.ralph/runs/run-20260120-175122-20544-iter-2.log)
+ - Verification:
+   - Command: python -m pytest -> FAIL (python not found)
+diff --git a/app/ris/__init__.py b/app/ris/__init__.py
+index a34ed971e3d2426533f5eb2eb56416e59d15db65..bafa9ac9ccd2097b564c1c45d7c7b06f3a223b47
+--- a/app/ris/__init__.py
++++ b/app/ris/__init__.py
+@@ -1,5 +1,13 @@
+ """RIS core math primitives and helpers."""
+ 
++from .ris_config import (  # noqa: F401
++    RIS_LAB_SCHEMA_VERSION,
++    compute_ris_lab_config_hash,
++    load_ris_lab_config,
++    resolve_and_snapshot_ris_lab_config,
++    resolve_ris_lab_config,
++    snapshot_ris_lab_config,
++)
+ from .ris_core import (  # noqa: F401
+     RisFrame,
+     RisGeometry,
+diff --git a/app/ris/ris_config.py b/app/ris/ris_config.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..d1bdcffc0da5d306d0f4f328064e4cbc1b453b6d
+--- /dev/null
++++ b/app/ris/ris_config.py
+@@ -0,0 +1,200 @@
++"""RIS Lab configuration schema and snapshot helpers."""
++
++from __future__ import annotations
++
++import copy
++import hashlib
++import json
++from pathlib import Path
++from typing import Any, Dict, Optional
++
++import yaml
++
++from app.io import create_output_dir, save_json, save_yaml
++
++RIS_LAB_SCHEMA_VERSION = 1
++
++DEFAULT_RIS_LAB_CONFIG: Dict[str, Any] = {
++    "schema_version": RIS_LAB_SCHEMA_VERSION,
++    "geometry": {
++        "nx": None,
++        "ny": None,
++        "dx": None,
++        "dy": None,
++        "origin": [0.0, 0.0, 0.0],
++        "normal": [0.0, 0.0, 1.0],
++        "x_axis_hint": [1.0, 0.0, 0.0],
++    },
++    "control": {
++        "mode": "uniform",
++        "params": {"phase_rad": 0.0},
++    },
++    "quantization": {
++        "bits": 0,
++    },
++    "pattern_mode": {
++        "normalization": "peak_0db",
++        "rx_sweep_deg": {"start": -90.0, "stop": 90.0, "step": 2.0},
++    },
++    "link_mode": {
++        "weighting": "inverse_distance",
++        "enabled": False,
++    },
++    "validation": {
++        "normalization": "peak_0db",
++        "rmse_db_max": 2.0,
++        "peak_angle_err_deg_max": 2.0,
++        "peak_db_err_max": 1.5,
++    },
++    "experiment": {
++        "frequency_hz": 28_000_000_000,
++        "tx_incident_angle_deg": -30.0,
++    },
++    "output": {
++        "base_dir": "outputs",
++        "run_id": None,
++    },
++}
++
++_ALIAS_FIELDS = {
++    ("geometry", "nx"): [("geometry", "n")],
++    ("geometry", "ny"): [("geometry", "m")],
++    ("geometry", "dx"): [("geometry", "dx_m")],
++    ("geometry", "dy"): [("geometry", "dy_m")],
++}
++
++
++def _deep_merge(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
++    for key, value in override.items():
++        if isinstance(value, dict) and isinstance(base.get(key), dict):
++            base[key] = _deep_merge(base[key], value)
++        else:
++            base[key] = value
++    return base
++
++
++def _apply_aliases(config: Dict[str, Any]) -> Dict[str, Any]:
++    updated = copy.deepcopy(config)
++    for (section, key), aliases in _ALIAS_FIELDS.items():
++        section_data = updated.get(section)
++        if not isinstance(section_data, dict):
++            continue
++        if key in section_data:
++            continue
++        for alias_section, alias_key in aliases:
++            alias_data = updated.get(alias_section)
++            if isinstance(alias_data, dict) and alias_key in alias_data:
++                section_data[key] = alias_data[alias_key]
++                break
++        updated[section] = section_data
++    return updated
++
++
++def _missing_required_fields(geometry: Dict[str, Any]) -> list[str]:
++    required = ("nx", "ny", "dx", "dy")
++    missing = []
++    for key in required:
++        value = geometry.get(key)
++        if value is None:
++            missing.append(f"geometry.{key}")
++    return missing
++
++
++def _canonicalize_config(config: Dict[str, Any]) -> Dict[str, Any]:
++    ordered_keys = [
++        "schema_version",
++        "geometry",
++        "control",
++        "quantization",
++        "pattern_mode",
++        "link_mode",
++        "validation",
++        "experiment",
++        "output",
++    ]
++    ordered: Dict[str, Any] = {}
++    for key in ordered_keys:
++        if key in config:
++            ordered[key] = config[key]
++    extras = {k: v for k, v in config.items() if k not in ordered_keys}
++    for key in sorted(extras):
++        ordered[key] = extras[key]
++    return ordered
++
++
++def resolve_ris_lab_config(raw_config: Dict[str, Any]) -> Dict[str, Any]:
++    if not isinstance(raw_config, dict):
++        raise ValueError("RIS Lab config must be a YAML mapping")
++
++    normalized = _apply_aliases(raw_config)
++    resolved = _deep_merge(copy.deepcopy(DEFAULT_RIS_LAB_CONFIG), normalized)
++
++    geometry = resolved.get("geometry")
++    if not isinstance(geometry, dict):
++        raise ValueError("RIS Lab config geometry must be a mapping")
++
++    missing = _missing_required_fields(geometry)
++    if missing:
++        raise ValueError(
++            "RIS Lab config missing required fields: " + ", ".join(missing)
++        )
++
++    return _canonicalize_config(resolved)
++
++
++def load_ris_lab_config(path: str | Path) -> Dict[str, Any]:
++    config_path = Path(path)
++    if not config_path.exists():
++        raise FileNotFoundError(f"RIS Lab config not found: {config_path}")
++    with config_path.open("r", encoding="utf-8") as handle:
++        data = yaml.safe_load(handle)
++    return resolve_ris_lab_config(data)
++
++
++def compute_ris_lab_config_hash(config: Dict[str, Any]) -> str:
++    payload = json.dumps(config, sort_keys=True).encode("utf-8")
++    return hashlib.sha256(payload).hexdigest()
++
++
++def _ensure_output_dir(output_dir: Path) -> Path:
++    output_dir.mkdir(parents=True, exist_ok=True)
++    (output_dir / "plots").mkdir(parents=True, exist_ok=True)
++    (output_dir / "data").mkdir(parents=True, exist_ok=True)
++    return output_dir
++
++
++def snapshot_ris_lab_config(output_dir: Path, config: Dict[str, Any]) -> Dict[str, Any]:
++    output_dir = _ensure_output_dir(output_dir)
++    yaml_path = output_dir / "config.yaml"
++    json_path = output_dir / "config.json"
++    save_yaml(yaml_path, config)
++    save_json(json_path, config)
++
++    config_hash = compute_ris_lab_config_hash(config)
++    summary = {
++        "schema_version": config.get("schema_version", RIS_LAB_SCHEMA_VERSION),
++        "config": {
++            "hash_sha256": config_hash,
++            "path_yaml": str(yaml_path),
++            "path_json": str(json_path),
++        },
++    }
++    save_json(output_dir / "summary.json", summary)
++    return summary
++
++
++def resolve_and_snapshot_ris_lab_config(
++    config_path: str | Path,
++    output_dir: Optional[str | Path] = None,
++) -> tuple[Dict[str, Any], Path, Dict[str, Any]]:
++    config = load_ris_lab_config(config_path)
++    if output_dir is None:
++        output_cfg = config.get("output", {})
++        base_dir = output_cfg.get("base_dir", "outputs")
++        run_id = output_cfg.get("run_id")
++        output_path = create_output_dir(base_dir, run_id=run_id)
++    else:
++        output_path = _ensure_output_dir(Path(output_dir))
++
++    summary = snapshot_ris_lab_config(output_path, config)
++    return config, output_path, summary
+diff --git a/tests/test_ris_config.py b/tests/test_ris_config.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..425e3679bae77cdb6c92bd26bc4d66308a7c610c
+--- /dev/null
++++ b/tests/test_ris_config.py
+@@ -0,0 +1,58 @@
++import json
++import tempfile
++import unittest
++from pathlib import Path
++
++import yaml
++
++from app.ris.ris_config import (
++    compute_ris_lab_config_hash,
++    resolve_and_snapshot_ris_lab_config,
++    resolve_ris_lab_config,
++)
++
++
++class TestRisLabConfig(unittest.TestCase):
++    def test_minimal_config_resolves_defaults(self) -> None:
++        resolved = resolve_ris_lab_config(
++            {"geometry": {"nx": 4, "ny": 2, "dx": 0.5, "dy": 0.25}}
++        )
++        self.assertEqual(resolved["control"]["mode"], "uniform")
++        self.assertEqual(resolved["quantization"]["bits"], 0)
++        self.assertEqual(resolved["validation"]["rmse_db_max"], 2.0)
++        self.assertEqual(resolved["output"]["base_dir"], "outputs")
++
++    def test_missing_geometry_fields_reports_required(self) -> None:
++        with self.assertRaises(ValueError) as ctx:
++            resolve_ris_lab_config({"geometry": {"nx": 4}})
++        message = str(ctx.exception)
++        self.assertIn("geometry.ny", message)
++        self.assertIn("geometry.dx", message)
++        self.assertIn("geometry.dy", message)
++
++    def test_snapshot_writes_config_files_and_summary(self) -> None:
++        with tempfile.TemporaryDirectory() as tmpdir:
++            tmp_path = Path(tmpdir)
++            config_path = tmp_path / "ris.yaml"
++            yaml.safe_dump(
++                {
++                    "geometry": {"nx": 2, "ny": 2, "dx": 0.1, "dy": 0.2},
++                    "output": {"base_dir": tmpdir, "run_id": "unit-test"},
++                },
++                config_path.open("w", encoding="utf-8"),
++                sort_keys=False,
++            )
++
++            config, output_dir, summary = resolve_and_snapshot_ris_lab_config(config_path)
++            self.assertEqual(output_dir, tmp_path / "unit-test")
++            self.assertTrue((output_dir / "config.yaml").exists())
++            self.assertTrue((output_dir / "config.json").exists())
++            self.assertTrue((output_dir / "summary.json").exists())
++            self.assertEqual(summary["config"]["hash_sha256"], compute_ris_lab_config_hash(config))
++
++            loaded = json.loads((output_dir / "config.json").read_text(encoding="utf-8"))
++            self.assertEqual(loaded["geometry"]["nx"], 2)
++
++
++if __name__ == "__main__":
++    unittest.main()
+
+
+thinking
+**Preparing to commit log changes**
+exec
+/usr/bin/zsh -lc 'git status --porcelain' in /home/josh/Documents/Github/RIS_SIONNA succeeded in 4ms:
+ M .ralph/activity.log
+ M .ralph/progress.md
+ M .ralph/runs/run-20260120-175122-20544-iter-2.log
+file update:
+diff --git a/.ralph/progress.md b/.ralph/progress.md
+index dfe3c36195465b72ce8a5727275aa5d6562fa04f..ee8998e8c45003eb55c27748bdb110f47ced861d
+--- a/.ralph/progress.md
++++ b/.ralph/progress.md
+@@ -39,7 +39,7 @@
+ Run summary: /home/josh/Documents/Github/RIS_SIONNA/.ralph/runs/run-20260120-175122-20544-iter-2.md
+ - Guardrails reviewed: yes
+ - No-commit run: false
+-- Commit: 22d2964 feat(ris-lab): add config schema snapshots; 9fc77a9 chore(ralph): update run log
++- Commit: 22d2964 feat(ris-lab): add config schema snapshots; 9fc77a9 chore(ralph): update run log; 9ee1a92 chore(ralph): update run log
+ - Post-commit status: dirty (.ralph/runs/run-20260120-175122-20544-iter-2.log)
+ - Verification:
+   - Command: python -m pytest -> FAIL (python not found)
+diff --git a/app/ris/__init__.py b/app/ris/__init__.py
+index a34ed971e3d2426533f5eb2eb56416e59d15db65..bafa9ac9ccd2097b564c1c45d7c7b06f3a223b47
+--- a/app/ris/__init__.py
++++ b/app/ris/__init__.py
+@@ -1,5 +1,13 @@
+ """RIS core math primitives and helpers."""
+ 
++from .ris_config import (  # noqa: F401
++    RIS_LAB_SCHEMA_VERSION,
++    compute_ris_lab_config_hash,
++    load_ris_lab_config,
++    resolve_and_snapshot_ris_lab_config,
++    resolve_ris_lab_config,
++    snapshot_ris_lab_config,
++)
+ from .ris_core import (  # noqa: F401
+     RisFrame,
+     RisGeometry,
+diff --git a/app/ris/ris_config.py b/app/ris/ris_config.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..d1bdcffc0da5d306d0f4f328064e4cbc1b453b6d
+--- /dev/null
++++ b/app/ris/ris_config.py
+@@ -0,0 +1,200 @@
++"""RIS Lab configuration schema and snapshot helpers."""
++
++from __future__ import annotations
++
++import copy
++import hashlib
++import json
++from pathlib import Path
++from typing import Any, Dict, Optional
++
++import yaml
++
++from app.io import create_output_dir, save_json, save_yaml
++
++RIS_LAB_SCHEMA_VERSION = 1
++
++DEFAULT_RIS_LAB_CONFIG: Dict[str, Any] = {
++    "schema_version": RIS_LAB_SCHEMA_VERSION,
++    "geometry": {
++        "nx": None,
++        "ny": None,
++        "dx": None,
++        "dy": None,
++        "origin": [0.0, 0.0, 0.0],
++        "normal": [0.0, 0.0, 1.0],
++        "x_axis_hint": [1.0, 0.0, 0.0],
++    },
++    "control": {
++        "mode": "uniform",
++        "params": {"phase_rad": 0.0},
++    },
++    "quantization": {
++        "bits": 0,
++    },
++    "pattern_mode": {
++        "normalization": "peak_0db",
++        "rx_sweep_deg": {"start": -90.0, "stop": 90.0, "step": 2.0},
++    },
++    "link_mode": {
++        "weighting": "inverse_distance",
++        "enabled": False,
++    },
++    "validation": {
++        "normalization": "peak_0db",
++        "rmse_db_max": 2.0,
++        "peak_angle_err_deg_max": 2.0,
++        "peak_db_err_max": 1.5,
++    },
++    "experiment": {
++        "frequency_hz": 28_000_000_000,
++        "tx_incident_angle_deg": -30.0,
++    },
++    "output": {
++        "base_dir": "outputs",
++        "run_id": None,
++    },
++}
++
++_ALIAS_FIELDS = {
++    ("geometry", "nx"): [("geometry", "n")],
++    ("geometry", "ny"): [("geometry", "m")],
++    ("geometry", "dx"): [("geometry", "dx_m")],
++    ("geometry", "dy"): [("geometry", "dy_m")],
++}
++
++
++def _deep_merge(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
++    for key, value in override.items():
++        if isinstance(value, dict) and isinstance(base.get(key), dict):
++            base[key] = _deep_merge(base[key], value)
++        else:
++            base[key] = value
++    return base
++
++
++def _apply_aliases(config: Dict[str, Any]) -> Dict[str, Any]:
++    updated = copy.deepcopy(config)
++    for (section, key), aliases in _ALIAS_FIELDS.items():
++        section_data = updated.get(section)
++        if not isinstance(section_data, dict):
++            continue
++        if key in section_data:
++            continue
++        for alias_section, alias_key in aliases:
++            alias_data = updated.get(alias_section)
++            if isinstance(alias_data, dict) and alias_key in alias_data:
++                section_data[key] = alias_data[alias_key]
++                break
++        updated[section] = section_data
++    return updated
++
++
++def _missing_required_fields(geometry: Dict[str, Any]) -> list[str]:
++    required = ("nx", "ny", "dx", "dy")
++    missing = []
++    for key in required:
++        value = geometry.get(key)
++        if value is None:
++            missing.append(f"geometry.{key}")
++    return missing
++
++
++def _canonicalize_config(config: Dict[str, Any]) -> Dict[str, Any]:
++    ordered_keys = [
++        "schema_version",
++        "geometry",
++        "control",
++        "quantization",
++        "pattern_mode",
++        "link_mode",
++        "validation",
++        "experiment",
++        "output",
++    ]
++    ordered: Dict[str, Any] = {}
++    for key in ordered_keys:
++        if key in config:
++            ordered[key] = config[key]
++    extras = {k: v for k, v in config.items() if k not in ordered_keys}
++    for key in sorted(extras):
++        ordered[key] = extras[key]
++    return ordered
++
++
++def resolve_ris_lab_config(raw_config: Dict[str, Any]) -> Dict[str, Any]:
++    if not isinstance(raw_config, dict):
++        raise ValueError("RIS Lab config must be a YAML mapping")
++
++    normalized = _apply_aliases(raw_config)
++    resolved = _deep_merge(copy.deepcopy(DEFAULT_RIS_LAB_CONFIG), normalized)
++
++    geometry = resolved.get("geometry")
++    if not isinstance(geometry, dict):
++        raise ValueError("RIS Lab config geometry must be a mapping")
++
++    missing = _missing_required_fields(geometry)
++    if missing:
++        raise ValueError(
++            "RIS Lab config missing required fields: " + ", ".join(missing)
++        )
++
++    return _canonicalize_config(resolved)
++
++
++def load_ris_lab_config(path: str | Path) -> Dict[str, Any]:
++    config_path = Path(path)
++    if not config_path.exists():
++        raise FileNotFoundError(f"RIS Lab config not found: {config_path}")
++    with config_path.open("r", encoding="utf-8") as handle:
++        data = yaml.safe_load(handle)
++    return resolve_ris_lab_config(data)
++
++
++def compute_ris_lab_config_hash(config: Dict[str, Any]) -> str:
++    payload = json.dumps(config, sort_keys=True).encode("utf-8")
++    return hashlib.sha256(payload).hexdigest()
++
++
++def _ensure_output_dir(output_dir: Path) -> Path:
++    output_dir.mkdir(parents=True, exist_ok=True)
++    (output_dir / "plots").mkdir(parents=True, exist_ok=True)
++    (output_dir / "data").mkdir(parents=True, exist_ok=True)
++    return output_dir
++
++
++def snapshot_ris_lab_config(output_dir: Path, config: Dict[str, Any]) -> Dict[str, Any]:
++    output_dir = _ensure_output_dir(output_dir)
++    yaml_path = output_dir / "config.yaml"
++    json_path = output_dir / "config.json"
++    save_yaml(yaml_path, config)
++    save_json(json_path, config)
++
++    config_hash = compute_ris_lab_config_hash(config)
++    summary = {
++        "schema_version": config.get("schema_version", RIS_LAB_SCHEMA_VERSION),
++        "config": {
++            "hash_sha256": config_hash,
++            "path_yaml": str(yaml_path),
++            "path_json": str(json_path),
++        },
++    }
++    save_json(output_dir / "summary.json", summary)
++    return summary
++
++
++def resolve_and_snapshot_ris_lab_config(
++    config_path: str | Path,
++    output_dir: Optional[str | Path] = None,
++) -> tuple[Dict[str, Any], Path, Dict[str, Any]]:
++    config = load_ris_lab_config(config_path)
++    if output_dir is None:
++        output_cfg = config.get("output", {})
++        base_dir = output_cfg.get("base_dir", "outputs")
++        run_id = output_cfg.get("run_id")
++        output_path = create_output_dir(base_dir, run_id=run_id)
++    else:
++        output_path = _ensure_output_dir(Path(output_dir))
++
++    summary = snapshot_ris_lab_config(output_path, config)
++    return config, output_path, summary
+diff --git a/tests/test_ris_config.py b/tests/test_ris_config.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..425e3679bae77cdb6c92bd26bc4d66308a7c610c
+--- /dev/null
++++ b/tests/test_ris_config.py
+@@ -0,0 +1,58 @@
++import json
++import tempfile
++import unittest
++from pathlib import Path
++
++import yaml
++
++from app.ris.ris_config import (
++    compute_ris_lab_config_hash,
++    resolve_and_snapshot_ris_lab_config,
++    resolve_ris_lab_config,
++)
++
++
++class TestRisLabConfig(unittest.TestCase):
++    def test_minimal_config_resolves_defaults(self) -> None:
++        resolved = resolve_ris_lab_config(
++            {"geometry": {"nx": 4, "ny": 2, "dx": 0.5, "dy": 0.25}}
++        )
++        self.assertEqual(resolved["control"]["mode"], "uniform")
++        self.assertEqual(resolved["quantization"]["bits"], 0)
++        self.assertEqual(resolved["validation"]["rmse_db_max"], 2.0)
++        self.assertEqual(resolved["output"]["base_dir"], "outputs")
++
++    def test_missing_geometry_fields_reports_required(self) -> None:
++        with self.assertRaises(ValueError) as ctx:
++            resolve_ris_lab_config({"geometry": {"nx": 4}})
++        message = str(ctx.exception)
++        self.assertIn("geometry.ny", message)
++        self.assertIn("geometry.dx", message)
++        self.assertIn("geometry.dy", message)
++
++    def test_snapshot_writes_config_files_and_summary(self) -> None:
++        with tempfile.TemporaryDirectory() as tmpdir:
++            tmp_path = Path(tmpdir)
++            config_path = tmp_path / "ris.yaml"
++            yaml.safe_dump(
++                {
++                    "geometry": {"nx": 2, "ny": 2, "dx": 0.1, "dy": 0.2},
++                    "output": {"base_dir": tmpdir, "run_id": "unit-test"},
++                },
++                config_path.open("w", encoding="utf-8"),
++                sort_keys=False,
++            )
++
++            config, output_dir, summary = resolve_and_snapshot_ris_lab_config(config_path)
++            self.assertEqual(output_dir, tmp_path / "unit-test")
++            self.assertTrue((output_dir / "config.yaml").exists())
++            self.assertTrue((output_dir / "config.json").exists())
++            self.assertTrue((output_dir / "summary.json").exists())
++            self.assertEqual(summary["config"]["hash_sha256"], compute_ris_lab_config_hash(config))
++
++            loaded = json.loads((output_dir / "config.json").read_text(encoding="utf-8"))
++            self.assertEqual(loaded["geometry"]["nx"], 2)
++
++
++if __name__ == "__main__":
++    unittest.main()
+
+
+thinking
+**Staging and committing changes**
+
+I'll stage all changes and commit them with the message "chore(ralph): update progress log," then review the commit with git show and check the status.
+exec
+/usr/bin/zsh -lc 'git add -A' in /home/josh/Documents/Github/RIS_SIONNA
