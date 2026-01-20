@@ -135,6 +135,7 @@ def _plot_phase_map(phase_map: np.ndarray, output_dir: Path) -> Path:
 
 
 def _plot_pattern(theta_deg: np.ndarray, pattern_db: np.ndarray, output_dir: Path) -> Tuple[Path, Path]:
+    _validate_theta_pattern_lengths(theta_deg, pattern_db, "pattern_db")
     fig, ax = plt.subplots(figsize=(7, 4))
     ax.plot(theta_deg, pattern_db, color="#005f73", linewidth=2.0)
     ax.set_title("RIS Pattern (Normalized)")
@@ -177,6 +178,38 @@ def _load_reference_csv(path: Path) -> Tuple[np.ndarray, np.ndarray, str]:
             theta_vals.append(float(row["theta_deg"]))
             pattern_vals.append(float(row[pattern_kind]))
     return np.array(theta_vals, dtype=float), np.array(pattern_vals, dtype=float), pattern_kind
+
+
+def _validate_theta_pattern_lengths(
+    theta_deg: np.ndarray, pattern: np.ndarray, pattern_name: str
+) -> None:
+    if len(theta_deg) != len(pattern):
+        raise ValueError(
+            "theta_deg length does not match "
+            f"{pattern_name} length: {len(theta_deg)} != {len(pattern)}"
+        )
+
+
+def _compute_sidelobe_metrics(
+    theta_deg: np.ndarray, pattern_db: np.ndarray
+) -> Dict[str, Any]:
+    _validate_theta_pattern_lengths(theta_deg, pattern_db, "pattern_db")
+    if len(pattern_db) < 2:
+        return {
+            "sidelobe_level_db": None,
+            "sidelobe_peak_db": None,
+            "sidelobe_definition": "undefined for fewer than 2 samples",
+        }
+    peak_idx = int(np.argmax(pattern_db))
+    sidelobe_mask = np.ones_like(pattern_db, dtype=bool)
+    sidelobe_mask[peak_idx] = False
+    sidelobe_peak_db = float(np.max(pattern_db[sidelobe_mask]))
+    peak_db = float(pattern_db[peak_idx])
+    return {
+        "sidelobe_level_db": float(peak_db - sidelobe_peak_db),
+        "sidelobe_peak_db": sidelobe_peak_db,
+        "sidelobe_definition": "peak_db - max(pattern_db excluding peak index)",
+    }
 
 
 def _write_metrics(output_dir: Path, metrics: Dict[str, Any]) -> None:
@@ -259,12 +292,15 @@ def run_ris_lab(config_path: str, mode: str) -> Path:
             normalization = config["pattern_mode"].get("normalization", "peak_0db")
             linear_norm = _apply_normalization(linear, normalization)
             pattern_db = 10.0 * np.log10(linear_norm + _DB_FLOOR)
+            _validate_theta_pattern_lengths(theta_deg, linear_norm, "pattern_linear")
+            _validate_theta_pattern_lengths(theta_deg, pattern_db, "pattern_db")
             np.save(data_dir / "theta_deg.npy", theta_deg)
             np.save(data_dir / "pattern_linear.npy", linear_norm)
             np.save(data_dir / "pattern_db.npy", pattern_db)
             _plot_pattern(theta_deg, pattern_db, plots_dir)
 
             peak_idx = int(np.argmax(pattern_db))
+            sidelobe_metrics = _compute_sidelobe_metrics(theta_deg, pattern_db)
             metrics = {
                 "run_id": run_id,
                 "mode": mode,
@@ -274,6 +310,7 @@ def run_ris_lab(config_path: str, mode: str) -> Path:
                 "peak_angle_deg": float(theta_deg[peak_idx]),
                 "peak_db": float(pattern_db[peak_idx]),
                 "peak_linear": float(linear_norm[peak_idx]),
+                **sidelobe_metrics,
             }
         elif mode == "link":
             link_cfg = config.get("link_mode", {})

@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-01-20 18:31:34 | run=20260120-175122-20544 | iter=4 | mode=build | story=US-003A | duration=570s | status=success
 - 2026-01-20 18:22:02 | run=20260120-175122-20544 | iter=3 | mode=build | story=US-003 | duration=755s | status=success
 - 2026-01-20 18:09:25 | run=20260120-175122-20544 | iter=2 | mode=build | story=US-002 | duration=733s | status=success
 - 2026-01-20 17:57:10 | run=20260120-175122-20544 | iter=1 | mode=build | story=US-001 | duration=348s | status=success
@@ -34,3 +35,8 @@
 [2026-01-20 18:27:32] Implemented RIS Lab job progress and sim_jobs/sim_server wiring
 [2026-01-20 18:27:58] Ran pytest via .venv/bin/python
 [2026-01-20 18:30:52] Updated progress log for US-003A
+[2026-01-20 18:31:34] ITERATION 4 end (duration=570s)
+[2026-01-20 18:31:36] ITERATION 5 start (mode=build story=US-004)
+[2026-01-20 18:31:55] Start US-004 work
+[2026-01-20 18:33:17] Implemented pattern mode sidelobe metrics and length validation
+[2026-01-20 18:33:28] Ran tests (pytest not available)

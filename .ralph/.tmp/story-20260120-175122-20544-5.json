@@ -1,0 +1,10 @@
+{
+  "ok": true,
+  "total": 11,
+  "remaining": 7,
+  "quality_gates": [
+    "python -m pytest"
+  ],
+  "id": "US-004",
+  "title": "Implement pattern mode artifacts and metrics"
+}
