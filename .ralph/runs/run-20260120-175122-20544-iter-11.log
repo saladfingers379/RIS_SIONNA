@@ -1428,4 +1428,195 @@ thinking
 
 I'm staging all modified files including logs, configs, and docs with a clean git add -A before committing with a conventional commit message scoped to docs.
 exec
-/usr/bin/zsh -lc 'git add -A' in /home/josh/Documents/Github/RIS_SIONNA
+/usr/bin/zsh -lc 'git add -A' in /home/josh/Documents/Github/RIS_SIONNA succeeded in 8ms:
+
+file update:
+diff --git a/README.md b/README.md
+index 249033259b1806aa9b9f8ec992898954686661ba..3488c5e0583bfc89c6c99e31e872cc083b893773
+--- a/README.md
++++ b/README.md
+@@ -92,6 +92,30 @@
+ - `python -m app dashboard`
+ - `python -m app sim`
+ 
++## RIS Lab (CPU-only)
++RIS Lab is a math-first validation tool for RIS patterns and link metrics. It is **not**
++ray-traced RIS integration and does not enable RIS in Sionna RT yet.
++
++CLI examples:
++```bash
++python -m app ris run --config configs/ris/steer_1bit.yaml --mode pattern
++python -m app ris run --config configs/ris/focus_point.yaml --mode pattern
++python -m app ris validate --config configs/ris/validate_vs_csv.yaml --ref refs/pattern.csv
++```
++
++Simulator UI:
++1. Run `python -m app sim`
++2. Open the "RIS Lab" tab
++3. Set the config path (for example `configs/ris/steer_1bit.yaml`)
++4. Choose Run (pattern/link) or Validate, then start the job
++
++Required artifacts (written to `outputs/<run_id>/`):
++- Common: `config.yaml`, `config.json`, `summary.json`, `progress.json`, `metrics.json`
++- Pattern runs: `plots/phase_map.png`, `plots/pattern_cartesian.png`,
++  `plots/pattern_polar.png`, `data/phase_map.npy`, `data/theta_deg.npy`,
++  `data/pattern_linear.npy`, `data/pattern_db.npy`
++- Validation runs: `plots/phase_map.png`, `plots/validation_overlay.png`
++
+ Makefile shortcuts:
+ - `make diagnose`, `make run`, `make plot`, `make dashboard`, `make sim`
+ 
+@@ -196,8 +220,15 @@
+ ```
+ 
+ ## RIS Lab Reference Imports
++CSV format (required fields):
++- Header row required.
++- Columns: `theta_deg` plus either `pattern_db` or `pattern_linear`.
++- Extra columns are ignored.
++
++Supported reference files:
+ - CSV and NPZ reference files are supported by default.
+-- MAT reference files require the optional dependency: `pip install 'ris_sionna[mat]'` (keeps the base CLI lightweight while enabling MATLAB exports).
++- MAT reference files require the optional dependency: `pip install 'ris_sionna[mat]'`
++  (keeps the base CLI lightweight while enabling MATLAB exports).
+ 
+ ## Project Notes
+ For operational notes, known quirks, and handoff context, see `PROJECT_CONTEXT.md`.
+
+
+thinking
+**Committing changes**
+exec
+/usr/bin/zsh -lc 'git commit -m "docs(ris-lab): add usage docs and configs"' in /home/josh/Documents/Github/RIS_SIONNA succeeded in 9ms:
+[linux ee9f8a2] docs(ris-lab): add usage docs and configs
+ 13 files changed, 2446 insertions(+), 7 deletions(-)
+ create mode 100644 .ralph/.tmp/prompt-20260120-175122-20544-11.md
+ create mode 100644 .ralph/.tmp/story-20260120-175122-20544-11.json
+ create mode 100644 .ralph/.tmp/story-20260120-175122-20544-11.md
+ create mode 100644 .ralph/runs/run-20260120-175122-20544-iter-10.md
+ create mode 100644 .ralph/runs/run-20260120-175122-20544-iter-11.log
+ create mode 100644 configs/ris/focus_point.yaml
+ create mode 100644 configs/ris/steer_1bit.yaml
+ create mode 100644 configs/ris/validate_vs_csv.yaml
+file update:
+diff --git a/README.md b/README.md
+index 249033259b1806aa9b9f8ec992898954686661ba..3488c5e0583bfc89c6c99e31e872cc083b893773
+--- a/README.md
++++ b/README.md
+@@ -92,6 +92,30 @@
+ - `python -m app dashboard`
+ - `python -m app sim`
+ 
++## RIS Lab (CPU-only)
++RIS Lab is a math-first validation tool for RIS patterns and link metrics. It is **not**
++ray-traced RIS integration and does not enable RIS in Sionna RT yet.
++
++CLI examples:
++```bash
++python -m app ris run --config configs/ris/steer_1bit.yaml --mode pattern
++python -m app ris run --config configs/ris/focus_point.yaml --mode pattern
++python -m app ris validate --config configs/ris/validate_vs_csv.yaml --ref refs/pattern.csv
++```
++
++Simulator UI:
++1. Run `python -m app sim`
++2. Open the "RIS Lab" tab
++3. Set the config path (for example `configs/ris/steer_1bit.yaml`)
++4. Choose Run (pattern/link) or Validate, then start the job
++
++Required artifacts (written to `outputs/<run_id>/`):
++- Common: `config.yaml`, `config.json`, `summary.json`, `progress.json`, `metrics.json`
++- Pattern runs: `plots/phase_map.png`, `plots/pattern_cartesian.png`,
++  `plots/pattern_polar.png`, `data/phase_map.npy`, `data/theta_deg.npy`,
++  `data/pattern_linear.npy`, `data/pattern_db.npy`
++- Validation runs: `plots/phase_map.png`, `plots/validation_overlay.png`
++
+ Makefile shortcuts:
+ - `make diagnose`, `make run`, `make plot`, `make dashboard`, `make sim`
+ 
+@@ -196,8 +220,15 @@
+ ```
+ 
+ ## RIS Lab Reference Imports
++CSV format (required fields):
++- Header row required.
++- Columns: `theta_deg` plus either `pattern_db` or `pattern_linear`.
++- Extra columns are ignored.
++
++Supported reference files:
+ - CSV and NPZ reference files are supported by default.
+-- MAT reference files require the optional dependency: `pip install 'ris_sionna[mat]'` (keeps the base CLI lightweight while enabling MATLAB exports).
++- MAT reference files require the optional dependency: `pip install 'ris_sionna[mat]'`
++  (keeps the base CLI lightweight while enabling MATLAB exports).
+ 
+ ## Project Notes
+ For operational notes, known quirks, and handoff context, see `PROJECT_CONTEXT.md`.
+
+
+thinking
+**Verifying clean git status**
+exec
+/usr/bin/zsh -lc 'git status --porcelain' in /home/josh/Documents/Github/RIS_SIONNA succeeded in 4ms:
+ M .ralph/runs/run-20260120-175122-20544-iter-11.log
+file update:
+diff --git a/README.md b/README.md
+index 249033259b1806aa9b9f8ec992898954686661ba..3488c5e0583bfc89c6c99e31e872cc083b893773
+--- a/README.md
++++ b/README.md
+@@ -92,6 +92,30 @@
+ - `python -m app dashboard`
+ - `python -m app sim`
+ 
++## RIS Lab (CPU-only)
++RIS Lab is a math-first validation tool for RIS patterns and link metrics. It is **not**
++ray-traced RIS integration and does not enable RIS in Sionna RT yet.
++
++CLI examples:
++```bash
++python -m app ris run --config configs/ris/steer_1bit.yaml --mode pattern
++python -m app ris run --config configs/ris/focus_point.yaml --mode pattern
++python -m app ris validate --config configs/ris/validate_vs_csv.yaml --ref refs/pattern.csv
++```
++
++Simulator UI:
++1. Run `python -m app sim`
++2. Open the "RIS Lab" tab
++3. Set the config path (for example `configs/ris/steer_1bit.yaml`)
++4. Choose Run (pattern/link) or Validate, then start the job
++
++Required artifacts (written to `outputs/<run_id>/`):
++- Common: `config.yaml`, `config.json`, `summary.json`, `progress.json`, `metrics.json`
++- Pattern runs: `plots/phase_map.png`, `plots/pattern_cartesian.png`,
++  `plots/pattern_polar.png`, `data/phase_map.npy`, `data/theta_deg.npy`,
++  `data/pattern_linear.npy`, `data/pattern_db.npy`
++- Validation runs: `plots/phase_map.png`, `plots/validation_overlay.png`
++
+ Makefile shortcuts:
+ - `make diagnose`, `make run`, `make plot`, `make dashboard`, `make sim`
+ 
+@@ -196,8 +220,15 @@
+ ```
+ 
+ ## RIS Lab Reference Imports
++CSV format (required fields):
++- Header row required.
++- Columns: `theta_deg` plus either `pattern_db` or `pattern_linear`.
++- Extra columns are ignored.
++
++Supported reference files:
+ - CSV and NPZ reference files are supported by default.
+-- MAT reference files require the optional dependency: `pip install 'ris_sionna[mat]'` (keeps the base CLI lightweight while enabling MATLAB exports).
++- MAT reference files require the optional dependency: `pip install 'ris_sionna[mat]'`
++  (keeps the base CLI lightweight while enabling MATLAB exports).
+ 
+ ## Project Notes
+ For operational notes, known quirks, and handoff context, see `PROJECT_CONTEXT.md`.
+
+
+thinking
+**Committing updated run log**
+
+I'm staging the modified run log and preparing a new commit with a message like "chore(ralph): update run log" to ensure all changes are committed and the working tree is clean.
+exec
+/usr/bin/zsh -lc 'git add /home/josh/Documents/Github/RIS_SIONNA/.ralph/runs/run-20260120-175122-20544-iter-11.log' in /home/josh/Documents/Github/RIS_SIONNA
