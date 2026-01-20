@@ -15,6 +15,12 @@ const state = {
   sceneOverride: null,
   runInfo: null,
   configs: [],
+  ris: {
+    jobs: [],
+    runs: [],
+    activeRunId: null,
+    activeJobId: null,
+  },
 };
 
 const ui = {
@@ -35,6 +41,23 @@ const ui = {
   dragMarkers: document.getElementById("dragMarkers"),
   runSim: document.getElementById("runSim"),
   jobList: document.getElementById("jobList"),
+  risTabStrip: document.getElementById("risTabStrip"),
+  risConfigPath: document.getElementById("risConfigPath"),
+  risAction: document.getElementById("risAction"),
+  risMode: document.getElementById("risMode"),
+  risReferenceField: document.getElementById("risReferenceField"),
+  risReferencePath: document.getElementById("risReferencePath"),
+  risStart: document.getElementById("risStart"),
+  risRefresh: document.getElementById("risRefresh"),
+  risJobStatus: document.getElementById("risJobStatus"),
+  risProgress: document.getElementById("risProgress"),
+  risLog: document.getElementById("risLog"),
+  risJobList: document.getElementById("risJobList"),
+  risRunSelect: document.getElementById("risRunSelect"),
+  risLoadResults: document.getElementById("risLoadResults"),
+  risResultStatus: document.getElementById("risResultStatus"),
+  risMetrics: document.getElementById("risMetrics"),
+  risPlots: document.getElementById("risPlots"),
   radioMapAuto: document.getElementById("radioMapAuto"),
   radioMapPadding: document.getElementById("radioMapPadding"),
   radioMapCellX: document.getElementById("radioMapCellX"),
@@ -106,6 +129,13 @@ const RUN_PROFILES = {
     configName: "default.yaml",
   },
 };
+
+const RIS_PLOT_FILES = [
+  { file: "phase_map.png", label: "Phase map" },
+  { file: "pattern_cartesian.png", label: "Pattern (cartesian)" },
+  { file: "pattern_polar.png", label: "Pattern (polar)" },
+  { file: "validation_overlay.png", label: "Validation overlay" },
+];
 
 let renderer;
 let scene;
@@ -236,6 +266,87 @@ function setInputValue(input, value) {
   } else {
     input.value = value;
   }
+}
+
+function setRisTab(tabName) {
+  const buttons = ui.risTabStrip.querySelectorAll(".tab-button");
+  const panels = document.querySelectorAll(".tab-panel[data-tab^=\"ris-\"]");
+  buttons.forEach((button) => {
+    button.classList.toggle("is-active", button.dataset.tab === tabName);
+  });
+  panels.forEach((panel) => {
+    panel.classList.toggle("is-active", panel.dataset.tab === tabName);
+  });
+}
+
+function updateRisActionVisibility() {
+  const action = ui.risAction.value;
+  const isValidate = action === "validate";
+  ui.risReferenceField.style.display = isValidate ? "" : "none";
+  ui.risMode.disabled = isValidate;
+}
+
+async function fetchJsonMaybe(url) {
+  const res = await fetch(url);
+  if (!res.ok) return null;
+  return await res.json();
+}
+
+async function fetchTextMaybe(url) {
+  const res = await fetch(url);
+  if (!res.ok) return null;
+  return await res.text();
+}
+
+function formatMetricValue(value) {
+  if (value === null || value === undefined) return "n/a";
+  if (typeof value === "number") return Number.isFinite(value) ? value.toFixed(4) : "n/a";
+  if (typeof value === "boolean") return value ? "true" : "false";
+  if (typeof value === "string") return value;
+  return JSON.stringify(value);
+}
+
+function renderRisMetrics(metrics) {
+  ui.risMetrics.innerHTML = "";
+  if (!metrics) {
+    ui.risMetrics.textContent = "No metrics found for this run.";
+    return;
+  }
+  Object.entries(metrics).forEach(([key, value]) => {
+    const row = document.createElement("div");
+    const label = document.createElement("strong");
+    label.textContent = `${key}: `;
+    const val = document.createElement("span");
+    val.textContent = formatMetricValue(value);
+    row.append(label, val);
+    ui.risMetrics.appendChild(row);
+  });
+}
+
+function renderRisPlots(runId) {
+  ui.risPlots.innerHTML = "";
+  RIS_PLOT_FILES.forEach(({ file, label }) => {
+    const figure = document.createElement("figure");
+    figure.className = "plot-card";
+    const img = document.createElement("img");
+    img.src = `/runs/${runId}/plots/${file}`;
+    img.alt = label;
+    img.addEventListener("error", () => {
+      figure.remove();
+    });
+    const caption = document.createElement("figcaption");
+    caption.textContent = label;
+    figure.append(img, caption);
+    ui.risPlots.appendChild(figure);
+  });
+}
+
+function setRisStatus(text) {
+  ui.risJobStatus.textContent = text;
+}
+
+function setRisResultStatus(text) {
+  ui.risResultStatus.textContent = text;
 }
 
 function isTextInput(target) {
@@ -427,6 +538,173 @@ async function fetchProgress(runId) {
     return null;
   }
   return await res.json();
+}
+
+async function fetchRisJobs() {
+  const data = await fetchJsonMaybe("/api/ris/jobs");
+  return data || { jobs: [] };
+}
+
+function renderRisJobList(jobs) {
+  ui.risJobList.innerHTML = "";
+  const sorted = [...jobs].sort((a, b) => (a.created_at || "").localeCompare(b.created_at || ""));
+  const recent = sorted.slice(-5).reverse();
+  recent.forEach((job) => {
+    const item = document.createElement("div");
+    const action = job.action ? ` · ${job.action}` : "";
+    const mode = job.mode ? `/${job.mode}` : "";
+    const status = job.status || "unknown";
+    const error = job.error ? ` · ERROR: ${job.error}` : "";
+    item.textContent = `${job.run_id}${action}${mode} · ${status}${error}`;
+    ui.risJobList.appendChild(item);
+  });
+}
+
+async function refreshRisRunSelect() {
+  const data = await fetchJsonMaybe("/api/runs");
+  const runIds = new Set();
+  (data && data.runs ? data.runs : []).forEach((run) => {
+    if (run.summary && run.summary.schema_version === 1) {
+      runIds.add(run.run_id);
+    }
+  });
+  state.ris.jobs.forEach((job) => {
+    if (job.run_id) {
+      runIds.add(job.run_id);
+    }
+  });
+  const runList = Array.from(runIds).sort((a, b) => b.localeCompare(a));
+  const previous = ui.risRunSelect.value;
+  ui.risRunSelect.innerHTML = "";
+  runList.forEach((runId) => {
+    const opt = document.createElement("option");
+    opt.value = runId;
+    opt.textContent = runId;
+    ui.risRunSelect.appendChild(opt);
+  });
+  if (runList.length > 0) {
+    ui.risRunSelect.value = runList.includes(previous) ? previous : runList[0];
+  }
+  state.ris.runs = runList;
+}
+
+function tailLines(text, maxLines) {
+  if (!text) return "";
+  const lines = text.trimEnd().split("\n");
+  return lines.slice(-maxLines).join("\n");
+}
+
+async function refreshRisProgressAndLog() {
+  const runId = state.ris.activeRunId;
+  if (!runId) {
+    ui.risProgress.textContent = "";
+    ui.risLog.textContent = "";
+    return;
+  }
+  const progress = await fetchProgress(runId);
+  if (progress) {
+    const step = progress.step_name || "Running";
+    const total = progress.total_steps || 0;
+    const idx = progress.step_index != null ? progress.step_index + 1 : null;
+    const pct = progress.progress != null ? Math.round(progress.progress * 100) : null;
+    const pctLabel = pct !== null ? `${pct}%` : "";
+    const stepLabel = total && idx ? `${step} (${idx}/${total})` : step;
+    const error = progress.error ? ` · ERROR: ${progress.error}` : "";
+    ui.risProgress.textContent = `${progress.status || "running"} · ${stepLabel} ${pctLabel}${error}`.trim();
+  } else {
+    ui.risProgress.textContent = "Progress unavailable.";
+  }
+  const logText = await fetchTextMaybe(`/runs/${runId}/job.log`);
+  ui.risLog.textContent = logText ? tailLines(logText, 120) : "No log available.";
+}
+
+async function refreshRisJobs() {
+  const data = await fetchRisJobs();
+  state.ris.jobs = data.jobs || [];
+  renderRisJobList(state.ris.jobs);
+  const sorted = [...state.ris.jobs].sort((a, b) => (a.created_at || "").localeCompare(b.created_at || ""));
+  const running = sorted.find((job) => job.status === "running");
+  const latest = sorted[sorted.length - 1];
+  const active = state.ris.activeJobId
+    ? sorted.find((job) => job.job_id === state.ris.activeJobId)
+    : null;
+  const current = active || running || latest;
+  if (current) {
+    state.ris.activeJobId = current.job_id;
+    state.ris.activeRunId = current.run_id;
+    setRisStatus(`${current.run_id} · ${current.status || "running"}`);
+  } else {
+    setRisStatus("Idle.");
+  }
+  await refreshRisRunSelect();
+  await refreshRisProgressAndLog();
+}
+
+async function submitRisJob() {
+  const configPath = ui.risConfigPath.value.trim();
+  if (!configPath) {
+    setRisStatus("Config path required.");
+    return;
+  }
+  const action = ui.risAction.value;
+  const payload = {
+    action,
+    config_path: configPath,
+  };
+  if (action === "run") {
+    payload.mode = ui.risMode.value;
+  } else {
+    const refPath = ui.risReferencePath.value.trim();
+    if (!refPath) {
+      setRisStatus("Reference file required for validation.");
+      return;
+    }
+    payload.ref = refPath;
+  }
+  setRisStatus("Submitting RIS Lab job...");
+  try {
+    const res = await fetch("/api/ris/jobs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) {
+      setRisStatus(`RIS job error: ${data.error || res.status}`);
+    } else {
+      state.ris.activeRunId = data.run_id;
+      state.ris.activeJobId = data.job_id;
+      setRisStatus(`RIS job submitted: ${data.run_id}`);
+    }
+    await refreshRisJobs();
+    await refreshRisProgressAndLog();
+  } catch (err) {
+    setRisStatus("RIS job error: network failure");
+  }
+}
+
+async function loadRisResults(runId) {
+  if (!runId) {
+    setRisResultStatus("Select a run to load results.");
+    renderRisMetrics(null);
+    ui.risPlots.innerHTML = "";
+    return;
+  }
+  setRisResultStatus(`Loading ${runId}...`);
+  const [metrics, progress] = await Promise.all([
+    fetchJsonMaybe(`/runs/${runId}/metrics.json`),
+    fetchProgress(runId),
+  ]);
+  renderRisMetrics(metrics);
+  renderRisPlots(runId);
+  if (progress && progress.status === "failed") {
+    const error = progress.error ? ` · ERROR: ${progress.error}` : "";
+    setRisResultStatus(`Run failed${error}`);
+  } else if (progress && progress.status) {
+    setRisResultStatus(`Run status: ${progress.status}`);
+  } else {
+    setRisResultStatus("Results loaded.");
+  }
 }
 
 async function loadRun(runId) {
@@ -1209,6 +1487,17 @@ function bindUI() {
     rebuildScene();
   });
   ui.runSim.addEventListener("click", () => submitJob());
+  ui.risTabStrip.addEventListener("click", (event) => {
+    const target = event.target;
+    if (target instanceof HTMLButtonElement && target.dataset.tab) {
+      setRisTab(target.dataset.tab);
+    }
+  });
+  ui.risAction.addEventListener("change", updateRisActionVisibility);
+  ui.risStart.addEventListener("click", submitRisJob);
+  ui.risRefresh.addEventListener("click", refreshRisJobs);
+  ui.risLoadResults.addEventListener("click", () => loadRisResults(ui.risRunSelect.value));
+  ui.risRunSelect.addEventListener("change", () => loadRisResults(ui.risRunSelect.value));
   ui.topDown.addEventListener("click", () => {
     camera.position.set(0, 0, 200);
     controls.target.set(0, 0, 0);
@@ -1281,5 +1570,9 @@ function bindUI() {
 initViewer();
 bindKeyboardNavigation();
 bindUI();
-fetchConfigs().then(fetchRuns);
-setInterval(refreshJobs, 3000);
+updateRisActionVisibility();
+fetchConfigs().then(fetchRuns).then(refreshRisJobs);
+setInterval(() => {
+  refreshJobs();
+  refreshRisJobs();
+}, 3000);

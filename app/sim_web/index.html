@@ -168,6 +168,76 @@
           </div>
         </details>
 
+        <details class="panel-section" open>
+          <summary>RIS Lab</summary>
+          <div class="panel-section-body">
+            <div class="tab-strip" id="risTabStrip">
+              <button class="tab-button is-active" data-tab="ris-config" type="button">Config</button>
+              <button class="tab-button" data-tab="ris-run" type="button">Run</button>
+              <button class="tab-button" data-tab="ris-results" type="button">Results</button>
+            </div>
+
+            <div class="tab-panel is-active" data-tab="ris-config">
+              <div class="field">
+                <label>Config path</label>
+                <input id="risConfigPath" type="text" placeholder="configs/ris/steer_1bit.yaml" />
+                <div class="help-text">RIS Lab config YAML used for runs and validation.</div>
+              </div>
+              <div class="field-grid">
+                <div>
+                  <label>Action</label>
+                  <select id="risAction">
+                    <option value="run">Run</option>
+                    <option value="validate">Validate</option>
+                  </select>
+                </div>
+                <div>
+                  <label>Mode</label>
+                  <select id="risMode">
+                    <option value="pattern">Pattern</option>
+                    <option value="link">Link</option>
+                  </select>
+                </div>
+              </div>
+              <div class="field" id="risReferenceField">
+                <label>Reference file (CSV/NPZ/MAT)</label>
+                <input id="risReferencePath" type="text" placeholder="refs/pattern.csv" />
+                <div class="help-text">Required for validation runs.</div>
+              </div>
+            </div>
+
+            <div class="tab-panel" data-tab="ris-run">
+              <div class="job-buttons">
+                <button id="risStart" type="button">Start RIS Lab</button>
+                <button id="risRefresh" type="button">Refresh Status</button>
+              </div>
+              <div class="job-status">
+                <h3>Status</h3>
+                <div id="risJobStatus">Idle.</div>
+                <div class="help-text" id="risProgress"></div>
+                <pre class="log-view" id="risLog"></pre>
+              </div>
+              <div class="job-status">
+                <h3>Recent RIS Jobs</h3>
+                <div id="risJobList"></div>
+              </div>
+            </div>
+
+            <div class="tab-panel" data-tab="ris-results">
+              <div class="field">
+                <label>Run directory</label>
+                <select id="risRunSelect"></select>
+              </div>
+              <div class="job-buttons">
+                <button id="risLoadResults" type="button">Load Results</button>
+              </div>
+              <div id="risResultStatus" class="help-text"></div>
+              <div class="metrics-card" id="risMetrics"></div>
+              <div class="plot-grid" id="risPlots"></div>
+            </div>
+          </div>
+        </details>
+
         <details class="panel-section">
           <summary>Heatmap</summary>
           <div class="panel-section-body">

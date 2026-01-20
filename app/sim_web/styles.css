@@ -255,6 +255,86 @@ input {
   font-size: 13px;
 }
 
+.tab-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.tab-button {
+  border-radius: 8px;
+  border: 1px solid #1f1f1f;
+  background: #f9f9f6;
+  color: var(--ink);
+  font-weight: 600;
+  cursor: pointer;
+  padding: 8px 10px;
+}
+
+.tab-button.is-active {
+  background: #1a1a1a;
+  color: #f9f9f6;
+}
+
+.tab-panel {
+  display: none;
+}
+
+.tab-panel.is-active {
+  display: block;
+}
+
+.log-view {
+  margin-top: 10px;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid #1f1f1f;
+  background: #0f172a;
+  color: #e2e8f0;
+  font-size: 11px;
+  min-height: 120px;
+  max-height: 220px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
+.metrics-card {
+  margin-top: 12px;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid #1f1f1f;
+  background: #f1f1ee;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.plot-grid {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.plot-card {
+  border: 1px solid #1f1f1f;
+  border-radius: 8px;
+  background: #fafaf7;
+  padding: 8px;
+  display: grid;
+  gap: 6px;
+}
+
+.plot-card img {
+  width: 100%;
+  border-radius: 6px;
+  border: 1px solid rgba(15, 23, 42, 0.15);
+}
+
+.plot-card figcaption {
+  font-size: 11px;
+  color: #334155;
+}
+
 .viewer {
   position: relative;
   border-radius: 10px;

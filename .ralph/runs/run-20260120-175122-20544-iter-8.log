@@ -7845,4 +7845,395 @@ thinking
 
 I'll commit the current run log changes now and then stop running commands to avoid further modifications, accepting that the final commit hash won't be captured post-commit to prevent additional run log updates.
 exec
-/usr/bin/zsh -lc 'git add -A && git commit -m "chore(run-log): update iter-8 log"' in /home/josh/Documents/Github/RIS_SIONNA
+/usr/bin/zsh -lc 'git add -A && git commit -m "chore(run-log): update iter-8 log"' in /home/josh/Documents/Github/RIS_SIONNA succeeded in 19ms:
+[linux 814a30f] chore(run-log): update iter-8 log
+ 1 file changed, 777 insertions(+), 1 deletion(-)
+file update:
+diff --git a/.ralph/progress.md b/.ralph/progress.md
+index 1d309332c23bfbd273a3b60af7e014ac9caf326b..408684bec18efec30520447a00390f8458118a45
+--- a/.ralph/progress.md
++++ b/.ralph/progress.md
+@@ -254,9 +254,9 @@
+   - app/ris/ris_lab.py
+   - pyproject.toml
+   - tests/test_ris_lab_reference.py
+-- What was implemented
++- What was implemented: added MAT reference loading via optional scipy, extended validation to accept .mat, updated CLI/docs, and added MAT import tests.
+ - **Learnings for future iterations:**
+-  - Patterns discovered
+-  - Gotchas encountered
+-  - Useful context
++  - Patterns discovered: MAT imports fit the same theta/pattern contract as CSV/NPZ after normalization.
++  - Gotchas encountered: `python` may not be on PATH; use the repo venv for pytest.
++  - Useful context: mock `__import__` to assert actionable missing-scipy errors.
+ ---
+diff --git a/README.md b/README.md
+index 52fba4c7f309fd7df585176d6bd40883960edf2c..249033259b1806aa9b9f8ec992898954686661ba
+--- a/README.md
++++ b/README.md
+@@ -195,6 +195,10 @@
+   enabled: false
+ ```
+ 
++## RIS Lab Reference Imports
++- CSV and NPZ reference files are supported by default.
++- MAT reference files require the optional dependency: `pip install 'ris_sionna[mat]'` (keeps the base CLI lightweight while enabling MATLAB exports).
++
+ ## Project Notes
+ For operational notes, known quirks, and handoff context, see `PROJECT_CONTEXT.md`.
+ Performance trace notes for the simulator viewer: `docs/perf.md`.
+diff --git a/app/cli.py b/app/cli.py
+index a9a5995d795b5f1caaea3ba2f6963231cd4bb30c..4fcb23a2714c6a2a36901b75160101d3b87210cb
+--- a/app/cli.py
++++ b/app/cli.py
+@@ -62,7 +62,7 @@
+     ris_validate = ris_subparsers.add_parser("validate", help="Validate RIS Lab")
+     ris_validate.add_argument("--config", required=True, help="Path to RIS Lab YAML config")
+     ris_validate.add_argument(
+-        "--ref", required=True, help="Path to reference CSV or NPZ file"
++        "--ref", required=True, help="Path to reference CSV, NPZ, or MAT file"
+     )
+ 
+     return parser.parse_args()
+diff --git a/app/ris/ris_lab.py b/app/ris/ris_lab.py
+index b02ee9da6a80ac30900b98e9b530ceb1fd70bd85..dbfe2b6af873a590f981b695d31805cedba281d1
+--- a/app/ris/ris_lab.py
++++ b/app/ris/ris_lab.py
+@@ -213,6 +213,36 @@
+     return theta, pattern, pattern_kind
+ 
+ 
++def _load_reference_mat(path: Path) -> Tuple[np.ndarray, np.ndarray, str]:
++    try:
++        from scipy.io import loadmat
++    except Exception as exc:
++        raise RuntimeError(
++            "scipy is required for MAT reference imports. "
++            "Install with: pip install 'ris_sionna[mat]'"
++        ) from exc
++
++    data = loadmat(path)
++    keys = {key for key in data.keys() if not key.startswith("__")}
++    missing = []
++    if "theta_deg" not in keys:
++        missing.append("theta_deg")
++    if "pattern_db" not in keys and "pattern_linear" not in keys:
++        missing.append("pattern_db or pattern_linear")
++    if missing:
++        key_list = ", ".join(sorted(keys)) if keys else "(none)"
++        missing_list = ", ".join(missing)
++        raise ValueError(
++            "Reference MAT missing required key(s): "
++            f"{missing_list}. Expected keys: theta_deg + (pattern_db or pattern_linear). "
++            f"Found keys: {key_list}"
++        )
++    pattern_kind = "pattern_db" if "pattern_db" in keys else "pattern_linear"
++    theta = np.asarray(data["theta_deg"], dtype=float).reshape(-1)
++    pattern = np.asarray(data[pattern_kind], dtype=float).reshape(-1)
++    return theta, pattern, pattern_kind
++
++
+ def _validate_theta_pattern_lengths(
+     theta_deg: np.ndarray, pattern: np.ndarray, pattern_name: str
+ ) -> None:
+@@ -417,13 +447,15 @@
+         if not ref_path.exists():
+             raise FileNotFoundError(f"Reference file not found: {ref_path}")
+         suffix = ref_path.suffix.lower()
+-        if suffix not in {".csv", ".npz"}:
+-            raise ValueError("Reference file must be a CSV or NPZ")
++        if suffix not in {".csv", ".npz", ".mat"}:
++            raise ValueError("Reference file must be a CSV, NPZ, or MAT")
+ 
+         if suffix == ".csv":
+             theta_ref, ref_vals, ref_kind = _load_reference_csv(ref_path)
++        elif suffix == ".npz":
++            theta_ref, ref_vals, ref_kind = _load_reference_npz(ref_path)
+         else:
+-            theta_ref, ref_vals, ref_kind = _load_reference_npz(ref_path)
++            theta_ref, ref_vals, ref_kind = _load_reference_mat(ref_path)
+         sim_linear = _compute_array_response(
+             geometry.centers, phase_map, geometry.frame, wavelength, theta_ref
+         )
+diff --git a/pyproject.toml b/pyproject.toml
+index d57fc1ac59e46ad565c1d3a6a243cb07559a4803..f8cbe3ddd9bad5005c459352d4762c41884c1b59
+--- a/pyproject.toml
++++ b/pyproject.toml
+@@ -22,6 +22,9 @@
+ dashboard = [
+   "streamlit==1.53.0",
+ ]
++mat = [
++  "scipy==1.12.0",
++]
+ 
+ [build-system]
+ requires = ["setuptools>=77.0.0"]
+diff --git a/tests/test_ris_lab_reference.py b/tests/test_ris_lab_reference.py
+index d0c04292906ea90de23134269ade07c8d0edd7f8..5f5326e4f68a2ed58675af7bd989f4e201ce3e07
+--- a/tests/test_ris_lab_reference.py
++++ b/tests/test_ris_lab_reference.py
+@@ -1,10 +1,17 @@
+ import tempfile
+ import unittest
++from unittest import mock
+ from pathlib import Path
+ 
+ import numpy as np
+ 
+-from app.ris.ris_lab import _load_reference_npz
++from app.ris.ris_lab import _load_reference_mat, _load_reference_npz
++
++try:
++    import scipy  # noqa: F401
++    SCIPY_AVAILABLE = True
++except Exception:
++    SCIPY_AVAILABLE = False
+ 
+ 
+ class TestRisLabReference(unittest.TestCase):
+@@ -24,3 +31,31 @@
+             np.savez(path, pattern_db=np.array([0.0, -3.0]))
+             with self.assertRaisesRegex(ValueError, r"Expected keys: theta_deg \+ \(pattern_db or pattern_linear\)"):
+                 _load_reference_npz(path)
++
++    def test_load_reference_mat_missing_scipy(self) -> None:
++        with tempfile.TemporaryDirectory() as tmp_dir:
++            path = Path(tmp_dir) / "ref.mat"
++            path.write_bytes(b"")
++            original_import = __import__
++
++            def _blocked_import(name, *args, **kwargs):
++                if name.startswith("scipy"):
++                    raise ImportError("No module named scipy")
++                return original_import(name, *args, **kwargs)
++
++            with mock.patch("builtins.__import__", side_effect=_blocked_import):
++                with self.assertRaisesRegex(RuntimeError, r"scipy is required for MAT reference imports"):
++                    _load_reference_mat(path)
++
++    @unittest.skipUnless(SCIPY_AVAILABLE, "scipy not installed")
++    def test_load_reference_mat_pattern_db(self) -> None:
++        from scipy.io import savemat
++
++        with tempfile.TemporaryDirectory() as tmp_dir:
++            path = Path(tmp_dir) / "ref.mat"
++            savemat(path, {"theta_deg": np.array([0.0, 5.0]), "pattern_db": np.array([0.0, -3.0])})
++            theta, pattern, kind = _load_reference_mat(path)
++
++        np.testing.assert_allclose(theta, np.array([0.0, 5.0]))
++        np.testing.assert_allclose(pattern, np.array([0.0, -3.0]))
++        self.assertEqual(kind, "pattern_db")
+
+
+
+thinking
+**Confirming final state and logs**
+
+All required logs including progress and activity are updated with the latest commit; no further commands will run to avoid altering the clean state.
+thinking
+**Preparing comprehensive final summary**
+
+The final response will summarize implemented features with affected files, note test outcomes including use of the virtual environment due to missing python command, reference all three commits, confirm review results, highlight verification commands run, mention no UI changes hence no browser testing, and suggest next steps in a numbered list, concluding with the completion signal.
+codex
+Added MAT reference imports with optional SciPy, extended validation to accept `.mat`, updated CLI help and README note, and added MAT import tests for both success and missing-SciPy cases. Core changes are in `app/ris/ris_lab.py`, `app/cli.py`, `pyproject.toml`, `tests/test_ris_lab_reference.py`, and `README.md`.
+
+- Verification: `python -m pytest` failed (`python` not found on PATH); `/.venv/bin/python -m pytest` passed.
+- Security/performance/regression review: no new unsafe I/O, no hot loops added, existing CSV/NPZ paths unchanged.
+- Commits: `45cba3f feat(validation): add MAT reference imports`, `4a0a079 chore(progress): log US-007 run`, `814a30f chore(run-log): update iter-8 log`.
+
+Next steps:
+1. Install MAT support when needed: `pip install 'ris_sionna[mat]'`.
+2. Run a sample validation with a MAT reference to confirm local workflow.
+
+<promise>COMPLETE</promise>
+file update:
+diff --git a/.ralph/progress.md b/.ralph/progress.md
+index 1d309332c23bfbd273a3b60af7e014ac9caf326b..408684bec18efec30520447a00390f8458118a45
+--- a/.ralph/progress.md
++++ b/.ralph/progress.md
+@@ -254,9 +254,9 @@
+   - app/ris/ris_lab.py
+   - pyproject.toml
+   - tests/test_ris_lab_reference.py
+-- What was implemented
++- What was implemented: added MAT reference loading via optional scipy, extended validation to accept .mat, updated CLI/docs, and added MAT import tests.
+ - **Learnings for future iterations:**
+-  - Patterns discovered
+-  - Gotchas encountered
+-  - Useful context
++  - Patterns discovered: MAT imports fit the same theta/pattern contract as CSV/NPZ after normalization.
++  - Gotchas encountered: `python` may not be on PATH; use the repo venv for pytest.
++  - Useful context: mock `__import__` to assert actionable missing-scipy errors.
+ ---
+diff --git a/README.md b/README.md
+index 52fba4c7f309fd7df585176d6bd40883960edf2c..249033259b1806aa9b9f8ec992898954686661ba
+--- a/README.md
++++ b/README.md
+@@ -195,6 +195,10 @@
+   enabled: false
+ ```
+ 
++## RIS Lab Reference Imports
++- CSV and NPZ reference files are supported by default.
++- MAT reference files require the optional dependency: `pip install 'ris_sionna[mat]'` (keeps the base CLI lightweight while enabling MATLAB exports).
++
+ ## Project Notes
+ For operational notes, known quirks, and handoff context, see `PROJECT_CONTEXT.md`.
+ Performance trace notes for the simulator viewer: `docs/perf.md`.
+diff --git a/app/cli.py b/app/cli.py
+index a9a5995d795b5f1caaea3ba2f6963231cd4bb30c..4fcb23a2714c6a2a36901b75160101d3b87210cb
+--- a/app/cli.py
++++ b/app/cli.py
+@@ -62,7 +62,7 @@
+     ris_validate = ris_subparsers.add_parser("validate", help="Validate RIS Lab")
+     ris_validate.add_argument("--config", required=True, help="Path to RIS Lab YAML config")
+     ris_validate.add_argument(
+-        "--ref", required=True, help="Path to reference CSV or NPZ file"
++        "--ref", required=True, help="Path to reference CSV, NPZ, or MAT file"
+     )
+ 
+     return parser.parse_args()
+diff --git a/app/ris/ris_lab.py b/app/ris/ris_lab.py
+index b02ee9da6a80ac30900b98e9b530ceb1fd70bd85..dbfe2b6af873a590f981b695d31805cedba281d1
+--- a/app/ris/ris_lab.py
++++ b/app/ris/ris_lab.py
+@@ -213,6 +213,36 @@
+     return theta, pattern, pattern_kind
+ 
+ 
++def _load_reference_mat(path: Path) -> Tuple[np.ndarray, np.ndarray, str]:
++    try:
++        from scipy.io import loadmat
++    except Exception as exc:
++        raise RuntimeError(
++            "scipy is required for MAT reference imports. "
++            "Install with: pip install 'ris_sionna[mat]'"
++        ) from exc
++
++    data = loadmat(path)
++    keys = {key for key in data.keys() if not key.startswith("__")}
++    missing = []
++    if "theta_deg" not in keys:
++        missing.append("theta_deg")
++    if "pattern_db" not in keys and "pattern_linear" not in keys:
++        missing.append("pattern_db or pattern_linear")
++    if missing:
++        key_list = ", ".join(sorted(keys)) if keys else "(none)"
++        missing_list = ", ".join(missing)
++        raise ValueError(
++            "Reference MAT missing required key(s): "
++            f"{missing_list}. Expected keys: theta_deg + (pattern_db or pattern_linear). "
++            f"Found keys: {key_list}"
++        )
++    pattern_kind = "pattern_db" if "pattern_db" in keys else "pattern_linear"
++    theta = np.asarray(data["theta_deg"], dtype=float).reshape(-1)
++    pattern = np.asarray(data[pattern_kind], dtype=float).reshape(-1)
++    return theta, pattern, pattern_kind
++
++
+ def _validate_theta_pattern_lengths(
+     theta_deg: np.ndarray, pattern: np.ndarray, pattern_name: str
+ ) -> None:
+@@ -417,13 +447,15 @@
+         if not ref_path.exists():
+             raise FileNotFoundError(f"Reference file not found: {ref_path}")
+         suffix = ref_path.suffix.lower()
+-        if suffix not in {".csv", ".npz"}:
+-            raise ValueError("Reference file must be a CSV or NPZ")
++        if suffix not in {".csv", ".npz", ".mat"}:
++            raise ValueError("Reference file must be a CSV, NPZ, or MAT")
+ 
+         if suffix == ".csv":
+             theta_ref, ref_vals, ref_kind = _load_reference_csv(ref_path)
++        elif suffix == ".npz":
++            theta_ref, ref_vals, ref_kind = _load_reference_npz(ref_path)
+         else:
+-            theta_ref, ref_vals, ref_kind = _load_reference_npz(ref_path)
++            theta_ref, ref_vals, ref_kind = _load_reference_mat(ref_path)
+         sim_linear = _compute_array_response(
+             geometry.centers, phase_map, geometry.frame, wavelength, theta_ref
+         )
+diff --git a/pyproject.toml b/pyproject.toml
+index d57fc1ac59e46ad565c1d3a6a243cb07559a4803..f8cbe3ddd9bad5005c459352d4762c41884c1b59
+--- a/pyproject.toml
++++ b/pyproject.toml
+@@ -22,6 +22,9 @@
+ dashboard = [
+   "streamlit==1.53.0",
+ ]
++mat = [
++  "scipy==1.12.0",
++]
+ 
+ [build-system]
+ requires = ["setuptools>=77.0.0"]
+diff --git a/tests/test_ris_lab_reference.py b/tests/test_ris_lab_reference.py
+index d0c04292906ea90de23134269ade07c8d0edd7f8..5f5326e4f68a2ed58675af7bd989f4e201ce3e07
+--- a/tests/test_ris_lab_reference.py
++++ b/tests/test_ris_lab_reference.py
+@@ -1,10 +1,17 @@
+ import tempfile
+ import unittest
++from unittest import mock
+ from pathlib import Path
+ 
+ import numpy as np
+ 
+-from app.ris.ris_lab import _load_reference_npz
++from app.ris.ris_lab import _load_reference_mat, _load_reference_npz
++
++try:
++    import scipy  # noqa: F401
++    SCIPY_AVAILABLE = True
++except Exception:
++    SCIPY_AVAILABLE = False
+ 
+ 
+ class TestRisLabReference(unittest.TestCase):
+@@ -24,3 +31,31 @@
+             np.savez(path, pattern_db=np.array([0.0, -3.0]))
+             with self.assertRaisesRegex(ValueError, r"Expected keys: theta_deg \+ \(pattern_db or pattern_linear\)"):
+                 _load_reference_npz(path)
++
++    def test_load_reference_mat_missing_scipy(self) -> None:
++        with tempfile.TemporaryDirectory() as tmp_dir:
++            path = Path(tmp_dir) / "ref.mat"
++            path.write_bytes(b"")
++            original_import = __import__
++
++            def _blocked_import(name, *args, **kwargs):
++                if name.startswith("scipy"):
++                    raise ImportError("No module named scipy")
++                return original_import(name, *args, **kwargs)
++
++            with mock.patch("builtins.__import__", side_effect=_blocked_import):
++                with self.assertRaisesRegex(RuntimeError, r"scipy is required for MAT reference imports"):
++                    _load_reference_mat(path)
++
++    @unittest.skipUnless(SCIPY_AVAILABLE, "scipy not installed")
++    def test_load_reference_mat_pattern_db(self) -> None:
++        from scipy.io import savemat
++
++        with tempfile.TemporaryDirectory() as tmp_dir:
++            path = Path(tmp_dir) / "ref.mat"
++            savemat(path, {"theta_deg": np.array([0.0, 5.0]), "pattern_db": np.array([0.0, -3.0])})
++            theta, pattern, kind = _load_reference_mat(path)
++
++        np.testing.assert_allclose(theta, np.array([0.0, 5.0]))
++        np.testing.assert_allclose(pattern, np.array([0.0, -3.0]))
++        self.assertEqual(kind, "pattern_db")
+
+tokens used
+92,298
+Added MAT reference imports with optional SciPy, extended validation to accept `.mat`, updated CLI help and README note, and added MAT import tests for both success and missing-SciPy cases. Core changes are in `app/ris/ris_lab.py`, `app/cli.py`, `pyproject.toml`, `tests/test_ris_lab_reference.py`, and `README.md`.
+
+- Verification: `python -m pytest` failed (`python` not found on PATH); `/.venv/bin/python -m pytest` passed.
+- Security/performance/regression review: no new unsafe I/O, no hot loops added, existing CSV/NPZ paths unchanged.
+- Commits: `45cba3f feat(validation): add MAT reference imports`, `4a0a079 chore(progress): log US-007 run`, `814a30f chore(run-log): update iter-8 log`.
+
+Next steps:
+1. Install MAT support when needed: `pip install 'ris_sionna[mat]'`.
+2. Run a sample validation with a MAT reference to confirm local workflow.
+
+<promise>COMPLETE</promise>
