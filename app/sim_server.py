@@ -162,6 +162,15 @@ class SimRequestHandler(BaseHTTPRequestHandler):
         if parsed.path.startswith("/api/jobs"):
             jobs = self.server.job_manager.list_jobs()
             return _json_response(self, jobs)
+        if parsed.path.startswith("/api/ris/jobs/"):
+            job_id = parsed.path.split("/", 4)[4]
+            job = self.server.job_manager.get_job(job_id)
+            if not job or job.get("kind") != "ris_lab":
+                return _json_response(self, {"error": "job not found"}, status=404)
+            return _json_response(self, job)
+        if parsed.path.startswith("/api/ris/jobs"):
+            jobs = self.server.job_manager.list_jobs(kind="ris_lab")
+            return _json_response(self, jobs)
         if parsed.path.startswith("/runs/"):
             parts = parsed.path.split("/", 3)
             if len(parts) < 4:
@@ -175,7 +184,7 @@ class SimRequestHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         parsed = urlparse(self.path)
-        if parsed.path != "/api/jobs":
+        if parsed.path not in {"/api/jobs", "/api/ris/jobs"}:
             self.send_error(404, "Not found")
             return
         length = int(self.headers.get("Content-Length", "0") or "0")
@@ -184,6 +193,8 @@ class SimRequestHandler(BaseHTTPRequestHandler):
             payload = json.loads(body.decode("utf-8"))
         except Exception:
             payload = {}
+        if parsed.path == "/api/ris/jobs":
+            payload["kind"] = "ris_lab"
         try:
             job = self.server.job_manager.create_job(payload)
         except Exception as exc:

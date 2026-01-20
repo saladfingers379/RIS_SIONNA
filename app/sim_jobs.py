@@ -131,17 +131,35 @@ class JobManager:
                     job["status"] = "completed" if ret == 0 else "failed"
                     job["ended_at"] = _now_ts()
                     job["return_code"] = ret
+                    if ret != 0:
+                        progress_path = Path(job.get("output_dir", "")) / "progress.json"
+                        if progress_path.exists():
+                            try:
+                                payload = json.loads(progress_path.read_text())
+                                if isinstance(payload, dict) and payload.get("error"):
+                                    job["error"] = payload["error"]
+                            except Exception:
+                                pass
                     self.jobs[job_id] = job
                     self.processes.pop(job_id, None)
             self._save_jobs()
             time.sleep(1.0)
 
-    def list_jobs(self) -> Dict[str, Any]:
+    def list_jobs(self, kind: Optional[str] = None) -> Dict[str, Any]:
         with self._lock:
-            return {"jobs": list(self.jobs.values())}
+            jobs = list(self.jobs.values())
+            if kind:
+                jobs = [job for job in jobs if job.get("kind") == kind]
+            return {"jobs": jobs}
+
+    def get_job(self, job_id: str) -> Optional[Dict[str, Any]]:
+        with self._lock:
+            return self.jobs.get(job_id)
 
     def create_job(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         kind = payload.get("kind", "run")
+        if kind == "ris_lab":
+            return self._create_ris_lab_job(payload)
         if kind != "run":
             kind = "run"
         preset = payload.get("preset")
@@ -214,6 +232,78 @@ class JobManager:
 
         process = subprocess.Popen(
             [sys.executable, "-m", "app", "run", "--config", str(job_config_path)],
+            stdout=job_log_path.open("w", encoding="utf-8"),
+            stderr=subprocess.STDOUT,
+        )
+
+        with self._lock:
+            self.jobs[job_id] = job
+            self.processes[job_id] = JobHandle(job_id=job_id, run_id=run_id, process=process)
+            self._save_jobs()
+
+        save_json(output_dir / "job.json", job)
+        return job
+
+    def _create_ris_lab_job(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        action = payload.get("action", "run")
+        if action not in {"run", "validate"}:
+            raise ValueError("RIS Lab action must be 'run' or 'validate'")
+
+        config_value = payload.get("config_path") or payload.get("config") or payload.get("base_config")
+        if not config_value:
+            raise ValueError("RIS Lab job requires config_path")
+        config_path = Path(config_value)
+        if not config_path.exists():
+            raise FileNotFoundError(f"RIS Lab config not found: {config_path}")
+
+        cfg = _load_yaml(config_path)
+        if not isinstance(cfg, dict):
+            raise ValueError("RIS Lab config must be a YAML mapping")
+
+        output_cfg = cfg.setdefault("output", {})
+        run_id = generate_run_id()
+        output_cfg["run_id"] = run_id
+        base_dir = output_cfg.get("base_dir", "outputs")
+        output_dir = create_output_dir(base_dir, run_id=run_id)
+
+        job_id = f"job-{run_id}"
+        cfg.setdefault("job", {})
+        cfg["job"].update({"id": job_id, "kind": "ris_lab", "action": action})
+
+        job_config_path = output_dir / "job_config.yaml"
+        save_yaml(job_config_path, cfg)
+        job_log_path = output_dir / "job.log"
+
+        command = [sys.executable, "-m", "app", "ris"]
+        job_mode = None
+        ref_path = None
+        if action == "run":
+            job_mode = payload.get("mode", "pattern")
+            if job_mode not in {"pattern", "link"}:
+                raise ValueError("RIS Lab run mode must be 'pattern' or 'link'")
+            command += ["run", "--config", str(job_config_path), "--mode", job_mode]
+        else:
+            ref_path = payload.get("ref") or payload.get("ref_path") or payload.get("reference")
+            if not ref_path:
+                raise ValueError("RIS Lab validate requires ref path")
+            command += ["validate", "--config", str(job_config_path), "--ref", str(ref_path)]
+
+        job = {
+            "job_id": job_id,
+            "run_id": run_id,
+            "kind": "ris_lab",
+            "status": "running",
+            "created_at": _now_ts(),
+            "started_at": _now_ts(),
+            "action": action,
+            "mode": job_mode,
+            "reference_path": str(ref_path) if ref_path else None,
+            "config_path": str(job_config_path),
+            "output_dir": str(output_dir),
+        }
+
+        process = subprocess.Popen(
+            command,
             stdout=job_log_path.open("w", encoding="utf-8"),
             stderr=subprocess.STDOUT,
         )

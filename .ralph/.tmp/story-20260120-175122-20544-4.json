@@ -1,0 +1,10 @@
+{
+  "ok": true,
+  "total": 11,
+  "remaining": 8,
+  "quality_gates": [
+    "python -m pytest"
+  ],
+  "id": "US-003A",
+  "title": "Wire RIS Lab into sim_jobs and sim_server for non-blocking UI runs"
+}

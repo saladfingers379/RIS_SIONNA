@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import logging
+import time
 from pathlib import Path
 from typing import Any, Dict, Tuple
 
@@ -182,178 +183,242 @@ def _write_metrics(output_dir: Path, metrics: Dict[str, Any]) -> None:
     save_json(output_dir / "metrics.json", metrics)
 
 
+def _write_progress(
+    progress_path: Path,
+    steps: list[str],
+    step_index: int,
+    status: str,
+    error: str | None = None,
+) -> None:
+    total = len(steps)
+    step_name = steps[step_index] if step_index < total else "Complete"
+    payload = {
+        "status": status,
+        "step_index": step_index,
+        "step_name": step_name,
+        "total_steps": total,
+        "progress": min(step_index / total, 1.0) if total else 1.0,
+        "updated_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+    }
+    if error:
+        payload["error"] = error
+    save_json(progress_path, payload)
+
+
 def run_ris_lab(config_path: str, mode: str) -> Path:
     config, output_dir, summary = resolve_and_snapshot_ris_lab_config(config_path)
     output_dir = Path(output_dir)
-
-    geometry_cfg = config["geometry"]
-    geometry = compute_element_centers(
-        nx=int(geometry_cfg["nx"]),
-        ny=int(geometry_cfg["ny"]),
-        dx=float(geometry_cfg["dx"]),
-        dy=float(geometry_cfg["dy"]),
-        origin=geometry_cfg.get("origin"),
-        normal=geometry_cfg.get("normal"),
-        x_axis_hint=geometry_cfg.get("x_axis_hint"),
-    )
-    frequency_hz = float(config["experiment"]["frequency_hz"])
-    wavelength = _SPEED_OF_LIGHT_M_S / frequency_hz
-
-    phase_map = _resolve_phase_map(config, geometry, wavelength)
-    plots_dir = output_dir / "plots"
-    plots_dir.mkdir(parents=True, exist_ok=True)
-    data_dir = output_dir / "data"
-    data_dir.mkdir(parents=True, exist_ok=True)
-    _plot_phase_map(phase_map, plots_dir)
-    np.save(data_dir / "phase_map.npy", phase_map)
-
-    run_id = output_dir.name
-
+    progress_path = output_dir / "progress.json"
     if mode == "pattern":
-        sweep_cfg = config["pattern_mode"]["rx_sweep_deg"]
-        theta_deg = np.arange(
-            float(sweep_cfg["start"]),
-            float(sweep_cfg["stop"]) + float(sweep_cfg["step"]) * 0.5,
-            float(sweep_cfg["step"]),
-        )
-        linear = _compute_array_response(
-            geometry.centers, phase_map, geometry.frame, wavelength, theta_deg
-        )
-        normalization = config["pattern_mode"].get("normalization", "peak_0db")
-        linear_norm = _apply_normalization(linear, normalization)
-        pattern_db = 10.0 * np.log10(linear_norm + _DB_FLOOR)
-        np.save(data_dir / "theta_deg.npy", theta_deg)
-        np.save(data_dir / "pattern_linear.npy", linear_norm)
-        np.save(data_dir / "pattern_db.npy", pattern_db)
-        _plot_pattern(theta_deg, pattern_db, plots_dir)
-
-        peak_idx = int(np.argmax(pattern_db))
-        metrics = {
-            "run_id": run_id,
-            "mode": mode,
-            "output_dir": str(output_dir),
-            "config_hash": summary["config"]["hash_sha256"],
-            "normalization": normalization,
-            "peak_angle_deg": float(theta_deg[peak_idx]),
-            "peak_db": float(pattern_db[peak_idx]),
-            "peak_linear": float(linear_norm[peak_idx]),
-        }
+        steps = ["Initialize", "Resolve phase map", "Compute pattern", "Write metrics"]
     elif mode == "link":
-        link_cfg = config.get("link_mode", {})
-        rx_angle = float(link_cfg.get("rx_angle_deg", 0.0))
-        linear = _compute_array_response(
-            geometry.centers,
-            phase_map,
-            geometry.frame,
-            wavelength,
-            np.array([rx_angle], dtype=float),
-        )
-        metrics = {
-            "run_id": run_id,
-            "mode": mode,
-            "output_dir": str(output_dir),
-            "config_hash": summary["config"]["hash_sha256"],
-            "rx_angle_deg": rx_angle,
-            "link_gain_linear": float(linear[0]),
-            "link_gain_db": float(10.0 * np.log10(linear[0] + _DB_FLOOR)),
-        }
+        steps = ["Initialize", "Resolve phase map", "Compute link", "Write metrics"]
     else:
         raise ValueError(f"Unsupported run mode: {mode}")
 
-    _write_metrics(output_dir, metrics)
-    logger.info("RIS Lab run_id=%s mode=%s output_dir=%s", run_id, mode, output_dir)
-    return output_dir
+    step_index = 0
+    _write_progress(progress_path, steps, step_index, "running")
+    try:
+        geometry_cfg = config["geometry"]
+        geometry = compute_element_centers(
+            nx=int(geometry_cfg["nx"]),
+            ny=int(geometry_cfg["ny"]),
+            dx=float(geometry_cfg["dx"]),
+            dy=float(geometry_cfg["dy"]),
+            origin=geometry_cfg.get("origin"),
+            normal=geometry_cfg.get("normal"),
+            x_axis_hint=geometry_cfg.get("x_axis_hint"),
+        )
+        frequency_hz = float(config["experiment"]["frequency_hz"])
+        wavelength = _SPEED_OF_LIGHT_M_S / frequency_hz
+
+        step_index += 1
+        _write_progress(progress_path, steps, step_index, "running")
+        phase_map = _resolve_phase_map(config, geometry, wavelength)
+        plots_dir = output_dir / "plots"
+        plots_dir.mkdir(parents=True, exist_ok=True)
+        data_dir = output_dir / "data"
+        data_dir.mkdir(parents=True, exist_ok=True)
+        _plot_phase_map(phase_map, plots_dir)
+        np.save(data_dir / "phase_map.npy", phase_map)
+
+        run_id = output_dir.name
+
+        step_index += 1
+        _write_progress(progress_path, steps, step_index, "running")
+        if mode == "pattern":
+            sweep_cfg = config["pattern_mode"]["rx_sweep_deg"]
+            theta_deg = np.arange(
+                float(sweep_cfg["start"]),
+                float(sweep_cfg["stop"]) + float(sweep_cfg["step"]) * 0.5,
+                float(sweep_cfg["step"]),
+            )
+            linear = _compute_array_response(
+                geometry.centers, phase_map, geometry.frame, wavelength, theta_deg
+            )
+            normalization = config["pattern_mode"].get("normalization", "peak_0db")
+            linear_norm = _apply_normalization(linear, normalization)
+            pattern_db = 10.0 * np.log10(linear_norm + _DB_FLOOR)
+            np.save(data_dir / "theta_deg.npy", theta_deg)
+            np.save(data_dir / "pattern_linear.npy", linear_norm)
+            np.save(data_dir / "pattern_db.npy", pattern_db)
+            _plot_pattern(theta_deg, pattern_db, plots_dir)
+
+            peak_idx = int(np.argmax(pattern_db))
+            metrics = {
+                "run_id": run_id,
+                "mode": mode,
+                "output_dir": str(output_dir),
+                "config_hash": summary["config"]["hash_sha256"],
+                "normalization": normalization,
+                "peak_angle_deg": float(theta_deg[peak_idx]),
+                "peak_db": float(pattern_db[peak_idx]),
+                "peak_linear": float(linear_norm[peak_idx]),
+            }
+        elif mode == "link":
+            link_cfg = config.get("link_mode", {})
+            rx_angle = float(link_cfg.get("rx_angle_deg", 0.0))
+            linear = _compute_array_response(
+                geometry.centers,
+                phase_map,
+                geometry.frame,
+                wavelength,
+                np.array([rx_angle], dtype=float),
+            )
+            metrics = {
+                "run_id": run_id,
+                "mode": mode,
+                "output_dir": str(output_dir),
+                "config_hash": summary["config"]["hash_sha256"],
+                "rx_angle_deg": rx_angle,
+                "link_gain_linear": float(linear[0]),
+                "link_gain_db": float(10.0 * np.log10(linear[0] + _DB_FLOOR)),
+            }
+        step_index += 1
+        _write_progress(progress_path, steps, step_index, "running")
+        _write_metrics(output_dir, metrics)
+        _write_progress(progress_path, steps, len(steps), "completed")
+        logger.info("RIS Lab run_id=%s mode=%s output_dir=%s", run_id, mode, output_dir)
+        return output_dir
+    except Exception as exc:
+        logger.exception("RIS Lab run failed")
+        _write_progress(progress_path, steps, step_index, "failed", error=str(exc))
+        raise
 
 
 def validate_ris_lab(config_path: str, ref_path: str) -> Path:
     config, output_dir, summary = resolve_and_snapshot_ris_lab_config(config_path)
     output_dir = Path(output_dir)
+    progress_path = output_dir / "progress.json"
+    steps = [
+        "Initialize",
+        "Resolve phase map",
+        "Load reference",
+        "Compute metrics",
+        "Write metrics",
+    ]
+    step_index = 0
+    _write_progress(progress_path, steps, step_index, "running")
 
-    geometry_cfg = config["geometry"]
-    geometry = compute_element_centers(
-        nx=int(geometry_cfg["nx"]),
-        ny=int(geometry_cfg["ny"]),
-        dx=float(geometry_cfg["dx"]),
-        dy=float(geometry_cfg["dy"]),
-        origin=geometry_cfg.get("origin"),
-        normal=geometry_cfg.get("normal"),
-        x_axis_hint=geometry_cfg.get("x_axis_hint"),
-    )
-    frequency_hz = float(config["experiment"]["frequency_hz"])
-    wavelength = _SPEED_OF_LIGHT_M_S / frequency_hz
+    try:
+        geometry_cfg = config["geometry"]
+        geometry = compute_element_centers(
+            nx=int(geometry_cfg["nx"]),
+            ny=int(geometry_cfg["ny"]),
+            dx=float(geometry_cfg["dx"]),
+            dy=float(geometry_cfg["dy"]),
+            origin=geometry_cfg.get("origin"),
+            normal=geometry_cfg.get("normal"),
+            x_axis_hint=geometry_cfg.get("x_axis_hint"),
+        )
+        frequency_hz = float(config["experiment"]["frequency_hz"])
+        wavelength = _SPEED_OF_LIGHT_M_S / frequency_hz
 
-    phase_map = _resolve_phase_map(config, geometry, wavelength)
-    plots_dir = output_dir / "plots"
-    plots_dir.mkdir(parents=True, exist_ok=True)
-    _plot_phase_map(phase_map, plots_dir)
+        step_index += 1
+        _write_progress(progress_path, steps, step_index, "running")
+        phase_map = _resolve_phase_map(config, geometry, wavelength)
+        plots_dir = output_dir / "plots"
+        plots_dir.mkdir(parents=True, exist_ok=True)
+        _plot_phase_map(phase_map, plots_dir)
 
-    ref_path = Path(ref_path)
-    if not ref_path.exists():
-        raise FileNotFoundError(f"Reference file not found: {ref_path}")
-    if ref_path.suffix.lower() != ".csv":
-        raise ValueError("Reference file must be a CSV for now")
+        step_index += 1
+        _write_progress(progress_path, steps, step_index, "running")
+        ref_path = Path(ref_path)
+        if not ref_path.exists():
+            raise FileNotFoundError(f"Reference file not found: {ref_path}")
+        if ref_path.suffix.lower() != ".csv":
+            raise ValueError("Reference file must be a CSV for now")
 
-    theta_ref, ref_vals, ref_kind = _load_reference_csv(ref_path)
-    sim_linear = _compute_array_response(
-        geometry.centers, phase_map, geometry.frame, wavelength, theta_ref
-    )
+        theta_ref, ref_vals, ref_kind = _load_reference_csv(ref_path)
+        sim_linear = _compute_array_response(
+            geometry.centers, phase_map, geometry.frame, wavelength, theta_ref
+        )
 
-    normalization = config.get("validation", {}).get(
-        "normalization", config["pattern_mode"].get("normalization", "peak_0db")
-    )
-    sim_linear_norm = _apply_normalization(sim_linear, normalization)
-    sim_db = 10.0 * np.log10(sim_linear_norm + _DB_FLOOR)
+        step_index += 1
+        _write_progress(progress_path, steps, step_index, "running")
+        normalization = config.get("validation", {}).get(
+            "normalization", config["pattern_mode"].get("normalization", "peak_0db")
+        )
+        sim_linear_norm = _apply_normalization(sim_linear, normalization)
+        sim_db = 10.0 * np.log10(sim_linear_norm + _DB_FLOOR)
 
-    if ref_kind == "pattern_db":
-        ref_linear = 10.0 ** (ref_vals / 10.0)
-    else:
-        ref_linear = ref_vals
-    ref_linear_norm = _apply_normalization(ref_linear, normalization)
-    ref_db = 10.0 * np.log10(ref_linear_norm + _DB_FLOOR)
+        if ref_kind == "pattern_db":
+            ref_linear = 10.0 ** (ref_vals / 10.0)
+        else:
+            ref_linear = ref_vals
+        ref_linear_norm = _apply_normalization(ref_linear, normalization)
+        ref_db = 10.0 * np.log10(ref_linear_norm + _DB_FLOOR)
 
-    rmse_db = float(np.sqrt(np.mean((sim_db - ref_db) ** 2)))
-    sim_peak_idx = int(np.argmax(sim_db))
-    ref_peak_idx = int(np.argmax(ref_db))
-    peak_angle_error = float(abs(theta_ref[sim_peak_idx] - theta_ref[ref_peak_idx]))
-    peak_db_error = float(abs(sim_db[sim_peak_idx] - ref_db[ref_peak_idx]))
+        rmse_db = float(np.sqrt(np.mean((sim_db - ref_db) ** 2)))
+        sim_peak_idx = int(np.argmax(sim_db))
+        ref_peak_idx = int(np.argmax(ref_db))
+        peak_angle_error = float(abs(theta_ref[sim_peak_idx] - theta_ref[ref_peak_idx]))
+        peak_db_error = float(abs(sim_db[sim_peak_idx] - ref_db[ref_peak_idx]))
 
-    thresholds = config.get("validation", {})
-    rmse_max = float(thresholds.get("rmse_db_max", 2.0))
-    peak_angle_max = float(thresholds.get("peak_angle_err_deg_max", 2.0))
-    peak_db_max = float(thresholds.get("peak_db_err_max", 1.5))
-    passed = rmse_db <= rmse_max and peak_angle_error <= peak_angle_max and peak_db_error <= peak_db_max
+        thresholds = config.get("validation", {})
+        rmse_max = float(thresholds.get("rmse_db_max", 2.0))
+        peak_angle_max = float(thresholds.get("peak_angle_err_deg_max", 2.0))
+        peak_db_max = float(thresholds.get("peak_db_err_max", 1.5))
+        passed = rmse_db <= rmse_max and peak_angle_error <= peak_angle_max and peak_db_error <= peak_db_max
 
-    fig, ax = plt.subplots(figsize=(7, 4))
-    ax.plot(theta_ref, ref_db, color="#9b2226", linewidth=2.0, label="Reference")
-    ax.plot(theta_ref, sim_db, color="#005f73", linewidth=2.0, label="Sim")
-    ax.set_title("RIS Validation Overlay")
-    ax.set_xlabel("Rx angle [deg]")
-    ax.set_ylabel("Gain [dB]")
-    ax.legend(loc="best")
-    ax.grid(True, alpha=0.3)
-    fig.tight_layout()
-    fig.savefig(plots_dir / "validation_overlay.png", dpi=200)
-    plt.close(fig)
+        fig, ax = plt.subplots(figsize=(7, 4))
+        ax.plot(theta_ref, ref_db, color="#9b2226", linewidth=2.0, label="Reference")
+        ax.plot(theta_ref, sim_db, color="#005f73", linewidth=2.0, label="Sim")
+        ax.set_title("RIS Validation Overlay")
+        ax.set_xlabel("Rx angle [deg]")
+        ax.set_ylabel("Gain [dB]")
+        ax.legend(loc="best")
+        ax.grid(True, alpha=0.3)
+        fig.tight_layout()
+        fig.savefig(plots_dir / "validation_overlay.png", dpi=200)
+        plt.close(fig)
 
-    metrics = {
-        "run_id": output_dir.name,
-        "mode": "validate",
-        "output_dir": str(output_dir),
-        "config_hash": summary["config"]["hash_sha256"],
-        "reference_path": str(ref_path),
-        "normalization": normalization,
-        "rmse_db": rmse_db,
-        "peak_angle_error_deg": peak_angle_error,
-        "peak_db_error": peak_db_error,
-        "thresholds": {
-            "rmse_db_max": rmse_max,
-            "peak_angle_err_deg_max": peak_angle_max,
-            "peak_db_err_max": peak_db_max,
-        },
-        "passed": bool(passed),
-    }
-    _write_metrics(output_dir, metrics)
-    logger.info(
-        "RIS Lab run_id=%s mode=validate output_dir=%s", output_dir.name, output_dir
-    )
-    return output_dir
+        metrics = {
+            "run_id": output_dir.name,
+            "mode": "validate",
+            "output_dir": str(output_dir),
+            "config_hash": summary["config"]["hash_sha256"],
+            "reference_path": str(ref_path),
+            "normalization": normalization,
+            "rmse_db": rmse_db,
+            "peak_angle_error_deg": peak_angle_error,
+            "peak_db_error": peak_db_error,
+            "thresholds": {
+                "rmse_db_max": rmse_max,
+                "peak_angle_err_deg_max": peak_angle_max,
+                "peak_db_err_max": peak_db_max,
+            },
+            "passed": bool(passed),
+        }
+        step_index += 1
+        _write_progress(progress_path, steps, step_index, "running")
+        _write_metrics(output_dir, metrics)
+        _write_progress(progress_path, steps, len(steps), "completed")
+        logger.info(
+            "RIS Lab run_id=%s mode=validate output_dir=%s", output_dir.name, output_dir
+        )
+        return output_dir
+    except Exception as exc:
+        logger.exception("RIS Lab validation failed")
+        _write_progress(progress_path, steps, step_index, "failed", error=str(exc))
+        raise
