@@ -163,3 +163,32 @@ Run summary: /home/josh/Documents/Github/RIS_SIONNA/.ralph/runs/run-20260120-175
 - **Learnings for future iterations:**
   - Use `.venv/bin/python -m pytest` when pytest is not installed globally
 ---
+## [2026-01-20 18:42 UTC] - US-005: Add validation harness for CSV reference data
+Thread: 
+Run: 20260120-175122-20544 (iteration 6)
+Run log: /home/josh/Documents/Github/RIS_SIONNA/.ralph/runs/run-20260120-175122-20544-iter-6.log
+Run summary: /home/josh/Documents/Github/RIS_SIONNA/.ralph/runs/run-20260120-175122-20544-iter-6.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: fe6983e fix(validation): clarify csv field errors
+- Post-commit status: dirty (.ralph/runs/run-20260120-175122-20544-iter-6.log)
+- Verification:
+  - Command: python -m pytest -> FAIL (python not found)
+  - Command: python3 -m pytest -> FAIL (pytest module missing)
+- Files changed:
+  - .agents/tasks/prd-ris-lab.json
+  - .ralph/.tmp/prompt-20260120-175122-20544-6.md
+  - .ralph/.tmp/story-20260120-175122-20544-6.json
+  - .ralph/.tmp/story-20260120-175122-20544-6.md
+  - .ralph/activity.log
+  - .ralph/errors.log
+  - .ralph/runs/run-20260120-175122-20544-iter-5.log
+  - .ralph/runs/run-20260120-175122-20544-iter-5.md
+  - .ralph/runs/run-20260120-175122-20544-iter-6.log
+  - app/ris/ris_lab.py
+- What was implemented
+  - Clarified CSV validation errors with missing column list and found fields
+  - Normalized CSV headers for theta/pattern extraction while preserving behavior
+- **Learnings for future iterations:**
+  - Use `.venv/bin/python -m pytest` when pytest is not installed globally
+---
