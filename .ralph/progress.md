@@ -319,3 +319,36 @@ Run summary: /home/josh/Documents/Github/RIS_SIONNA/.ralph/runs/run-20260120-175
   - Gotchas encountered: `python` may not be on PATH; use the repo venv for pytest.
   - Useful context: validation outputs metrics to `metrics.json` under each run directory.
 ---
+## [2026-01-20 19:28:42] - US-010: Document RIS Lab usage and config examples
+Thread: 
+Run: 20260120-175122-20544 (iteration 11)
+Run log: /home/josh/Documents/Github/RIS_SIONNA/.ralph/runs/run-20260120-175122-20544-iter-11.log
+Run summary: /home/josh/Documents/Github/RIS_SIONNA/.ralph/runs/run-20260120-175122-20544-iter-11.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: bfc84f4 chore(ralph): update run log
+- Post-commit status: dirty (.ralph/runs/run-20260120-175122-20544-iter-11.log)
+- Verification:
+  - Command: python -m pytest -> FAIL (python not found)
+  - Command: python3 -m pytest -> FAIL (pytest not installed)
+- Files changed:
+  - .agents/tasks/prd-ris-lab.json
+  - .ralph/.tmp/prompt-20260120-175122-20544-11.md
+  - .ralph/.tmp/story-20260120-175122-20544-11.json
+  - .ralph/.tmp/story-20260120-175122-20544-11.md
+  - .ralph/activity.log
+  - .ralph/errors.log
+  - .ralph/runs/run-20260120-175122-20544-iter-10.log
+  - .ralph/runs/run-20260120-175122-20544-iter-10.md
+  - .ralph/runs/run-20260120-175122-20544-iter-11.log
+  - README.md
+  - configs/ris/focus_point.yaml
+  - configs/ris/steer_1bit.yaml
+  - configs/ris/validate_vs_csv.yaml
+- What was implemented
+  - Documented RIS Lab CLI/UI usage, artifacts, CSV requirements, and out-of-scope warning in README.
+  - Added example RIS Lab configs for steering, focusing, and CSV validation.
+- **Learnings for future iterations:**
+  - System python lacked pytest; use the project venv before running tests.
+  - Run logs update during commands, so stage them last before final commit.
+---
