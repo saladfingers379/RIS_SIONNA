@@ -1,0 +1,10 @@
+{
+  "ok": true,
+  "total": 11,
+  "remaining": 9,
+  "quality_gates": [
+    "python -m pytest"
+  ],
+  "id": "US-003",
+  "title": "Add CLI entrypoint for RIS Lab runs and validation"
+}

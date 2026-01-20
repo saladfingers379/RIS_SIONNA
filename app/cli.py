@@ -49,6 +49,20 @@ def _parse_args() -> argparse.Namespace:
     sim_p.add_argument("--port", type=int, default=8765, help="Port for the simulator UI")
     sim_p.add_argument("--no-browser", action="store_true", help="Do not open the browser automatically")
 
+    ris_p = subparsers.add_parser("ris", help="RIS Lab tools")
+    ris_subparsers = ris_p.add_subparsers(dest="ris_command", required=True)
+    ris_run = ris_subparsers.add_parser("run", help="Run RIS Lab")
+    ris_run.add_argument("--config", required=True, help="Path to RIS Lab YAML config")
+    ris_run.add_argument(
+        "--mode",
+        required=True,
+        choices=["pattern", "link"],
+        help="Run mode: pattern or link",
+    )
+    ris_validate = ris_subparsers.add_parser("validate", help="Validate RIS Lab")
+    ris_validate.add_argument("--config", required=True, help="Path to RIS Lab YAML config")
+    ris_validate.add_argument("--ref", required=True, help="Path to reference CSV file")
+
     return parser.parse_args()
 
 
@@ -128,6 +142,16 @@ def main() -> None:
             webbrowser.open(f"http://{args.host}:{args.port}")
         serve_simulator(host=args.host, port=int(args.port))
         return
+
+    if args.command == "ris":
+        from .ris.ris_lab import run_ris_lab, validate_ris_lab
+
+        if args.ris_command == "run":
+            run_ris_lab(args.config, args.mode)
+            return
+        if args.ris_command == "validate":
+            validate_ris_lab(args.config, args.ref)
+            return
 
 
 if __name__ == "__main__":

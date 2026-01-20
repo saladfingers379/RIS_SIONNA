@@ -157,7 +157,7 @@
     {
       "id": "US-002",
       "title": "Define RIS Lab config schema and snapshot outputs",
-      "status": "in_progress",
+      "status": "done",
       "dependsOn": [
         "US-001"
       ],
@@ -169,13 +169,13 @@
         "Config resolution is deterministic and recorded in run metadata (metrics.json or summary.json)"
       ],
       "startedAt": "2026-01-20T17:57:12.190815+00:00",
-      "completedAt": null,
-      "updatedAt": "2026-01-20T17:57:12.190823+00:00"
+      "completedAt": "2026-01-20T18:09:25.595908+00:00",
+      "updatedAt": "2026-01-20T18:09:25.595899+00:00"
     },
     {
       "id": "US-003",
       "title": "Add CLI entrypoint for RIS Lab runs and validation",
-      "status": "open",
+      "status": "in_progress",
       "dependsOn": [
         "US-001",
         "US-002"
@@ -186,7 +186,10 @@
         "Example: pattern run creates outputs/<run_id>/ with required artifacts (phase_map.png, pattern plots, metrics.json)",
         "Negative case: invalid mode selection returns a non-zero exit and a usage hint",
         "CLI logs include run_id, mode, and output directory"
-      ]
+      ],
+      "startedAt": "2026-01-20T18:09:27.642152+00:00",
+      "completedAt": null,
+      "updatedAt": "2026-01-20T18:09:27.642160+00:00"
     },
     {
       "id": "US-003A",
