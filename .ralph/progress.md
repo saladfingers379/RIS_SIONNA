@@ -14,7 +14,7 @@ Run summary: /home/josh/Documents/Github/RIS_SIONNA/.ralph/runs/run-20260120-175
 - Guardrails reviewed: yes
 - No-commit run: false
 - Commit: b68f3bc feat(ris-lab): add CLI run and validate
-- Post-commit status: clean
+- Post-commit status: dirty (.ralph/runs/run-20260120-175122-20544-iter-5.log)
 - Verification:
   - Command: python -m pytest -> FAIL (python not found)
   - Command: python3 -m pytest -> FAIL (pytest not installed)
