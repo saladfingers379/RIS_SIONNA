@@ -170,6 +170,45 @@ button:hover {
   max-height: 260px;
 }
 
+.ris-preview {
+  border: 1px solid #1f1f1f;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #0f172a;
+}
+
+.plot-tab-strip {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.plot-tab-button {
+  background: #e6e6e1;
+  color: #111;
+  border: 1px solid #1f1f1f;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-weight: 600;
+  cursor: pointer;
+  transform: none;
+}
+
+.plot-tab-button.is-active {
+  background: #111827;
+  color: #f8fafc;
+}
+
+.plot-card.single {
+  margin-top: 10px;
+}
+
+.plot-card.single img {
+  width: 100%;
+  display: block;
+  border-radius: 6px;
+}
+
 .panel,
 .viewer {
   min-width: 0;

@@ -103,6 +103,16 @@ const ui = {
   risResultStatus: document.getElementById("risResultStatus"),
   risMetrics: document.getElementById("risMetrics"),
   risPlots: document.getElementById("risPlots"),
+  risPlotTabs: document.getElementById("risPlotTabs"),
+  risPlotImage: document.getElementById("risPlotImage"),
+  risPlotCaption: document.getElementById("risPlotCaption"),
+  risPreviewSvg: document.getElementById("risPreviewSvg"),
+  risPreviewTx: document.getElementById("risPreviewTx"),
+  risPreviewRx: document.getElementById("risPreviewRx"),
+  risPreviewPanel: document.getElementById("risPreviewPanel"),
+  risPreviewTxRay: document.getElementById("risPreviewTxRay"),
+  risPreviewRxRay: document.getElementById("risPreviewRxRay"),
+  risPreviewMeta: document.getElementById("risPreviewMeta"),
   radioMapAuto: document.getElementById("radioMapAuto"),
   radioMapPadding: document.getElementById("radioMapPadding"),
   radioMapCellX: document.getElementById("radioMapCellX"),
@@ -181,6 +191,7 @@ const RIS_PLOT_FILES = [
   { file: "pattern_polar.png", label: "Pattern (polar)" },
   { file: "validation_overlay.png", label: "Validation overlay" },
 ];
+const RIS_PLOT_LABELS = Object.fromEntries(RIS_PLOT_FILES.map((p) => [p.file, p.label]));
 
 let renderer;
 let scene;
@@ -462,6 +473,31 @@ function updateRisConfigPreview() {
   ui.risConfigPreview.textContent = JSON.stringify(cfg, null, 2);
 }
 
+function updateRisPreview() {
+  if (!ui.risPreviewSvg) return;
+  const txDist = readOptionalNumber(ui.risTxDistance, 0.4);
+  const rxDist = readOptionalNumber(ui.risRxDistance, 2.0);
+  const txAngle = readOptionalNumber(ui.risTxAngle, -30);
+  const total = Math.max(0.1, txDist + rxDist);
+  const txX = 120 - (txDist / total) * 180;
+  const rxX = 480 + (rxDist / total) * 60;
+  const clampedTxX = Math.max(60, Math.min(240, txX));
+  const clampedRxX = Math.max(360, Math.min(540, rxX));
+  if (ui.risPreviewTx) ui.risPreviewTx.setAttribute("cx", String(clampedTxX));
+  if (ui.risPreviewRx) ui.risPreviewRx.setAttribute("cx", String(clampedRxX));
+  if (ui.risPreviewTxRay) {
+    ui.risPreviewTxRay.setAttribute("x1", String(clampedTxX));
+    ui.risPreviewTxRay.setAttribute("x2", "300");
+  }
+  if (ui.risPreviewRxRay) {
+    ui.risPreviewRxRay.setAttribute("x1", "300");
+    ui.risPreviewRxRay.setAttribute("x2", String(clampedRxX));
+  }
+  if (ui.risPreviewMeta) {
+    ui.risPreviewMeta.textContent = `Tx angle ${txAngle.toFixed(1)}° · Tx ${txDist.toFixed(2)} m · Rx ${rxDist.toFixed(2)} m`;
+  }
+}
+
 async function fetchJsonMaybe(url) {
   const res = await fetch(url);
   if (!res.ok) return null;
@@ -499,22 +535,12 @@ function renderRisMetrics(metrics) {
   });
 }
 
-function renderRisPlots(runId) {
-  ui.risPlots.innerHTML = "";
-  RIS_PLOT_FILES.forEach(({ file, label }) => {
-    const figure = document.createElement("figure");
-    figure.className = "plot-card";
-    const img = document.createElement("img");
-    img.src = `/runs/${runId}/plots/${file}`;
-    img.alt = label;
-    img.addEventListener("error", () => {
-      figure.remove();
-    });
-    const caption = document.createElement("figcaption");
-    caption.textContent = label;
-    figure.append(img, caption);
-    ui.risPlots.appendChild(figure);
-  });
+function renderRisPlotSingle(runId, file) {
+  if (!ui.risPlotImage || !ui.risPlotCaption) return;
+  const label = RIS_PLOT_LABELS[file] || file;
+  ui.risPlotCaption.textContent = label;
+  ui.risPlotImage.src = `/runs/${runId}/plots/${file}`;
+  ui.risPlotImage.alt = label;
 }
 
 function setRisStatus(text) {
@@ -814,6 +840,10 @@ async function refreshRisJobs() {
   }
   await refreshRisRunSelect();
   await refreshRisProgressAndLog();
+  if (state.ris.activeRunId) {
+    ui.risRunSelect.value = state.ris.activeRunId;
+    loadRisResults(state.ris.activeRunId);
+  }
 }
 
 async function submitRisJob() {
@@ -869,7 +899,7 @@ async function loadRisResults(runId) {
   if (!runId) {
     setRisResultStatus("Select a run to load results.");
     renderRisMetrics(null);
-    ui.risPlots.innerHTML = "";
+    if (ui.risPlotImage) ui.risPlotImage.src = "";
     return;
   }
   setRisResultStatus(`Loading ${runId}...`);
@@ -878,7 +908,13 @@ async function loadRisResults(runId) {
     fetchProgress(runId),
   ]);
   renderRisMetrics(metrics);
-  renderRisPlots(runId);
+  const defaultPlot = "phase_map.png";
+  renderRisPlotSingle(runId, defaultPlot);
+  if (ui.risPlotTabs) {
+    ui.risPlotTabs.querySelectorAll(".plot-tab-button").forEach((btn) => {
+      btn.classList.toggle("is-active", btn.dataset.plot === defaultPlot);
+    });
+  }
   if (progress && progress.status === "failed") {
     const error = progress.error ? ` · ERROR: ${progress.error}` : "";
     setRisResultStatus(`Run failed${error}`);
@@ -1707,6 +1743,18 @@ function bindUI() {
   
   if (!ui.risRunSelect) console.error("ui.risRunSelect is missing");
   ui.risRunSelect.addEventListener("change", () => loadRisResults(ui.risRunSelect.value));
+
+  if (!ui.risPlotTabs) console.error("ui.risPlotTabs is missing");
+  ui.risPlotTabs.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLButtonElement)) return;
+    const file = target.dataset.plot;
+    if (!file || !state.ris.activeRunId) return;
+    ui.risPlotTabs.querySelectorAll(".plot-tab-button").forEach((btn) => {
+      btn.classList.toggle("is-active", btn === target);
+    });
+    renderRisPlotSingle(state.ris.activeRunId, file);
+  });
   
   if (!ui.risConfigSource) console.error("ui.risConfigSource is missing");
   ui.risConfigSource.addEventListener("change", () => {
@@ -1763,6 +1811,7 @@ function bindUI() {
     if (input.tagName && input.tagName.toLowerCase() === "select") {
       input.addEventListener("change", updateRisConfigPreview);
     }
+    input.addEventListener("input", updateRisPreview);
   });
   
   if (!ui.topDown) console.error("ui.topDown is missing");
@@ -1877,6 +1926,7 @@ updateRisActionVisibility();
 updateRisConfigSourceVisibility();
 updateRisControlVisibility();
 updateRisConfigPreview();
+updateRisPreview();
 setMainTab("sim");
 fetchConfigs().then(fetchRuns).then(refreshRisJobs);
 setInterval(() => {

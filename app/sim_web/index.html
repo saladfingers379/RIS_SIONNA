@@ -535,6 +535,27 @@
         </details>
 
         <details class="panel-section" open>
+          <summary>Experiment Preview</summary>
+          <div class="panel-section-body">
+            <div class="ris-preview">
+              <svg id="risPreviewSvg" viewBox="0 0 600 220" preserveAspectRatio="xMidYMid meet">
+                <rect x="0" y="0" width="600" height="220" fill="#0f172a"/>
+                <line x1="80" y1="110" x2="520" y2="110" stroke="#334155" stroke-width="2"/>
+                <rect id="risPreviewPanel" x="285" y="70" width="30" height="80" fill="#fbbf24"/>
+                <circle id="risPreviewTx" cx="120" cy="110" r="10" fill="#ef4444"/>
+                <circle id="risPreviewRx" cx="480" cy="110" r="10" fill="#22c55e"/>
+                <line id="risPreviewTxRay" x1="120" y1="110" x2="300" y2="110" stroke="#f97316" stroke-width="2" stroke-dasharray="6 6"/>
+                <line id="risPreviewRxRay" x1="300" y1="110" x2="480" y2="110" stroke="#38bdf8" stroke-width="2" stroke-dasharray="6 6"/>
+                <text x="120" y="92" fill="#fca5a5" font-size="12" font-family="IBM Plex Mono">Tx</text>
+                <text x="470" y="92" fill="#86efac" font-size="12" font-family="IBM Plex Mono">Rx</text>
+                <text x="270" y="60" fill="#fde68a" font-size="12" font-family="IBM Plex Mono">RIS</text>
+                <text id="risPreviewMeta" x="20" y="200" fill="#e2e8f0" font-size="12" font-family="IBM Plex Mono"></text>
+              </svg>
+            </div>
+          </div>
+        </details>
+
+        <details class="panel-section" open>
           <summary>Results</summary>
           <div class="panel-section-body">
             <div class="field">
@@ -546,7 +567,31 @@
             </div>
             <div id="risResultStatus" class="help-text"></div>
             <div class="metrics-card" id="risMetrics"></div>
-            <div class="plot-grid" id="risPlots"></div>
+            <div class="plot-tab-strip" id="risPlotTabs">
+              <button class="plot-tab-button is-active" data-plot="phase_map.png" type="button">Phase</button>
+              <button class="plot-tab-button" data-plot="pattern_cartesian.png" type="button">Pattern</button>
+              <button class="plot-tab-button" data-plot="pattern_polar.png" type="button">Polar</button>
+              <button class="plot-tab-button" data-plot="validation_overlay.png" type="button">Validation</button>
+            </div>
+            <figure class="plot-card single" id="risPlotSingle">
+              <img id="risPlotImage" alt="RIS plot" />
+              <figcaption id="risPlotCaption"></figcaption>
+            </figure>
+          </div>
+        </details>
+
+        <details class="panel-section">
+          <summary>RIS Glossary</summary>
+          <div class="panel-section-body glossary">
+            <div class="glossary-item"><strong>Tx angle</strong> azimuth angle of the transmitter relative to the RIS normal.</div>
+            <div class="glossary-item"><strong>Tx/Rx distance</strong> radial distance from RIS center to the Tx/Rx points.</div>
+            <div class="glossary-item"><strong>Reflection coeff</strong> amplitude factor (ρ) applied to RIS elements.</div>
+            <div class="glossary-item"><strong>Control: Steer</strong> reflectarray phase law: k·(R_i − r·k̂).</div>
+            <div class="glossary-item"><strong>Control: Uniform</strong> sets all elements to the same phase.</div>
+            <div class="glossary-item"><strong>Control: Focus</strong> near-field phase for a focal point.</div>
+            <div class="glossary-item"><strong>Quantization bits</strong> phase resolution; 0 = continuous.</div>
+            <div class="glossary-item"><strong>Sweep</strong> receiver azimuth scan range for patterns.</div>
+            <div class="glossary-item"><strong>Normalization</strong> peak_0db or unit_power normalization.</div>
           </div>
         </details>
       </section>
