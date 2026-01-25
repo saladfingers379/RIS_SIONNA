@@ -36,6 +36,7 @@ const ui = {
   refreshRuns: document.getElementById("refreshRuns"),
   topDown: document.getElementById("topDown"),
   snapshot: document.getElementById("snapshot"),
+  mainTabStrip: document.getElementById("mainTabStrip"),
   runProfile: document.getElementById("runProfile"),
   sceneRunSelect: document.getElementById("sceneRunSelect"),
   runStats: document.getElementById("runStats"),
@@ -49,8 +50,44 @@ const ui = {
   dragMarkers: document.getElementById("dragMarkers"),
   runSim: document.getElementById("runSim"),
   jobList: document.getElementById("jobList"),
-  risTabStrip: document.getElementById("risTabStrip"),
+  risConfigSource: document.getElementById("risConfigSource"),
   risConfigPath: document.getElementById("risConfigPath"),
+  risConfigPreview: document.getElementById("risConfigPreview"),
+  risFreqHz: document.getElementById("risFreqHz"),
+  risTxAngle: document.getElementById("risTxAngle"),
+  risTxDistance: document.getElementById("risTxDistance"),
+  risRxDistance: document.getElementById("risRxDistance"),
+  risTxGain: document.getElementById("risTxGain"),
+  risRxGain: document.getElementById("risRxGain"),
+  risTxPower: document.getElementById("risTxPower"),
+  risReflectionCoeff: document.getElementById("risReflectionCoeff"),
+  risGeomNx: document.getElementById("risGeomNx"),
+  risGeomNy: document.getElementById("risGeomNy"),
+  risGeomDx: document.getElementById("risGeomDx"),
+  risGeomDy: document.getElementById("risGeomDy"),
+  risOriginX: document.getElementById("risOriginX"),
+  risOriginY: document.getElementById("risOriginY"),
+  risOriginZ: document.getElementById("risOriginZ"),
+  risNormalX: document.getElementById("risNormalX"),
+  risNormalY: document.getElementById("risNormalY"),
+  risNormalZ: document.getElementById("risNormalZ"),
+  risAxisX: document.getElementById("risAxisX"),
+  risAxisY: document.getElementById("risAxisY"),
+  risAxisZ: document.getElementById("risAxisZ"),
+  risElementSize: document.getElementById("risElementSize"),
+  risControlMode: document.getElementById("risControlMode"),
+  risSteerAz: document.getElementById("risSteerAz"),
+  risSteerEl: document.getElementById("risSteerEl"),
+  risPhaseOffsetDeg: document.getElementById("risPhaseOffsetDeg"),
+  risUniformPhaseDeg: document.getElementById("risUniformPhaseDeg"),
+  risFocusX: document.getElementById("risFocusX"),
+  risFocusY: document.getElementById("risFocusY"),
+  risFocusZ: document.getElementById("risFocusZ"),
+  risQuantBits: document.getElementById("risQuantBits"),
+  risSweepStart: document.getElementById("risSweepStart"),
+  risSweepStop: document.getElementById("risSweepStop"),
+  risSweepStep: document.getElementById("risSweepStep"),
+  risNormalization: document.getElementById("risNormalization"),
   risAction: document.getElementById("risAction"),
   risMode: document.getElementById("risMode"),
   risReferenceField: document.getElementById("risReferenceField"),
@@ -276,14 +313,15 @@ function setInputValue(input, value) {
   }
 }
 
-function setRisTab(tabName) {
-  const buttons = ui.risTabStrip.querySelectorAll(".tab-button");
-  const panels = document.querySelectorAll(".tab-panel[data-tab^=\"ris-\"]");
+function setMainTab(tabName) {
+  if (!ui.mainTabStrip) return;
+  const buttons = ui.mainTabStrip.querySelectorAll(".main-tab-button");
+  const panels = document.querySelectorAll(".main-tab-panel");
   buttons.forEach((button) => {
-    button.classList.toggle("is-active", button.dataset.tab === tabName);
+    button.classList.toggle("is-active", button.dataset.mainTab === tabName);
   });
   panels.forEach((panel) => {
-    panel.classList.toggle("is-active", panel.dataset.tab === tabName);
+    panel.classList.toggle("is-active", panel.dataset.mainTab === tabName);
   });
 }
 
@@ -292,6 +330,136 @@ function updateRisActionVisibility() {
   const isValidate = action === "validate";
   ui.risReferenceField.style.display = isValidate ? "" : "none";
   ui.risMode.disabled = isValidate;
+}
+
+function updateRisConfigSourceVisibility() {
+  const source = ui.risConfigSource ? ui.risConfigSource.value : "builder";
+  const fileFields = document.querySelectorAll(".ris-config-file");
+  fileFields.forEach((el) => {
+    el.style.display = source === "file" ? "" : "none";
+  });
+}
+
+function updateRisControlVisibility() {
+  const mode = ui.risControlMode ? ui.risControlMode.value : "steer";
+  const steerFields = document.querySelectorAll(".ris-control-steer");
+  const uniformFields = document.querySelectorAll(".ris-control-uniform");
+  const focusFields = document.querySelectorAll(".ris-control-focus");
+  steerFields.forEach((el) => {
+    el.style.display = mode === "steer" ? "" : "none";
+  });
+  uniformFields.forEach((el) => {
+    el.style.display = mode === "uniform" ? "" : "none";
+  });
+  focusFields.forEach((el) => {
+    el.style.display = mode === "focus" ? "" : "none";
+  });
+}
+
+function readOptionalNumber(input, fallback) {
+  const val = parseFloat(input && input.value);
+  return Number.isFinite(val) ? val : fallback;
+}
+
+function readOptionalInt(input, fallback) {
+  const val = parseInt(input && input.value, 10);
+  return Number.isFinite(val) ? val : fallback;
+}
+
+function buildRisConfigFromUI() {
+  const config = {
+    schema_version: 1,
+    geometry: {
+      nx: readOptionalInt(ui.risGeomNx, 20),
+      ny: readOptionalInt(ui.risGeomNy, 20),
+      dx: readOptionalNumber(ui.risGeomDx, 0.0049),
+      dy: readOptionalNumber(ui.risGeomDy, 0.0049),
+      origin: [
+        readOptionalNumber(ui.risOriginX, 0.0),
+        readOptionalNumber(ui.risOriginY, 0.0),
+        readOptionalNumber(ui.risOriginZ, 0.0),
+      ],
+      normal: [
+        readOptionalNumber(ui.risNormalX, 1.0),
+        readOptionalNumber(ui.risNormalY, 0.0),
+        readOptionalNumber(ui.risNormalZ, 0.0),
+      ],
+      x_axis_hint: [
+        readOptionalNumber(ui.risAxisX, 0.0),
+        readOptionalNumber(ui.risAxisY, 1.0),
+        readOptionalNumber(ui.risAxisZ, 0.0),
+      ],
+    },
+    control: {
+      mode: ui.risControlMode ? ui.risControlMode.value : "steer",
+      params: {},
+    },
+    quantization: {
+      bits: readOptionalInt(ui.risQuantBits, 0),
+    },
+    pattern_mode: {
+      normalization: ui.risNormalization ? ui.risNormalization.value : "peak_0db",
+      rx_sweep_deg: {
+        start: readOptionalNumber(ui.risSweepStart, -90),
+        stop: readOptionalNumber(ui.risSweepStop, 90),
+        step: readOptionalNumber(ui.risSweepStep, 2),
+      },
+    },
+    experiment: {
+      frequency_hz: readOptionalNumber(ui.risFreqHz, 28000000000),
+      tx_angle_deg: readOptionalNumber(ui.risTxAngle, -30),
+      tx_incident_angle_deg: readOptionalNumber(ui.risTxAngle, -30),
+      tx_distance_m: readOptionalNumber(ui.risTxDistance, 0.4),
+      rx_distance_m: readOptionalNumber(ui.risRxDistance, 2.0),
+      tx_gain_dbi: readOptionalNumber(ui.risTxGain, 15.0),
+      rx_gain_dbi: readOptionalNumber(ui.risRxGain, 22.0),
+      tx_power_dbm: readOptionalNumber(ui.risTxPower, 28.0),
+      reflection_coeff: readOptionalNumber(ui.risReflectionCoeff, 0.84),
+    },
+    output: {
+      base_dir: "outputs",
+    },
+  };
+
+  const elementSize = readOptionalNumber(ui.risElementSize, null);
+  if (elementSize !== null) {
+    config.experiment.element_size_m = elementSize;
+  }
+
+  const mode = config.control.mode;
+  if (mode === "steer") {
+    config.control.params.azimuth_deg = readOptionalNumber(ui.risSteerAz, 0.0);
+    config.control.params.elevation_deg = readOptionalNumber(ui.risSteerEl, 0.0);
+    config.control.params.phase_offset_deg = readOptionalNumber(ui.risPhaseOffsetDeg, 0.0);
+  } else if (mode === "uniform") {
+    config.control.params.phase_deg = readOptionalNumber(ui.risUniformPhaseDeg, 0.0);
+  } else if (mode === "focus") {
+    config.control.params.focal_point = [
+      readOptionalNumber(ui.risFocusX, 0.0),
+      readOptionalNumber(ui.risFocusY, 0.0),
+      readOptionalNumber(ui.risFocusZ, 0.8),
+    ];
+  }
+
+  if (config.quantization.bits === 0) {
+    config.quantization.bits = 0;
+  }
+
+  if (!config.pattern_mode.normalization) {
+    delete config.pattern_mode.normalization;
+  }
+
+  return config;
+}
+
+function updateRisConfigPreview() {
+  if (!ui.risConfigPreview) return;
+  if (ui.risConfigSource && ui.risConfigSource.value === "file") {
+    ui.risConfigPreview.textContent = "Using config file path.";
+    return;
+  }
+  const cfg = buildRisConfigFromUI();
+  ui.risConfigPreview.textContent = JSON.stringify(cfg, null, 2);
 }
 
 async function fetchJsonMaybe(url) {
@@ -649,19 +817,22 @@ async function refreshRisJobs() {
 }
 
 async function submitRisJob() {
-  let configPath = ui.risConfigPath.value.trim();
-  if (!configPath && ui.risConfigPath.placeholder) {
-    configPath = ui.risConfigPath.placeholder;
-  }
-  if (!configPath) {
-    setRisStatus("Config path required.");
-    return;
-  }
   const action = ui.risAction.value;
-  const payload = {
-    action,
-    config_path: configPath,
-  };
+  const payload = { action };
+  const source = ui.risConfigSource ? ui.risConfigSource.value : "builder";
+  if (source === "file") {
+    let configPath = ui.risConfigPath.value.trim();
+    if (!configPath && ui.risConfigPath.placeholder) {
+      configPath = ui.risConfigPath.placeholder;
+    }
+    if (!configPath) {
+      setRisStatus("Config path required.");
+      return;
+    }
+    payload.config_path = configPath;
+  } else {
+    payload.config_data = buildRisConfigFromUI();
+  }
   if (action === "run") {
     payload.mode = ui.risMode.value;
   } else {
@@ -1514,11 +1685,11 @@ function bindUI() {
   ui.runSim.addEventListener("click", () => submitJob());
   
   console.log("Binding RIS controls...");
-  if (!ui.risTabStrip) console.error("ui.risTabStrip is missing");
-  ui.risTabStrip.addEventListener("click", (event) => {
+  if (!ui.mainTabStrip) console.error("ui.mainTabStrip is missing");
+  ui.mainTabStrip.addEventListener("click", (event) => {
     const target = event.target;
-    if (target instanceof HTMLButtonElement && target.dataset.tab) {
-      setRisTab(target.dataset.tab);
+    if (target instanceof HTMLButtonElement && target.dataset.mainTab) {
+      setMainTab(target.dataset.mainTab);
     }
   });
   
@@ -1536,6 +1707,63 @@ function bindUI() {
   
   if (!ui.risRunSelect) console.error("ui.risRunSelect is missing");
   ui.risRunSelect.addEventListener("change", () => loadRisResults(ui.risRunSelect.value));
+  
+  if (!ui.risConfigSource) console.error("ui.risConfigSource is missing");
+  ui.risConfigSource.addEventListener("change", () => {
+    updateRisConfigSourceVisibility();
+    updateRisConfigPreview();
+  });
+  
+  if (!ui.risControlMode) console.error("ui.risControlMode is missing");
+  ui.risControlMode.addEventListener("change", () => {
+    updateRisControlVisibility();
+    updateRisConfigPreview();
+  });
+
+  const risPreviewInputs = [
+    ui.risConfigPath,
+    ui.risFreqHz,
+    ui.risTxAngle,
+    ui.risTxDistance,
+    ui.risRxDistance,
+    ui.risTxGain,
+    ui.risRxGain,
+    ui.risTxPower,
+    ui.risReflectionCoeff,
+    ui.risGeomNx,
+    ui.risGeomNy,
+    ui.risGeomDx,
+    ui.risGeomDy,
+    ui.risOriginX,
+    ui.risOriginY,
+    ui.risOriginZ,
+    ui.risNormalX,
+    ui.risNormalY,
+    ui.risNormalZ,
+    ui.risAxisX,
+    ui.risAxisY,
+    ui.risAxisZ,
+    ui.risElementSize,
+    ui.risSteerAz,
+    ui.risSteerEl,
+    ui.risPhaseOffsetDeg,
+    ui.risUniformPhaseDeg,
+    ui.risFocusX,
+    ui.risFocusY,
+    ui.risFocusZ,
+    ui.risQuantBits,
+    ui.risSweepStart,
+    ui.risSweepStop,
+    ui.risSweepStep,
+    ui.risNormalization,
+  ];
+  risPreviewInputs.forEach((input) => {
+    if (!input) return;
+    input.addEventListener("input", updateRisConfigPreview);
+    if (input.tagName && input.tagName.toLowerCase() === "select") {
+      input.addEventListener("change", updateRisConfigPreview);
+    }
+  });
   
   if (!ui.topDown) console.error("ui.topDown is missing");
   ui.topDown.addEventListener("click", () => {
@@ -1646,6 +1874,10 @@ try {
 bindKeyboardNavigation();
 bindUI();
 updateRisActionVisibility();
+updateRisConfigSourceVisibility();
+updateRisControlVisibility();
+updateRisConfigPreview();
+setMainTab("sim");
 fetchConfigs().then(fetchRuns).then(refreshRisJobs);
 setInterval(() => {
   refreshJobs();

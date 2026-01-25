@@ -3,16 +3,16 @@ schema_version: 1
 geometry:
   nx: 20
   ny: 20
-  dx: 0.0046
-  dy: 0.0046
+  dx: 0.0049
+  dy: 0.0049
   origin: [0.0, 0.0, 0.0]
-  normal: [0.0, 0.0, 1.0]
-  x_axis_hint: [1.0, 0.0, 0.0]
+  normal: [1.0, 0.0, 0.0]
+  x_axis_hint: [0.0, 1.0, 0.0]
 
 control:
   mode: steer
   params:
-    azimuth_deg: 25.0
+    azimuth_deg: 0.0
     elevation_deg: 0.0
 
 quantization:
@@ -28,6 +28,12 @@ pattern_mode:
 experiment:
   frequency_hz: 28000000000
   tx_incident_angle_deg: -30.0
+  tx_distance_m: 0.4
+  rx_distance_m: 2.0
+  tx_gain_dbi: 15.0
+  rx_gain_dbi: 22.0
+  tx_power_dbm: 28.0
+  reflection_coeff: 0.84
 
 output:
   base_dir: outputs

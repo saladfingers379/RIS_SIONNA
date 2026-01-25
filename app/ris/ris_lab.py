@@ -6,7 +6,7 @@ import csv
 import logging
 import time
 from pathlib import Path
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 import matplotlib
 matplotlib.use("Agg")
@@ -17,11 +17,10 @@ from app.io import save_json
 from app.ris.ris_config import resolve_and_snapshot_ris_lab_config
 from app.ris.ris_core import (
     compute_element_centers,
-    degrees_to_radians,
     quantize_phase,
     synthesize_custom_phase,
     synthesize_focusing_phase,
-    synthesize_steering_phase,
+    synthesize_reflectarray_phase,
     synthesize_uniform_phase,
 )
 
@@ -46,8 +45,33 @@ def _direction_from_angles(azimuth_deg: float, elevation_deg: float) -> np.ndarr
     )
 
 
+def _resolve_tx_angle_deg(experiment_cfg: Dict[str, Any]) -> float:
+    if "tx_angle_deg" in experiment_cfg:
+        return float(experiment_cfg["tx_angle_deg"])
+    return float(experiment_cfg.get("tx_incident_angle_deg", 0.0))
+
+
+def _compute_ris_center(geometry: Any) -> np.ndarray:
+    return geometry.centers.reshape(-1, 3).mean(axis=0)
+
+
+def _compute_tx_position(
+    geometry: Any,
+    ris_center: np.ndarray,
+    tx_distance_m: float,
+    tx_angle_deg: float,
+) -> np.ndarray:
+    theta_rad = np.deg2rad(float(tx_angle_deg))
+    direction = np.cos(theta_rad) * geometry.frame.w + np.sin(theta_rad) * geometry.frame.u
+    return ris_center + float(tx_distance_m) * direction
+
+
 def _resolve_phase_map(
-    config: Dict[str, Any], geometry: Any, wavelength: float, incident_direction: Optional[np.ndarray] = None
+    config: Dict[str, Any],
+    geometry: Any,
+    wavelength: float,
+    tx_position: np.ndarray,
+    ris_center: np.ndarray,
 ) -> np.ndarray:
     geometry_cfg = config["geometry"]
     control_cfg = config.get("control", {})
@@ -72,12 +96,22 @@ def _resolve_phase_map(
                     "steer control requires direction or azimuth_deg/elevation_deg"
                 )
             direction = _direction_from_angles(float(az), float(el))
-        phase = synthesize_steering_phase(geometry.centers, wavelength, direction, incident_direction)
+        phase_offset = float(params.get("phase_offset_rad", 0.0))
+        if "phase_offset_deg" in params:
+            phase_offset = float(np.deg2rad(params["phase_offset_deg"]))
+        phase = synthesize_reflectarray_phase(
+            geometry.centers,
+            wavelength,
+            tx_position,
+            direction,
+            phase_offset_rad=phase_offset,
+            ris_center=ris_center,
+        )
     elif mode == "focus":
         focal_point = params.get("focal_point")
         if focal_point is None:
             raise ValueError("focus control requires focal_point")
-        phase = synthesize_focusing_phase(geometry.centers, wavelength, focal_point, incident_direction)
+        phase = synthesize_focusing_phase(geometry.centers, wavelength, focal_point, None)
     elif mode == "custom":
         phase_map = params.get("phase_map")
         if phase_map is None:
@@ -91,54 +125,92 @@ def _resolve_phase_map(
     return phase
 
 
-def _compute_array_response(
+def _compute_received_power(
     centers: np.ndarray,
     phase_map: np.ndarray,
     frame: Any,
     wavelength: float,
     theta_deg: np.ndarray,
-    incident_direction: np.ndarray,
+    tx_position: np.ndarray,
+    ris_center: np.ndarray,
+    tx_gain_dbi: float,
+    rx_gain_dbi: float,
+    tx_power_dbm: float,
+    reflection_coeff: float,
+    element_area_m2: float,
+    tx_distance_m: float,
+    rx_distance_m: float,
 ) -> np.ndarray:
-    # 1. Incident Phase (from Tx to Element)
-    # Assuming plane wave from 'incident_direction' (unit vector pointing FROM source TO ris? or RIS to Source?)
-    # Convention: incident_direction points FROM the source TOWARDS the RIS. 
-    # But usually we define "Angle of Incidence" as direction vector. 
-    # Let's assume 'incident_direction' is the k-vector direction (Source -> RIS).
-    # Phase @ element = -k * (r . k_inc)
     k = 2.0 * np.pi / float(wavelength)
     centers_flat = centers.reshape(-1, 3)
-    
-    # Projection of centers onto incident direction
-    # incident_direction should be normalized
-    phase_incident = -k * (centers_flat @ incident_direction)
 
-    # 2. Outgoing Phase (from Element to Rx)
-    # Rx direction depends on theta scan
-    theta_rad = degrees_to_radians(np.array(theta_deg, dtype=float))
-    # Directions pointing FROM RIS TO Rx
+    tx_position = np.array(tx_position, dtype=float)
+    ris_center = np.array(ris_center, dtype=float)
+
+    # Tx->element distances
+    rt = np.linalg.norm(centers_flat - tx_position[None, :], axis=1)
+    d1_center = float(np.linalg.norm(tx_position - ris_center))
+    if d1_center <= 0.0:
+        raise ValueError("tx_distance_m must be > 0")
+
+    # Element offset from RIS center (remove normal component)
+    v_rel = centers_flat - ris_center
+    v_normal = (v_rel @ frame.w)[:, None] * frame.w[None, :]
+    d_nm = np.linalg.norm(v_rel - v_normal, axis=1)
+
+    cos_theta_nm_t = np.abs((centers_flat - tx_position[None, :]) @ frame.w) / rt
+    cos_theta_nm_t = np.clip(cos_theta_nm_t, 0.0, 1.0)
+    cos_theta_nm_tx = (d1_center**2 + rt**2 - d_nm**2) / (2.0 * d1_center * rt)
+    cos_theta_nm_tx = np.clip(cos_theta_nm_tx, 0.0, 1.0)
+
+    # Gains (linear)
+    Gt = 10.0 ** (float(tx_gain_dbi) / 10.0)
+    Gr = 10.0 ** (float(rx_gain_dbi) / 10.0)
+    Pt_W = 10.0 ** ((float(tx_power_dbm) - 30.0) / 10.0)
+
+    alpha_t = (Gt / 2.0) - 1.0
+    alpha_r = (Gr / 2.0) - 1.0
+
+    theta_rad = np.deg2rad(np.array(theta_deg, dtype=float))
     directions_out = np.cos(theta_rad)[:, None] * frame.w + np.sin(theta_rad)[:, None] * frame.u
-    
-    # Phase accumulation from element to far-field Rx = -k * (r . k_out) 
-    # (relative to origin)
-    # Wait, Sionna RT / standard array theory:
-    # Array Factor AF(u) = sum( w_n * exp(j * k * r_n . u) )
-    # where u is direction vector towards observer.
-    # Correct sign: +k * (r . u) represents phase lead of element relative to origin in direction u.
-    # So phase delay is -k * (r . u).
-    # Let's use +k * (r . u) for the "geometric phase difference" term in the sum.
-    
-    phase_outgoing_diff = k * (centers_flat @ directions_out.T)
+    rx_positions = ris_center[None, :] + rx_distance_m * directions_out
 
-    # 3. Total Phase = Incident + RIS + Outgoing
-    phase_ris_flat = phase_map.reshape(-1)
-    
-    # Sum over elements (axis 0)
-    # shape: (num_elements, num_angles)
-    total_phase = phase_incident[:, None] + phase_ris_flat[:, None] + phase_outgoing_diff
-    
-    # Field sum
-    response = np.exp(1j * total_phase).sum(axis=0)
-    return np.abs(response) ** 2
+    gamma_on = float(reflection_coeff) * np.exp(1j * phase_map.reshape(-1))
+    denom_tx = rt
+
+    power = np.zeros(theta_rad.shape[0], dtype=float)
+    for idx, rx_pos in enumerate(rx_positions):
+        rr = np.linalg.norm(centers_flat - rx_pos[None, :], axis=1)
+        d2_center = float(np.linalg.norm(rx_pos - ris_center))
+
+        cos_theta_nm_r = np.abs((centers_flat - rx_pos[None, :]) @ frame.w) / rr
+        cos_theta_nm_r = np.clip(cos_theta_nm_r, 0.0, 1.0)
+        cos_theta_nm_rx = (d2_center**2 + rr**2 - d_nm**2) / (2.0 * d2_center * rr)
+        cos_theta_nm_rx = np.clip(cos_theta_nm_rx, 0.0, 1.0)
+
+        F_combine = (
+            (cos_theta_nm_tx ** alpha_t)
+            * cos_theta_nm_t
+            * cos_theta_nm_r
+            * (cos_theta_nm_rx ** alpha_r)
+        )
+        F_combine = np.maximum(F_combine, 0.0)
+
+        phase_term = np.exp(-1j * k * (rt + rr))
+        denom = denom_tx * rr
+
+        sum_on = np.sum(np.sqrt(F_combine) * gamma_on / denom * phase_term)
+
+        power[idx] = (
+            Pt_W
+            * Gt
+            * Gr
+            * (element_area_m2**2)
+            / (16.0 * np.pi**2)
+            * (np.abs(sum_on) ** 2)
+        )
+
+    return power
 
 
 def _apply_normalization(linear: np.ndarray, mode: str | None) -> np.ndarray:
@@ -153,13 +225,59 @@ def _apply_normalization(linear: np.ndarray, mode: str | None) -> np.ndarray:
     raise ValueError(f"Unsupported normalization mode: {mode}")
 
 
-def _plot_phase_map(phase_map: np.ndarray, output_dir: Path) -> Path:
-    fig, ax = plt.subplots(figsize=(6, 5))
-    im = ax.imshow(phase_map, origin="lower", cmap="twilight")
+def _plot_phase_map(
+    phase_map: np.ndarray,
+    output_dir: Path,
+    geometry: Any,
+    quant_bits: Optional[int],
+) -> Path:
+    fig, ax = plt.subplots(figsize=(6.5, 5.2))
+
+    if quant_bits == 1:
+        cmap = plt.cm.get_cmap("bwr", 2)
+        vmin, vmax = 0.0, np.pi
+        ticks = [0.0, np.pi]
+        tick_labels = ["0", "π"]
+    elif quant_bits and quant_bits > 1:
+        cmap = "hsv"
+        vmin, vmax = 0.0, 2.0 * np.pi
+        ticks = [0.0, np.pi, 2.0 * np.pi]
+        tick_labels = ["0", "π", "2π"]
+    else:
+        cmap = "twilight"
+        vmin, vmax = None, None
+        ticks = None
+        tick_labels = None
+
+    centers = geometry.centers
+    frame = geometry.frame
+    origin = centers.reshape(-1, 3).mean(axis=0)
+    u_coords = (centers - origin) @ frame.u
+    v_coords = (centers - origin) @ frame.v
+
+    extent = [
+        float(u_coords.min() * 1000.0),
+        float(u_coords.max() * 1000.0),
+        float(v_coords.min() * 1000.0),
+        float(v_coords.max() * 1000.0),
+    ]
+
+    im = ax.imshow(
+        phase_map,
+        origin="lower",
+        cmap=cmap,
+        vmin=vmin,
+        vmax=vmax,
+        extent=extent,
+        aspect="equal",
+    )
     ax.set_title("RIS Phase Map [rad]")
-    ax.set_xlabel("Element X")
-    ax.set_ylabel("Element Y")
-    fig.colorbar(im, ax=ax, label="Phase [rad]")
+    ax.set_xlabel("u (mm)")
+    ax.set_ylabel("v (mm)")
+    cb = fig.colorbar(im, ax=ax, label="Phase [rad]")
+    if ticks is not None:
+        cb.set_ticks(ticks)
+        cb.set_ticklabels(tick_labels)
     fig.tight_layout()
     path = output_dir / "phase_map.png"
     fig.savefig(path, dpi=200)
@@ -360,37 +478,35 @@ def run_ris_lab(config_path: str, mode: str) -> Path:
         )
         frequency_hz = float(config["experiment"]["frequency_hz"])
         wavelength = _SPEED_OF_LIGHT_M_S / frequency_hz
-        
-        # Calculate incident direction from config
-        # Assuming incident angle is defined relative to surface normal in x-z plane?
-        # Standard convention: theta_inc relative to Normal (w).
-        inc_angle_deg = float(config["experiment"].get("tx_incident_angle_deg", 0.0))
-        inc_angle_rad = np.deg2rad(inc_angle_deg)
-        # If inc_angle is -30 deg (coming from left), vector should point towards surface.
-        # Vector S (source direction) = -sin(theta)u - cos(theta)w ??
-        # Let's assume standard "Angle of Arrival":
-        # If theta=0, comes from Normal (top). Direction = -w.
-        # If theta=-30 (from left), Direction = sin(30)u - cos(30)w.
-        # Let's use the same convention as scanning:
-        # u is 'right', w is 'up'.
-        # Incident vector k_i.
-        # We need the direction the wave is TRAVELING.
-        # If source is at theta_inc, wave travels in -r_source direction.
-        # Source dir (from origin): cos(theta)w + sin(theta)u.
-        # Incident wave dir: -cos(theta)w - sin(theta)u.
-        inc_u = np.sin(inc_angle_rad)
-        inc_w = np.cos(inc_angle_rad)
-        incident_direction = -1.0 * (inc_u * geometry.frame.u + inc_w * geometry.frame.w)
+
+        experiment_cfg = config.get("experiment", {})
+        tx_angle_deg = _resolve_tx_angle_deg(experiment_cfg)
+        tx_distance_m = float(experiment_cfg.get("tx_distance_m", 0.4))
+        rx_distance_m = float(experiment_cfg.get("rx_distance_m", 2.0))
+        tx_gain_dbi = float(experiment_cfg.get("tx_gain_dbi", 15.0))
+        rx_gain_dbi = float(experiment_cfg.get("rx_gain_dbi", 22.0))
+        tx_power_dbm = float(experiment_cfg.get("tx_power_dbm", 28.0))
+        reflection_coeff = float(experiment_cfg.get("reflection_coeff", 0.84))
+        if experiment_cfg.get("element_area_m2") is not None:
+            element_area_m2 = float(experiment_cfg["element_area_m2"])
+        elif experiment_cfg.get("element_size_m") is not None:
+            size = float(experiment_cfg["element_size_m"])
+            element_area_m2 = size * size
+        else:
+            element_area_m2 = float(geometry_cfg["dx"]) * float(geometry_cfg["dy"])
+
+        ris_center = _compute_ris_center(geometry)
+        tx_position = _compute_tx_position(geometry, ris_center, tx_distance_m, tx_angle_deg)
 
         step_index += 1
         _write_progress(progress_path, steps, step_index, "running")
-        # Pass incident direction to phase synthesis for compensation
-        phase_map = _resolve_phase_map(config, geometry, wavelength, incident_direction)
+        phase_map = _resolve_phase_map(config, geometry, wavelength, tx_position, ris_center)
         plots_dir = output_dir / "plots"
         plots_dir.mkdir(parents=True, exist_ok=True)
         data_dir = output_dir / "data"
         data_dir.mkdir(parents=True, exist_ok=True)
-        _plot_phase_map(phase_map, plots_dir)
+        quant_bits = config.get("quantization", {}).get("bits")
+        _plot_phase_map(phase_map, plots_dir, geometry, quant_bits)
         np.save(data_dir / "phase_map.npy", phase_map)
 
         run_id = output_dir.name
@@ -404,8 +520,21 @@ def run_ris_lab(config_path: str, mode: str) -> Path:
                 float(sweep_cfg["stop"]) + float(sweep_cfg["step"]) * 0.5,
                 float(sweep_cfg["step"]),
             )
-            linear = _compute_array_response(
-                geometry.centers, phase_map, geometry.frame, wavelength, theta_deg, incident_direction
+            linear = _compute_received_power(
+                geometry.centers,
+                phase_map,
+                geometry.frame,
+                wavelength,
+                theta_deg,
+                tx_position,
+                ris_center,
+                tx_gain_dbi,
+                rx_gain_dbi,
+                tx_power_dbm,
+                reflection_coeff,
+                element_area_m2,
+                tx_distance_m,
+                rx_distance_m,
             )
             normalization = config["pattern_mode"].get("normalization", "peak_0db")
             linear_norm = _apply_normalization(linear, normalization)
@@ -433,13 +562,21 @@ def run_ris_lab(config_path: str, mode: str) -> Path:
         elif mode == "link":
             link_cfg = config.get("link_mode", {})
             rx_angle = float(link_cfg.get("rx_angle_deg", 0.0))
-            linear = _compute_array_response(
+            linear = _compute_received_power(
                 geometry.centers,
                 phase_map,
                 geometry.frame,
                 wavelength,
                 np.array([rx_angle], dtype=float),
-                incident_direction
+                tx_position,
+                ris_center,
+                tx_gain_dbi,
+                rx_gain_dbi,
+                tx_power_dbm,
+                reflection_coeff,
+                element_area_m2,
+                tx_distance_m,
+                rx_distance_m,
             )
             metrics = {
                 "run_id": run_id,
@@ -489,20 +626,33 @@ def validate_ris_lab(config_path: str, ref_path: str) -> Path:
         )
         frequency_hz = float(config["experiment"]["frequency_hz"])
         wavelength = _SPEED_OF_LIGHT_M_S / frequency_hz
-        
-        inc_angle_deg = float(config["experiment"].get("tx_incident_angle_deg", 0.0))
-        inc_angle_rad = np.deg2rad(inc_angle_deg)
-        inc_u = np.sin(inc_angle_rad)
-        inc_w = np.cos(inc_angle_rad)
-        incident_direction = -1.0 * (inc_u * geometry.frame.u + inc_w * geometry.frame.w)
+
+        experiment_cfg = config.get("experiment", {})
+        tx_angle_deg = _resolve_tx_angle_deg(experiment_cfg)
+        tx_distance_m = float(experiment_cfg.get("tx_distance_m", 0.4))
+        rx_distance_m = float(experiment_cfg.get("rx_distance_m", 2.0))
+        tx_gain_dbi = float(experiment_cfg.get("tx_gain_dbi", 15.0))
+        rx_gain_dbi = float(experiment_cfg.get("rx_gain_dbi", 22.0))
+        tx_power_dbm = float(experiment_cfg.get("tx_power_dbm", 28.0))
+        reflection_coeff = float(experiment_cfg.get("reflection_coeff", 0.84))
+        if experiment_cfg.get("element_area_m2") is not None:
+            element_area_m2 = float(experiment_cfg["element_area_m2"])
+        elif experiment_cfg.get("element_size_m") is not None:
+            size = float(experiment_cfg["element_size_m"])
+            element_area_m2 = size * size
+        else:
+            element_area_m2 = float(geometry_cfg["dx"]) * float(geometry_cfg["dy"])
+
+        ris_center = _compute_ris_center(geometry)
+        tx_position = _compute_tx_position(geometry, ris_center, tx_distance_m, tx_angle_deg)
 
         step_index += 1
         _write_progress(progress_path, steps, step_index, "running")
-        # Validate DOES use compensation in synthesis if the DUT (Device Under Test) logic is consistent
-        phase_map = _resolve_phase_map(config, geometry, wavelength, incident_direction)
+        phase_map = _resolve_phase_map(config, geometry, wavelength, tx_position, ris_center)
         plots_dir = output_dir / "plots"
         plots_dir.mkdir(parents=True, exist_ok=True)
-        _plot_phase_map(phase_map, plots_dir)
+        quant_bits = config.get("quantization", {}).get("bits")
+        _plot_phase_map(phase_map, plots_dir, geometry, quant_bits)
 
         step_index += 1
         _write_progress(progress_path, steps, step_index, "running")
@@ -519,8 +669,21 @@ def validate_ris_lab(config_path: str, ref_path: str) -> Path:
             theta_ref, ref_vals, ref_kind = _load_reference_npz(ref_path)
         else:
             theta_ref, ref_vals, ref_kind = _load_reference_mat(ref_path)
-        sim_linear = _compute_array_response(
-            geometry.centers, phase_map, geometry.frame, wavelength, theta_ref, incident_direction
+        sim_linear = _compute_received_power(
+            geometry.centers,
+            phase_map,
+            geometry.frame,
+            wavelength,
+            theta_ref,
+            tx_position,
+            ris_center,
+            tx_gain_dbi,
+            rx_gain_dbi,
+            tx_power_dbm,
+            reflection_coeff,
+            element_area_m2,
+            tx_distance_m,
+            rx_distance_m,
         )
 
         step_index += 1

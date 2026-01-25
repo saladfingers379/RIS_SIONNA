@@ -108,27 +108,47 @@ def synthesize_steering_phase(
     direction: Iterable[float],
     incident_direction: Optional[Iterable[float]] = None,
 ) -> np.ndarray:
-    """Far-field steering phase for a desired direction, optionally compensating for incidence."""
+    """Far-field steering phase for a desired direction (legacy)."""
 
     k = 2.0 * np.pi / float(wavelength)
     direction_vec = _normalize(np.array(direction, dtype=float), "direction")
-    
+
     # Phase gradient to align emission towards 'direction'
-    # Phase required: -k * (r . r_out)
     phase_out = -k * np.tensordot(centers, direction_vec, axes=([2], [0]))
 
     if incident_direction is not None:
-        # Compensate for incident phase: -k * (r . r_inc)
-        # We want: Phase_RIS = Phase_out - Phase_inc
-        # But wait, the physical phase at the element is Phase_inc.
-        # So Total_Phase = Phase_inc + Phase_RIS.
-        # We want Total_Phase to equal Phase_out (the planar gradient).
-        # So Phase_RIS = Phase_out - Phase_inc.
         inc_vec = _normalize(np.array(incident_direction, dtype=float), "incident_direction")
         phase_inc = -k * np.tensordot(centers, inc_vec, axes=([2], [0]))
         return phase_out - phase_inc
 
     return phase_out
+
+
+def synthesize_reflectarray_phase(
+    centers: np.ndarray,
+    wavelength: float,
+    feed_point: Iterable[float],
+    direction: Iterable[float],
+    phase_offset_rad: float = 0.0,
+    ris_center: Optional[Iterable[float]] = None,
+) -> np.ndarray:
+    """Near-field reflectarray steering phase for a point feed and desired outgoing direction."""
+
+    k = 2.0 * np.pi / float(wavelength)
+    feed = np.array(feed_point, dtype=float)
+    direction_vec = _normalize(np.array(direction, dtype=float), "direction")
+
+    centers_flat = centers.reshape(-1, 3)
+    if ris_center is None:
+        center = centers_flat.mean(axis=0)
+    else:
+        center = np.array(ris_center, dtype=float)
+
+    r_rel = centers_flat - center
+    rt = np.linalg.norm(centers_flat - feed[None, :], axis=1)
+    proj = r_rel @ direction_vec
+    phase = k * (rt - proj) + float(phase_offset_rad)
+    return phase.reshape(centers.shape[:2])
 
 
 def synthesize_focusing_phase(
@@ -165,20 +185,20 @@ def synthesize_focusing_phase(
 
 
 def quantize_phase(phase_rad: np.ndarray, bits: Optional[int]) -> np.ndarray:
-    """Quantize phase in radians using 1-bit or 2-bit levels."""
-
-    if bits in (None, 0):
-        return np.array(phase_rad, dtype=float, copy=True)
-    if bits not in (1, 2):
-        raise ValueError("quantization_bits must be one of {0, 1, 2}")
+    """Quantize phase in radians using uniform B-bit levels over [0, 2π)."""
 
     phase = np.array(phase_rad, dtype=float)
-    step = 2.0 * np.pi / (2**bits)
-    levels = np.arange(2**bits, dtype=float) * step
     phase_wrapped = np.mod(phase, 2.0 * np.pi)
-    diffs = np.abs(phase_wrapped[..., None] - levels)
-    indices = np.argmin(diffs, axis=-1)
-    return levels[indices]
+
+    if bits in (None, 0):
+        return phase_wrapped
+    if bits < 1:
+        raise ValueError("quantization_bits must be >= 1, 0, or None")
+
+    levels = 2**int(bits)
+    step = 2.0 * np.pi / levels
+    indices = np.floor(phase_wrapped / step).astype(int)
+    return indices * step
 
 
 def radians_to_degrees(angle_rad: np.ndarray) -> np.ndarray:

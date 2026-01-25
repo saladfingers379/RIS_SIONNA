@@ -18,6 +18,7 @@ from .ris_core import (  # noqa: F401
     radians_to_degrees,
     synthesize_custom_phase,
     synthesize_focusing_phase,
+    synthesize_reflectarray_phase,
     synthesize_steering_phase,
     synthesize_uniform_phase,
 )

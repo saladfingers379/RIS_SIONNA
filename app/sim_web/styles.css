@@ -106,6 +106,70 @@ button:hover {
   padding: 16px;
 }
 
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.main-tab-strip {
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px 0;
+  background: #f5f5f2;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.main-tab-button {
+  background: #e6e6e1;
+  color: #111;
+  border: 1px solid #1f1f1f;
+  border-bottom: none;
+  border-top-left-radius: 10px;
+  border-top-right-radius: 10px;
+  padding: 10px 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transform: none;
+}
+
+.main-tab-button:hover {
+  transform: none;
+}
+
+.main-tab-button.is-active {
+  background: var(--panel);
+  position: relative;
+  top: 1px;
+}
+
+.main-tab-panel {
+  display: none;
+  min-height: 0;
+}
+
+.main-tab-panel.is-active {
+  display: block;
+}
+
+.ris-layout {
+  display: grid;
+  grid-template-columns: minmax(320px, 420px) 1fr;
+  gap: 16px;
+  padding: 16px;
+}
+
+.code-block {
+  background: #141414;
+  color: #f4f4f4;
+  border-radius: 6px;
+  padding: 10px;
+  font-size: 11px;
+  overflow: auto;
+  max-height: 260px;
+}
+
 .panel,
 .viewer {
   min-width: 0;
@@ -454,5 +518,8 @@ tbody tr:hover {
   }
   .viewer {
     min-height: 420px;
+  }
+  .ris-layout {
+    grid-template-columns: 1fr;
   }
 }

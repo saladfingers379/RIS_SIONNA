@@ -249,16 +249,23 @@ class JobManager:
         if action not in {"run", "validate"}:
             raise ValueError("RIS Lab action must be 'run' or 'validate'")
 
-        config_value = payload.get("config_path") or payload.get("config") or payload.get("base_config")
-        if not config_value:
-            raise ValueError("RIS Lab job requires config_path")
-        config_path = Path(config_value)
-        if not config_path.exists():
-            raise FileNotFoundError(f"RIS Lab config not found: {config_path}")
+        cfg = None
+        config_data = payload.get("config_data")
+        if isinstance(config_data, dict):
+            cfg = config_data
+        elif isinstance(payload.get("config"), dict):
+            cfg = payload.get("config")
+        else:
+            config_value = payload.get("config_path") or payload.get("config") or payload.get("base_config")
+            if not config_value:
+                raise ValueError("RIS Lab job requires config_path or config_data")
+            config_path = Path(config_value)
+            if not config_path.exists():
+                raise FileNotFoundError(f"RIS Lab config not found: {config_path}")
 
-        cfg = _load_yaml(config_path)
-        if not isinstance(cfg, dict):
-            raise ValueError("RIS Lab config must be a YAML mapping")
+            cfg = _load_yaml(config_path)
+            if not isinstance(cfg, dict):
+                raise ValueError("RIS Lab config must be a YAML mapping")
 
         output_cfg = cfg.setdefault("output", {})
         run_id = generate_run_id()

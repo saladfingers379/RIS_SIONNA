@@ -49,6 +49,13 @@ DEFAULT_RIS_LAB_CONFIG: Dict[str, Any] = {
     "experiment": {
         "frequency_hz": 28_000_000_000,
         "tx_incident_angle_deg": -30.0,
+        "tx_distance_m": 0.4,
+        "rx_distance_m": 2.0,
+        "tx_gain_dbi": 15.0,
+        "rx_gain_dbi": 22.0,
+        "tx_power_dbm": 28.0,
+        "reflection_coeff": 0.84,
+        "element_size_m": None,
     },
     "output": {
         "base_dir": "outputs",

@@ -26,8 +26,15 @@
       </div>
     </header>
 
-    <main class="layout">
-      <section class="panel left">
+    <main class="main">
+      <div class="main-tab-strip" id="mainTabStrip">
+        <button class="main-tab-button is-active" data-main-tab="sim" type="button">Simulation</button>
+        <button class="main-tab-button" data-main-tab="ris" type="button">RIS Lab</button>
+      </div>
+
+      <div class="main-tab-panel is-active" data-main-tab="sim">
+        <div class="layout">
+          <section class="panel left">
         <details class="panel-section" open>
           <summary>Scene Controls</summary>
           <div class="panel-section-body">
@@ -168,76 +175,6 @@
           </div>
         </details>
 
-        <details class="panel-section" open>
-          <summary>RIS Lab</summary>
-          <div class="panel-section-body">
-            <div class="tab-strip" id="risTabStrip">
-              <button class="tab-button is-active" data-tab="ris-config" type="button">Config</button>
-              <button class="tab-button" data-tab="ris-run" type="button">Run</button>
-              <button class="tab-button" data-tab="ris-results" type="button">Results</button>
-            </div>
-
-            <div class="tab-panel is-active" data-tab="ris-config">
-              <div class="field">
-                <label>Config path</label>
-                <input id="risConfigPath" type="text" placeholder="configs/ris/steer_1bit.yaml" />
-                <div class="help-text">RIS Lab config YAML used for runs and validation.</div>
-              </div>
-              <div class="field-grid">
-                <div>
-                  <label>Action</label>
-                  <select id="risAction">
-                    <option value="run">Run</option>
-                    <option value="validate">Validate</option>
-                  </select>
-                </div>
-                <div>
-                  <label>Mode</label>
-                  <select id="risMode">
-                    <option value="pattern">Pattern</option>
-                    <option value="link">Link</option>
-                  </select>
-                </div>
-              </div>
-              <div class="field" id="risReferenceField">
-                <label>Reference file (CSV/NPZ/MAT)</label>
-                <input id="risReferencePath" type="text" placeholder="refs/pattern.csv" />
-                <div class="help-text">Required for validation runs.</div>
-              </div>
-            </div>
-
-            <div class="tab-panel" data-tab="ris-run">
-              <div class="job-buttons">
-                <button id="risStart" type="button">Start RIS Lab</button>
-                <button id="risRefresh" type="button">Refresh Status</button>
-              </div>
-              <div class="job-status">
-                <h3>Status</h3>
-                <div id="risJobStatus">Idle.</div>
-                <div class="help-text" id="risProgress"></div>
-                <pre class="log-view" id="risLog"></pre>
-              </div>
-              <div class="job-status">
-                <h3>Recent RIS Jobs</h3>
-                <div id="risJobList"></div>
-              </div>
-            </div>
-
-            <div class="tab-panel" data-tab="ris-results">
-              <div class="field">
-                <label>Run directory</label>
-                <select id="risRunSelect"></select>
-              </div>
-              <div class="job-buttons">
-                <button id="risLoadResults" type="button">Load Results</button>
-              </div>
-              <div id="risResultStatus" class="help-text"></div>
-              <div class="metrics-card" id="risMetrics"></div>
-              <div class="plot-grid" id="risPlots"></div>
-            </div>
-          </div>
-        </details>
-
         <details class="panel-section">
           <summary>Heatmap</summary>
           <div class="panel-section-body">
@@ -338,7 +275,284 @@
           </table>
         </div>
       </section>
-    </main>
+    </div>
+  </div>
+
+  <div class="main-tab-panel" data-main-tab="ris">
+    <div class="ris-layout">
+      <section class="panel ris-panel">
+        <details class="panel-section" open>
+          <summary>RIS Config</summary>
+          <div class="panel-section-body">
+            <div class="field">
+              <label>Config source</label>
+              <select id="risConfigSource">
+                <option value="builder">Builder</option>
+                <option value="file">Config file</option>
+              </select>
+            </div>
+            <div class="field ris-config-file">
+              <label>Config path</label>
+              <input id="risConfigPath" type="text" placeholder="configs/ris/steer_1bit.yaml" />
+              <div class="help-text">Used when Config source = file.</div>
+            </div>
+            <div class="field-grid">
+              <div>
+                <label>Action</label>
+                <select id="risAction">
+                  <option value="run">Run</option>
+                  <option value="validate">Validate</option>
+                </select>
+              </div>
+              <div>
+                <label>Mode</label>
+                <select id="risMode">
+                  <option value="pattern">Pattern</option>
+                  <option value="link">Link</option>
+                </select>
+              </div>
+            </div>
+            <div class="field" id="risReferenceField">
+              <label>Reference file (CSV/NPZ/MAT)</label>
+              <input id="risReferencePath" type="text" placeholder="refs/pattern.csv" />
+              <div class="help-text">Required for validation runs.</div>
+            </div>
+            <div class="job-buttons">
+              <button id="risStart" type="button">Run RIS Lab</button>
+              <button id="risRefresh" type="button">Refresh Status</button>
+            </div>
+          </div>
+        </details>
+
+        <details class="panel-section" open>
+          <summary>Experiment</summary>
+          <div class="panel-section-body">
+            <div class="field-grid">
+              <div>
+                <label>Frequency (Hz)</label>
+                <input id="risFreqHz" type="number" step="100000000" value="28000000000" />
+              </div>
+              <div>
+                <label>Tx angle (deg)</label>
+                <input id="risTxAngle" type="number" step="1" value="-30" />
+              </div>
+            </div>
+            <div class="field-grid">
+              <div>
+                <label>Tx distance (m)</label>
+                <input id="risTxDistance" type="number" step="0.01" value="0.4" />
+              </div>
+              <div>
+                <label>Rx distance (m)</label>
+                <input id="risRxDistance" type="number" step="0.01" value="2.0" />
+              </div>
+            </div>
+            <div class="field-grid">
+              <div>
+                <label>Tx gain (dBi)</label>
+                <input id="risTxGain" type="number" step="0.5" value="15" />
+              </div>
+              <div>
+                <label>Rx gain (dBi)</label>
+                <input id="risRxGain" type="number" step="0.5" value="22" />
+              </div>
+            </div>
+            <div class="field-grid">
+              <div>
+                <label>Tx power (dBm)</label>
+                <input id="risTxPower" type="number" step="0.5" value="28" />
+              </div>
+              <div>
+                <label>Reflection coeff</label>
+                <input id="risReflectionCoeff" type="number" step="0.01" value="0.84" />
+              </div>
+            </div>
+          </div>
+        </details>
+
+        <details class="panel-section" open>
+          <summary>Geometry</summary>
+          <div class="panel-section-body">
+            <div class="field-grid">
+              <div>
+                <label>Elements X (nx)</label>
+                <input id="risGeomNx" type="number" step="1" value="20" />
+              </div>
+              <div>
+                <label>Elements Y (ny)</label>
+                <input id="risGeomNy" type="number" step="1" value="20" />
+              </div>
+            </div>
+            <div class="field-grid">
+              <div>
+                <label>Element spacing X (m)</label>
+                <input id="risGeomDx" type="number" step="0.0001" value="0.0049" />
+              </div>
+              <div>
+                <label>Element spacing Y (m)</label>
+                <input id="risGeomDy" type="number" step="0.0001" value="0.0049" />
+              </div>
+            </div>
+            <div class="field">
+              <label>Origin (x y z)</label>
+              <div class="triple">
+                <input id="risOriginX" type="number" step="0.01" value="0" />
+                <input id="risOriginY" type="number" step="0.01" value="0" />
+                <input id="risOriginZ" type="number" step="0.01" value="0" />
+              </div>
+            </div>
+            <div class="field">
+              <label>Normal (x y z)</label>
+              <div class="triple">
+                <input id="risNormalX" type="number" step="0.1" value="1" />
+                <input id="risNormalY" type="number" step="0.1" value="0" />
+                <input id="risNormalZ" type="number" step="0.1" value="0" />
+              </div>
+            </div>
+            <div class="field">
+              <label>X-axis hint (x y z)</label>
+              <div class="triple">
+                <input id="risAxisX" type="number" step="0.1" value="0" />
+                <input id="risAxisY" type="number" step="0.1" value="1" />
+                <input id="risAxisZ" type="number" step="0.1" value="0" />
+              </div>
+            </div>
+            <div class="field">
+              <label>Element size override (m)</label>
+              <input id="risElementSize" type="number" step="0.0001" placeholder="(optional)" />
+              <div class="help-text">Leave blank to use dx * dy.</div>
+            </div>
+          </div>
+        </details>
+
+        <details class="panel-section" open>
+          <summary>Control</summary>
+          <div class="panel-section-body">
+            <div class="field">
+              <label>Mode</label>
+              <select id="risControlMode">
+                <option value="steer">Steer</option>
+                <option value="uniform">Uniform</option>
+                <option value="focus">Focus</option>
+              </select>
+            </div>
+            <div class="field-grid ris-control-steer">
+              <div>
+                <label>Azimuth (deg)</label>
+                <input id="risSteerAz" type="number" step="1" value="0" />
+              </div>
+              <div>
+                <label>Elevation (deg)</label>
+                <input id="risSteerEl" type="number" step="1" value="0" />
+              </div>
+              <div>
+                <label>Phase offset (deg)</label>
+                <input id="risPhaseOffsetDeg" type="number" step="1" value="0" />
+              </div>
+            </div>
+            <div class="field ris-control-uniform">
+              <label>Uniform phase (deg)</label>
+              <input id="risUniformPhaseDeg" type="number" step="1" value="0" />
+            </div>
+            <div class="field ris-control-focus">
+              <label>Focal point (x y z)</label>
+              <div class="triple">
+                <input id="risFocusX" type="number" step="0.01" value="0" />
+                <input id="risFocusY" type="number" step="0.01" value="0" />
+                <input id="risFocusZ" type="number" step="0.01" value="0.8" />
+              </div>
+            </div>
+          </div>
+        </details>
+
+        <details class="panel-section" open>
+          <summary>Quantization</summary>
+          <div class="panel-section-body">
+            <div class="field">
+              <label>Phase bits</label>
+              <select id="risQuantBits">
+                <option value="0">Continuous</option>
+                <option value="1" selected>1 bit</option>
+                <option value="2">2 bit</option>
+                <option value="3">3 bit</option>
+                <option value="4">4 bit</option>
+                <option value="6">6 bit</option>
+                <option value="8">8 bit</option>
+                <option value="10">10 bit</option>
+              </select>
+            </div>
+          </div>
+        </details>
+
+        <details class="panel-section" open>
+          <summary>Pattern Sweep</summary>
+          <div class="panel-section-body">
+            <div class="field-grid">
+              <div>
+                <label>Start (deg)</label>
+                <input id="risSweepStart" type="number" step="1" value="-90" />
+              </div>
+              <div>
+                <label>Stop (deg)</label>
+                <input id="risSweepStop" type="number" step="1" value="90" />
+              </div>
+              <div>
+                <label>Step (deg)</label>
+                <input id="risSweepStep" type="number" step="1" value="2" />
+              </div>
+            </div>
+            <div class="field">
+              <label>Normalization</label>
+              <select id="risNormalization">
+                <option value="peak_0db">Peak 0 dB</option>
+                <option value="unit_power">Unit power</option>
+                <option value="">None</option>
+              </select>
+            </div>
+          </div>
+        </details>
+
+        <details class="panel-section">
+          <summary>Config Preview</summary>
+          <div class="panel-section-body">
+            <pre class="code-block" id="risConfigPreview"></pre>
+          </div>
+        </details>
+      </section>
+
+      <section class="panel ris-panel">
+        <details class="panel-section" open>
+          <summary>Status</summary>
+          <div class="panel-section-body">
+            <div id="risJobStatus">Idle.</div>
+            <div class="help-text" id="risProgress"></div>
+            <pre class="log-view" id="risLog"></pre>
+            <div class="job-status">
+              <h3>Recent RIS Jobs</h3>
+              <div id="risJobList"></div>
+            </div>
+          </div>
+        </details>
+
+        <details class="panel-section" open>
+          <summary>Results</summary>
+          <div class="panel-section-body">
+            <div class="field">
+              <label>Run directory</label>
+              <select id="risRunSelect"></select>
+            </div>
+            <div class="job-buttons">
+              <button id="risLoadResults" type="button">Load Results</button>
+            </div>
+            <div id="risResultStatus" class="help-text"></div>
+            <div class="metrics-card" id="risMetrics"></div>
+            <div class="plot-grid" id="risPlots"></div>
+          </div>
+        </details>
+      </section>
+    </div>
+  </div>
+  </main>
   </div>
   <script type="module" src="app.js?v=dev"></script>
 </body>
