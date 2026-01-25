@@ -12,6 +12,7 @@
 - Alignment aids: guides toggle (off by default) and heatmap/mesh rotation defaults set to 0.
 - Marker tools: randomize Tx/Rx button (avoids proxy boxes when available).
 - Perf trace captured in `docs/trace_viewer.json`, summary in `docs/perf.md`.
+- Sionna RT v0.19.2 integration with RIS adapter (`app/ris/ris_sionna.py`).
 
 ## Known issues (needs work)
 - UI still needs polish; more responsive layouts + better defaults needed.
@@ -37,6 +38,8 @@
 - Viewer artifacts: `app/viewer.py`
 - UI: `app/sim_web/index.html`, `app/sim_web/styles.css`, `app/sim_web/app.js`
 - Configs: `configs/*.yaml`
+- RIS adapter: `app/ris/ris_sionna.py`
+- RIS demo: `configs/ris_rt_demo.yaml`, `scripts/demo_ris_in_scene.py`
 
 ## Suggested next steps
 - If alignment issues reappear, consider baking a heatmap mesh in world coords using cell centers.

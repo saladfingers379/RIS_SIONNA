@@ -5,6 +5,7 @@ project:
 runtime:
   prefer_gpu: true
   force_cpu: false
+  require_cuda: true
   tensorflow_import: auto  # auto | force | skip
   disable_pythreejs: true
   mitsuba_variant: auto  # auto | cuda_ad_rgb | llvm_ad_mono_polarized | llvm_ad_spectral_polarized | llvm_ad_rgb | scalar_spectral | scalar_rgb

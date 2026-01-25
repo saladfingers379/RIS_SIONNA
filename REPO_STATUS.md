@@ -9,6 +9,7 @@
 - Preview run completes and writes outputs under `outputs/<run_id>/`.
 - Radio map artifacts are generated (`data/radio_map.npz`, `viewer/heatmap.json`).
 - Mesh export succeeds (`scene_mesh/*.ply`) for the builtin `etoile` scene.
+- GPU runs work with Mitsuba CUDA variants once TF GPU runtime libs are installed.
 
 ## Status
 - Coverage/heatmap alignment issues are resolved; keep regression checks in place.

@@ -214,12 +214,15 @@ SCENE_BUILDERS = {
 }
 
 
-def build_scene(cfg: Dict[str, Any]):
+def build_scene(cfg: Dict[str, Any], mitsuba_variant: Optional[str] = None):
     import numpy as np
     from .utils.system import disable_pythreejs_import
 
     disable_pythreejs_import("build_scene")
     import sionna.rt as rt
+    from .utils.system import apply_mitsuba_variant
+
+    apply_mitsuba_variant(mitsuba_variant)
 
     scene_cfg = cfg.get("scene", {})
     scene_type = scene_cfg.get("type", "builtin")

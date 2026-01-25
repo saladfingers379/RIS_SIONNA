@@ -7,7 +7,9 @@
 ## Backend Selection Points
 - Mitsuba variant selection: `app/utils/system.py::select_mitsuba_variant()`.
   - Prefers `cuda_ad_rgb` when `runtime.prefer_gpu` is true and available.
-  - Falls back to LLVM/scalar variants for CPU preview.
+  - Optional `runtime.require_cuda` will fail fast instead of falling back.
+  - CPU fallbacks prefer LLVM variants (`llvm_ad_rgb`).
+- Variant re-apply after `sionna.rt` import: `app/utils/system.py::apply_mitsuba_variant()`.
 - CPU fallback switch: `app/simulate.py` uses `runtime.force_cpu` to clear `CUDA_VISIBLE_DEVICES`.
 - Diagnose path: `app/utils/system.py::diagnose_environment()` reports variants, selected backend, OptiX checks.
 
@@ -15,9 +17,9 @@
 - Scene construction: `app/scene.py::build_scene()` with `scene.type` (builtin/file/procedural).
 - Procedural scene caching: `app/scene.py::_build_procedural_scene()` caches XML under `outputs/_cache/procedural/`.
 
-## Radio Map & Coverage Sampling
-- Paths: `app/simulate.py` -> `sionna.rt.PathSolver()`.
-- Radio maps: `app/simulate.py::_compute_radio_map()` -> `sionna.rt.RadioMapSolver()`.
+## Radio Map & Coverage Sampling (v0.19.2)
+- Paths: `app/simulate.py` -> `scene.compute_paths()`.
+- Coverage map: `app/simulate.py::_compute_radio_map()` -> `scene.coverage_map()`.
 - Coverage/heatmap export + plots: `app/simulate.py` and `app/plots.py`.
 
 ## Output & Logging

@@ -106,6 +106,16 @@ Look for:
 - `diagnose.runtime.optix` finds `libnvoptix.so.1` + `optixQueryFunctionTable`
 
 Each diagnose run writes `outputs/<run_id>/summary.json`.
+Tip: `python -m app diagnose --json` prints JSON only.
+
+## CUDA + TensorFlow GPU Requirement
+Sionna RT v0.19.2 transfers CUDA tensors to TensorFlow via DLPack. If
+Mitsuba selects a CUDA variant but TensorFlow cannot see a GPU, runs will
+fail with `GPU:0 unknown device`.
+
+Fix:
+- Install TF GPU runtime libraries matching your TensorFlow build.
+  TF 2.15 expects CUDA 12.2 + cuDNN 8.
 
 ## Outputs (Simulation)
 Each run saves to `outputs/<run_id>/`:

@@ -1,4 +1,4 @@
-# AGENTS.md — RIS_SIONNA (Sionna RT digital-twin baseline @ 28 GHz)
+# AGENTS.md — RIS_SIONNA (Sionna RT v0.19.2 baseline @ 28 GHz)
 
 ## Goal of this repo
 Build a trustworthy, reproducible Sionna / Sionna RT simulation tool (RIS later) with:
@@ -12,9 +12,9 @@ Build a trustworthy, reproducible Sionna / Sionna RT simulation tool (RIS later)
 - We have fixed the coverage/heatmap alignment issues already (do not regress).
 - We are continuing the Omniverse replication and development direction.
 - Immediate focus:
-  1) verify GPU acceleration is actually being used for heavy workloads
+  1) verify GPU acceleration is actually being used for heavy workloads (Mitsuba CUDA/OptiX)
   2) test higher-compute profiles (GPU low/medium/high) with good progress + logs
-  3) keep accuracy and Sionna correctness as the highest priority
+  3) integrate RIS (v0.19.2) via workbench phase maps and validate ON/OFF delta
 
 ## Environment
 Primary dev:
@@ -40,6 +40,7 @@ Baseline:
 - Tx/Rx placement in a simple, documented scene.
 - Compute: paths + received power/pathloss proxy.
 - Coverage/radio map supported with batching.
+- RIS available via v0.19.2 `sionna.rt.RIS` (workbench adapter).
 
 High-compute testing (now required):
 - Use GPU high profile (larger grid + controlled complexity).

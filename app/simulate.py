@@ -73,12 +73,24 @@ def run_simulation(config_path: str) -> Path:
     variant = select_mitsuba_variant(
         prefer_gpu=prefer_gpu,
         forced_variant=str(runtime_cfg.get("mitsuba_variant", "auto")),
+        require_cuda=bool(runtime_cfg.get("require_cuda", False)),
     )
+    logger.info("Mitsuba variant selected: %s", variant)
+    if prefer_gpu and "cuda" not in (variant or ""):
+        logger.warning("GPU mode requested but CUDA variant not selected. Using %s", variant)
     if runtime_cfg.get("disable_pythreejs", True):
         disable_pythreejs_import("simulate")
     tf_info = configure_tensorflow_memory_growth(
         mode=str(runtime_cfg.get("tensorflow_import", "auto"))
     )
+    tf_gpus = tf_info.get("tf_gpus") or []
+    if "cuda" in (variant or "") and not tf_gpus:
+        raise RuntimeError(
+            "CUDA Mitsuba variant selected but TensorFlow GPU is unavailable. "
+            "Install CUDA/CuDNN runtime libraries compatible with your TensorFlow build "
+            "(TF 2.15 expects CUDA 12.2 + cuDNN 8) or install a TF build that matches "
+            "your system CUDA. Otherwise use CPU (llvm) variants."
+        )
 
     timings: Dict[str, float] = {}
     gpu_monitor = None
@@ -121,7 +133,7 @@ def run_simulation(config_path: str) -> Path:
                     write_progress(step_idx, "running")
                     t0 = time.time()
                     progress.update(task_id, description=steps[0])
-                    scene = build_scene(cfg.data)
+                    scene = build_scene(cfg.data, mitsuba_variant=variant)
                     timings["scene_build_s"] = time.time() - t0
                     scene_cfg = cfg.scene
                     progress.advance(task_id)
@@ -157,6 +169,7 @@ def run_simulation(config_path: str) -> Path:
 
                             cam_cfg = cfg.scene.get("camera", {})
                             cam = Camera(
+                                name=cam_cfg.get("name", "camera"),
                                 position=np.array(cam_cfg.get("position", [0.0, 80.0, 500.0])),
                                 orientation=np.array(cam_cfg.get("orientation", [0.0, 1.5708, -1.5708])),
                             )

@@ -84,7 +84,11 @@ def disable_pythreejs_import(reason: str = "cli") -> None:
     sys.modules["pythreejs"] = stub
 
 
-def select_mitsuba_variant(prefer_gpu: bool, forced_variant: str = "auto") -> str:
+def select_mitsuba_variant(
+    prefer_gpu: bool,
+    forced_variant: str = "auto",
+    require_cuda: bool = False,
+) -> str:
     cache_dir = os.environ.get("DRJIT_CACHE_DIR", "/tmp/drjit-cache")
     os.environ.setdefault("DRJIT_CACHE_DIR", cache_dir)
     try:
@@ -109,15 +113,20 @@ def select_mitsuba_variant(prefer_gpu: bool, forced_variant: str = "auto") -> st
                 return mi.variant()
             except Exception as exc:  # pragma: no cover - runtime GPU variance
                 logger.warning("CUDA variant selection failed (%s): %s", candidate, exc)
+                if require_cuda:
+                    raise RuntimeError(
+                        "CUDA variant requested but could not be initialized. "
+                        "Ensure NVIDIA driver + CUDA runtime are compatible."
+                    ) from exc
 
     # Prefer spectral variants on CPU to avoid RGB spectrum shape mismatches.
     for candidate in [
         "llvm_ad_mono_polarized",
         "llvm_ad_spectral_polarized",
-        "scalar_spectral_polarized",
         "llvm_ad_spectral",
-        "scalar_spectral",
         "llvm_ad_rgb",
+        "scalar_spectral_polarized",
+        "scalar_spectral",
         "scalar_rgb",
     ]:
         if candidate in variants:
@@ -126,6 +135,25 @@ def select_mitsuba_variant(prefer_gpu: bool, forced_variant: str = "auto") -> st
 
     mi.set_variant(variants[0])
     return mi.variant()
+
+
+def apply_mitsuba_variant(variant: str | None) -> None:
+    if not variant:
+        return
+    try:
+        import mitsuba as mi
+        mi.set_variant(variant)
+    except Exception:
+        return
+    try:
+        from sionna.rt import Camera
+
+        Camera.mi_2_sionna = (
+            mi.ScalarTransform4f.rotate([0, 0, 1], 90.0)
+            @ mi.ScalarTransform4f.rotate([1, 0, 0], 90.0)
+        )
+    except Exception:
+        return
 
 
 def configure_tensorflow_memory_growth(
@@ -425,14 +453,29 @@ def gpu_smoke_test(prefer_gpu: bool = True, forced_variant: str = "auto") -> Dic
     try:
         import numpy as np
         import sionna.rt as rt  # pylint: disable=import-error
+        apply_mitsuba_variant(result.get("selected_variant"))
     except Exception as exc:
         result["error"] = f"sionna-rt import failed: {exc}"
         return result
 
     try:
         scene = rt.load_scene()
-        scene.tx_array = rt.PlanarArray(num_rows=1, num_cols=1, pattern="iso", polarization="V")
-        scene.rx_array = rt.PlanarArray(num_rows=1, num_cols=1, pattern="iso", polarization="V")
+        scene.tx_array = rt.PlanarArray(
+            num_rows=1,
+            num_cols=1,
+            vertical_spacing=0.5,
+            horizontal_spacing=0.5,
+            pattern="iso",
+            polarization="V",
+        )
+        scene.rx_array = rt.PlanarArray(
+            num_rows=1,
+            num_cols=1,
+            vertical_spacing=0.5,
+            horizontal_spacing=0.5,
+            pattern="iso",
+            polarization="V",
+        )
         scene.add(rt.Transmitter(name="tx", position=np.array([0.0, 0.0, 3.0])))
         scene.add(rt.Receiver(name="rx", position=np.array([10.0, 0.0, 1.5])))
         t0 = time.time()

@@ -17,6 +17,16 @@ If you see `RT backend is CPU/LLVM`:
 3) Verify `nvidia-smi` detects the GPU and the driver is installed.
 4) Re-run `python -m app diagnose` and check `diagnose.runtime.mitsuba_variants`.
 
+## CUDA Mitsuba Selected but TF GPU Missing
+If `diagnose.runtime.selected_variant` is `cuda_*` but TensorFlow reports
+`tensorflow_gpus: []`, Sionna RT will crash when transferring CUDA tensors
+to TF (DLPack error like `GPU:0 unknown device`).
+
+Fix:
+- Install TF GPU runtime libraries matching your TF build.
+  TF 2.15 expects CUDA 12.2 + cuDNN 8.
+- Re-run `python -m app diagnose --json` and confirm TF sees a GPU.
+
 ## GPU Visible but No Utilization
 - Run a high compute profile from the sim UI or CLI:
   ```bash
