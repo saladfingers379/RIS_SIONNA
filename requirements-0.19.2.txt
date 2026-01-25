@@ -1,10 +1,10 @@
 sionna==0.19.2
-tensorflow<2.16,>=2.13
+tensorflow>=2.13,<2.16
 numpy==1.26.4
 matplotlib==3.10.8
 scipy==1.12.0
 importlib_resources>=1.4.0
-mitsuba<3.6.0,>=3.2.0
+mitsuba>=3.2.0,<3.6.0
 pythreejs>=2.4.2
 ipywidgets>=8.0.4
 ipydatawidgets==4.3.2
@@ -12,8 +12,5 @@ jupyterlab-widgets==3.0.5
 pyyaml==6.0.3
 rich==14.2.0
 
-[dashboard]
+# Optional extras
 streamlit==1.53.0
-
-[mat]
-scipy==1.12.0

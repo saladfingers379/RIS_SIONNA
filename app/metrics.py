@@ -12,21 +12,35 @@ def _to_numpy(x):
         return np.asarray(x)
 
 
+def _paths_coefficients(paths) -> np.ndarray:
+    a = paths.a
+    if isinstance(a, (tuple, list)) and len(a) == 2:
+        a_real, a_imag = a
+        return _to_numpy(a_real) + 1j * _to_numpy(a_imag)
+    return _to_numpy(a)
+
+
+def _paths_mask(paths) -> Optional[np.ndarray]:
+    for attr in ("valid", "mask", "targets_sources_mask"):
+        if hasattr(paths, attr):
+            try:
+                return _to_numpy(getattr(paths, attr)).astype(bool)
+            except Exception:
+                continue
+    return None
+
+
 def compute_path_metrics(paths, tx_power_dbm: float) -> Dict[str, Any]:
     """Compute simple, report-friendly metrics from Sionna RT Paths."""
-    a_real, a_imag = paths.a
-    a = _to_numpy(a_real) + 1j * _to_numpy(a_imag)
+    a = _paths_coefficients(paths)
 
     # Sum over all paths and antennas to get a total path gain proxy.
     power_linear = np.abs(a) ** 2
     total_path_gain_linear = float(power_linear.sum())
     total_path_gain_db = 10.0 * np.log10(total_path_gain_linear + 1e-12)
 
-    try:
-        valid = _to_numpy(paths.valid)
-        num_valid_paths = int(valid.sum())
-    except Exception:
-        num_valid_paths = None
+    mask = _paths_mask(paths)
+    num_valid_paths = int(mask.sum()) if mask is not None else None
 
     tx_power_dbm = _to_numpy(tx_power_dbm).item()
     metrics = {
@@ -48,29 +62,44 @@ def compute_path_metrics(paths, tx_power_dbm: float) -> Dict[str, Any]:
 
 def extract_path_data(paths) -> Dict[str, Any]:
     """Extract per-path arrays for plotting and advanced metrics."""
-    a_real, a_imag = paths.a
-    a = _to_numpy(a_real) + 1j * _to_numpy(a_imag)
+    a = _paths_coefficients(paths)
     power = np.abs(a) ** 2
-    # Sum over rx/tx antennas to get power per path
-    path_power = power.sum(axis=(1, 3))  # [num_rx, num_tx, num_paths]
+    if power.ndim < 1:
+        return {
+            "delays_s": np.array([]),
+            "aoa_azimuth_rad": np.array([]),
+            "aoa_elevation_rad": np.array([]),
+            "weights": np.array([]),
+            "metrics": {},
+        }
 
-    valid = _to_numpy(paths.valid).astype(bool)
+    # Sum over all axes except path axis (last)
+    sum_axes = tuple(range(power.ndim - 1))
+    path_power = power.sum(axis=sum_axes)
+
+    mask = _paths_mask(paths)
     tau = _to_numpy(paths.tau)
     theta_r = _to_numpy(paths.theta_r)
     phi_r = _to_numpy(paths.phi_r)
 
-    mask = valid
-    if mask.ndim == 3:
-        weights = path_power * mask
-        delays = tau[mask]
-        aoa_el = theta_r[mask]
-        aoa_az = phi_r[mask]
-        weights = weights[mask]
-    else:
+    if mask is None or mask.ndim < 1:
         delays = np.array([])
         aoa_el = np.array([])
         aoa_az = np.array([])
         weights = np.array([])
+    else:
+        # Broadcast path_power to mask shape if needed
+        try:
+            weights = path_power * mask
+            delays = tau[mask]
+            aoa_el = theta_r[mask]
+            aoa_az = phi_r[mask]
+            weights = weights[mask]
+        except Exception:
+            delays = np.array([])
+            aoa_el = np.array([])
+            aoa_az = np.array([])
+            weights = np.array([])
 
     metrics: Dict[str, Any] = {}
     if delays.size > 0 and np.any(weights > 0):
@@ -111,44 +140,70 @@ def _interaction_type_map() -> Dict[int, str]:
 
 def build_paths_table(paths, tx_power_dbm: float) -> Dict[str, Any]:
     """Create a table-friendly view of path geometry and power."""
-    a_real, a_imag = paths.a
-    a = _to_numpy(a_real) + 1j * _to_numpy(a_imag)
+    a = _paths_coefficients(paths)
     power = np.abs(a) ** 2
-    path_power = power.sum(axis=(1, 3))  # [num_rx, num_tx, num_paths]
+    if power.ndim >= 1:
+        sum_axes = tuple(range(power.ndim - 1))
+        path_power = power.sum(axis=sum_axes)
+    else:
+        path_power = np.array([])
 
-    valid = _to_numpy(paths.valid).astype(bool)
+    mask = _paths_mask(paths)
     tau = _to_numpy(paths.tau)
     verts = _to_numpy(paths.vertices)
-    interactions = _to_numpy(paths.interactions)
+    objects = _to_numpy(getattr(paths, "objects", np.array([])))
+    interactions = _to_numpy(getattr(paths, "interactions", np.array([])))
 
     try:
-        src = _to_numpy(paths.sources).reshape(3)
-        tgt = _to_numpy(paths.targets).reshape(3)
+        sources = _to_numpy(paths.sources)
+        targets = _to_numpy(paths.targets)
     except Exception:
-        src = None
-        tgt = None
+        sources = None
+        targets = None
 
     type_map = _interaction_type_map()
     rows = []
-    num_paths = valid.shape[-1]
-    num_vertices = verts.shape[0]
+    if mask is None or mask.ndim < 1:
+        return {"rows": rows, "tx_power_dbm": float(_to_numpy(tx_power_dbm).item())}
+
+    num_paths = mask.shape[-1]
+    per_path = np.any(mask.reshape(-1, num_paths), axis=0)
+    num_vertices = verts.shape[0] if verts.size else 0
     for p in range(num_paths):
-        if not valid[0, 0, p]:
+        if not per_path[p]:
             continue
+
         pts = []
-        if src is not None:
-            pts.append(src)
-        inter = interactions[:, 0, 0, p]
-        v = verts[:, 0, 0, p, :]
+        if sources is not None and sources.size:
+            pts.append(sources[0])
+        if targets is not None and targets.size:
+            tgt = targets[0]
+        else:
+            tgt = None
+
+        if num_vertices:
+            v = verts[:, 0, 0, p, :] if verts.ndim >= 5 else verts[:, p, :]
+        else:
+            v = None
         interaction_names = []
-        for i in range(num_vertices):
-            if inter[i] != 0:
-                pts.append(v[i])
-                interaction_names.append(type_map.get(int(inter[i]), f"interaction_{int(inter[i])}"))
+        if interactions.size:
+            inter = interactions[:, 0, 0, p] if interactions.ndim >= 4 else interactions[:, p]
+            for i in range(num_vertices):
+                if inter[i] != 0:
+                    if v is not None:
+                        pts.append(v[i])
+                    interaction_names.append(type_map.get(int(inter[i]), f"interaction_{int(inter[i])}"))
+        elif objects.size:
+            inter = objects[:, 0, 0, p] if objects.ndim >= 4 else objects[:, p]
+            for i in range(num_vertices):
+                if inter[i] != -1:
+                    if v is not None:
+                        pts.append(v[i])
+                    interaction_names.append(f"object_{int(inter[i])}")
         if tgt is not None:
             pts.append(tgt)
 
-        order = int(np.sum(inter != 0))
+        order = len(interaction_names)
         path_type = "LOS" if order == 0 else "+".join(sorted(set(interaction_names))) or "NLOS"
 
         length_m = 0.0
@@ -156,9 +211,20 @@ def build_paths_table(paths, tx_power_dbm: float) -> Dict[str, Any]:
             for i in range(len(pts) - 1):
                 length_m += float(np.linalg.norm(np.asarray(pts[i + 1]) - np.asarray(pts[i])))
 
-        power_linear = float(path_power[0, 0, p])
+        try:
+            power_linear = float(path_power[p])
+        except Exception:
+            power_linear = 0.0
         power_db = 10.0 * np.log10(power_linear + 1e-12)
-        delay_s = float(tau[0, 0, p])
+
+        delay_s = 0.0
+        if tau.size:
+            tau_flat = tau.reshape(-1, num_paths)
+            vals = tau_flat[:, p]
+            vals = vals[np.isfinite(vals)]
+            vals = vals[vals >= 0]
+            if vals.size:
+                delay_s = float(vals[0])
 
         rows.append(
             {

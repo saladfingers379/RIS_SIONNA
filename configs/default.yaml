@@ -106,7 +106,22 @@ quality:
 
 ris:
   enabled: false
-  notes: "Placeholder for future RIS integration"
+  mode: workbench  # workbench | flat
+  sionna:
+    name: ris
+    position: [0.0, 0.0, 2.0]
+    orientation: [0.0, 0.0, 0.0]  # normal +x (yz plane)
+    num_modes: 1
+  workbench:
+    config_path: configs/ris_lab_example.yaml
+    amplitude: 0.84
+    geometry_override:
+      normal: [1.0, 0.0, 0.0]
+      x_axis_hint: [0.0, 1.0, 0.0]
+    mapping:
+      position_tol: 1.0e-6
+      flip_rows: false
+      flip_cols: false
 
 output:
   base_dir: outputs

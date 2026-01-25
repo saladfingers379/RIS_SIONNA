@@ -20,4 +20,10 @@ ris_sionna.egg-info/dependency_links.txt
 ris_sionna.egg-info/requires.txt
 ris_sionna.egg-info/top_level.txt
 tests/test_alignment.py
+tests/test_ris_config.py
+tests/test_ris_core.py
+tests/test_ris_lab_pattern.py
+tests/test_ris_lab_reference.py
+tests/test_ris_lab_validation.py
+tests/test_ris_sionna_integration.py
 tests/test_ui_smoke.py

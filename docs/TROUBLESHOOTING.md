@@ -10,8 +10,8 @@ Expect:
 - `diagnose.verdict` to show `RT backend is CUDA/OptiX`
 
 If you see `RT backend is CPU/LLVM`:
-1) Confirm Sionna RT is installed (`pip install sionna-rt`).
-   Source: https://github.com/nvlabs/sionna-rt/blob/main/README.md
+1) Confirm Sionna v0.19.2 is installed (`pip install sionna==0.19.2`).
+   Source: https://github.com/NVlabs/sionna/releases/tag/v0.19.2
 2) Ensure Mitsuba has CUDA variants available and selectable.
    Source: https://github.com/mitsuba-renderer/mitsuba3/blob/master/docs/src/key_topics/variants.rst
 3) Verify `nvidia-smi` detects the GPU and the driver is installed.

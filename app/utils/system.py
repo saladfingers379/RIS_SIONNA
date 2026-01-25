@@ -12,6 +12,13 @@ import time
 from typing import Any, Dict, Optional, Tuple
 
 
+_DRJIT_CACHE_DIR = os.environ.get("DRJIT_CACHE_DIR", "/tmp/drjit-cache")
+os.environ.setdefault("DRJIT_CACHE_DIR", _DRJIT_CACHE_DIR)
+try:
+    os.makedirs(_DRJIT_CACHE_DIR, exist_ok=True)
+except Exception:
+    pass
+
 def _safe_version(pkg: str) -> Optional[str]:
     try:
         return importlib.metadata.version(pkg)
@@ -78,6 +85,12 @@ def disable_pythreejs_import(reason: str = "cli") -> None:
 
 
 def select_mitsuba_variant(prefer_gpu: bool, forced_variant: str = "auto") -> str:
+    cache_dir = os.environ.get("DRJIT_CACHE_DIR", "/tmp/drjit-cache")
+    os.environ.setdefault("DRJIT_CACHE_DIR", cache_dir)
+    try:
+        os.makedirs(cache_dir, exist_ok=True)
+    except Exception:
+        pass
     import mitsuba as mi
 
     variants = list(mi.variants())
@@ -377,6 +390,12 @@ def gpu_smoke_test(prefer_gpu: bool = True, forced_variant: str = "auto") -> Dic
         "prefer_gpu": prefer_gpu,
         "forced_variant": forced_variant,
     }
+    cache_dir = os.environ.get("DRJIT_CACHE_DIR", "/tmp/drjit-cache")
+    os.environ.setdefault("DRJIT_CACHE_DIR", cache_dir)
+    try:
+        os.makedirs(cache_dir, exist_ok=True)
+    except Exception:
+        pass
     try:
         import mitsuba as mi
     except Exception as exc:
@@ -416,23 +435,21 @@ def gpu_smoke_test(prefer_gpu: bool = True, forced_variant: str = "auto") -> Dic
         scene.rx_array = rt.PlanarArray(num_rows=1, num_cols=1, pattern="iso", polarization="V")
         scene.add(rt.Transmitter(name="tx", position=np.array([0.0, 0.0, 3.0])))
         scene.add(rt.Receiver(name="rx", position=np.array([10.0, 0.0, 1.5])))
-        solver = rt.PathSolver()
         t0 = time.time()
-        paths = solver(
-            scene,
+        paths = scene.compute_paths(
             max_depth=1,
-            samples_per_src=512,
-            max_num_paths_per_src=512,
+            method="fibonacci",
+            num_samples=512,
             los=True,
-            specular_reflection=False,
-            diffuse_reflection=False,
-            refraction=False,
+            reflection=False,
             diffraction=False,
+            scattering=False,
+            ris=True,
         )
         result["duration_s"] = time.time() - t0
         try:
-            valid = paths.valid
-            result["valid_paths"] = int(valid.numpy().sum())
+            mask = paths.mask
+            result["valid_paths"] = int(mask.numpy().sum())
         except Exception:
             result["valid_paths"] = None
         result["ok"] = True
@@ -524,6 +541,7 @@ def print_diagnose_info(
     forced_variant: str = "auto",
     tensorflow_mode: str = "auto",
     run_smoke: bool = True,
+    json_only: bool = False,
 ) -> None:
     start_time = time.time()
     info = diagnose_environment(
@@ -543,5 +561,6 @@ def print_diagnose_info(
     info["diagnose"]["output_dir"] = str(output_dir)
     save_json(output_dir / "summary.json", info)
     print(json.dumps(info, indent=2))
-    verdict = info.get("diagnose", {}).get("verdict", "unknown")
-    print(verdict)
+    if not json_only:
+        verdict = info.get("diagnose", {}).get("verdict", "unknown")
+        print(verdict)

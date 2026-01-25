@@ -1,12 +1,14 @@
 from __future__ import annotations
 
-import urllib.request
 from pathlib import Path
+import shutil
+import urllib.request
 
 
 def ensure_three_vendor(root_dir: Path) -> None:
     vendor_dir = root_dir / "vendor"
     vendor_dir.mkdir(parents=True, exist_ok=True)
+    local_vendor = Path(__file__).resolve().parent / "sim_web" / "vendor"
     assets = {
         "three.module.js": "https://unpkg.com/three@0.161.0/build/three.module.js",
         "OrbitControls.js": "https://unpkg.com/three@0.161.0/examples/jsm/controls/OrbitControls.js",
@@ -18,6 +20,10 @@ def ensure_three_vendor(root_dir: Path) -> None:
     for name, url in assets.items():
         path = vendor_dir / name
         if path.exists():
+            continue
+        local_path = local_vendor / name
+        if local_path.exists():
+            shutil.copyfile(local_path, path)
             continue
         with urllib.request.urlopen(url, timeout=30) as resp:
             content = resp.read()

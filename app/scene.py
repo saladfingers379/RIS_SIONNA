@@ -275,10 +275,19 @@ def build_scene(cfg: Dict[str, Any]):
     scene.add(tx)
     scene.add(rx)
 
-    # Placeholder for future scene objects (including RIS)
+    # RIS integration (optional)
+    try:
+        from .ris.ris_sionna import add_ris_from_config
+
+        add_ris_from_config(scene, cfg)
+    except Exception:
+        # RIS is optional; ignore failures unless explicitly enabled elsewhere.
+        if cfg.get("ris", {}).get("enabled"):
+            raise
+
+    # Placeholder for future scene objects (including custom objects)
     _objects = scene_cfg.get("objects", [])
     if _objects:
-        # No-op placeholder: objects are defined for future extensions.
         pass
 
     return scene

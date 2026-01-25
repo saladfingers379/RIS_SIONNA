@@ -201,11 +201,17 @@ def generate_viewer(output_dir: Path, config: Dict[str, Any]) -> Optional[Path]:
             metric_name = "rx_power_dbm" if rx_power_dbm is not None else "path_gain_db"
             values = rx_power_dbm if rx_power_dbm is not None else path_gain_db
             if values is not None and cell_centers is not None:
+                if values.ndim == 3:
+                    values_out = values[0]
+                    grid_shape = list(values.shape[1:])
+                else:
+                    values_out = values
+                    grid_shape = list(values.shape)
                 radio_cfg = config.get("radio_map", {})
                 heatmap = {
                     "metric": metric_name,
-                    "grid_shape": list(values.shape[1:]),
-                    "values": values[0].tolist(),
+                    "grid_shape": grid_shape,
+                    "values": values_out.tolist(),
                     "cell_centers": cell_centers.tolist(),
                     "center": radio_cfg.get("center"),
                     "size": radio_cfg.get("size"),

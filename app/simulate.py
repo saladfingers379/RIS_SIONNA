@@ -171,23 +171,21 @@ def run_simulation(config_path: str) -> Path:
                     progress.advance(task_id)
                     step_idx += 1
 
-                    from sionna.rt import PathSolver, RadioMapSolver
-
                     sim_cfg = cfg.simulation
                     t0 = time.time()
                     progress.update(task_id, description="Ray trace paths")
                     write_progress(step_idx, "running")
-                    path_solver = PathSolver()
-                    paths = path_solver(
-                        scene,
+                    if sim_cfg.get("refraction"):
+                        logger.warning("Sionna 0.19.2 RT does not support refraction; ignoring refraction=True.")
+                    paths = scene.compute_paths(
                         max_depth=int(sim_cfg.get("max_depth", 3)),
-                        max_num_paths_per_src=int(sim_cfg.get("max_num_paths_per_src", 200000)),
-                        samples_per_src=int(sim_cfg.get("samples_per_src", 200000)),
+                        method=str(sim_cfg.get("method", "fibonacci")),
+                        num_samples=int(sim_cfg.get("samples_per_src", 200000)),
                         los=bool(sim_cfg.get("los", True)),
-                        specular_reflection=bool(sim_cfg.get("specular_reflection", True)),
-                        diffuse_reflection=bool(sim_cfg.get("diffuse_reflection", False)),
-                        refraction=bool(sim_cfg.get("refraction", True)),
+                        reflection=bool(sim_cfg.get("specular_reflection", True)),
                         diffraction=bool(sim_cfg.get("diffraction", False)),
+                        scattering=bool(sim_cfg.get("diffuse_reflection", False)),
+                        ris=bool(sim_cfg.get("ris", True)),
                     )
                     timings["path_tracing_s"] = time.time() - t0
                     progress.advance(task_id)
@@ -271,24 +269,23 @@ def run_simulation(config_path: str) -> Path:
                         cfg_local.update(overrides)
                         cfg_local = _maybe_autosize(cfg_local)
                         kwargs = dict(
-                            center=cfg_local.get("center"),
-                            orientation=cfg_local.get("orientation", [0.0, 0.0, 0.0]),
-                            size=cfg_local.get("size"),
-                            cell_size=cfg_local.get("cell_size", [2.0, 2.0]),
-                            samples_per_tx=int(cfg_local.get("samples_per_tx", 200000)),
+                            cm_center=cfg_local.get("center"),
+                            cm_orientation=cfg_local.get("orientation", [0.0, 0.0, 0.0]),
+                            cm_size=cfg_local.get("size"),
+                            cm_cell_size=cfg_local.get("cell_size", [2.0, 2.0]),
+                            num_samples=int(cfg_local.get("samples_per_tx", 200000)),
                             max_depth=int(cfg_local.get("max_depth", 3)),
                             los=bool(cfg_local.get("los", True)),
-                            specular_reflection=bool(cfg_local.get("specular_reflection", True)),
-                            diffuse_reflection=bool(cfg_local.get("diffuse_reflection", False)),
-                            refraction=bool(cfg_local.get("refraction", True)),
+                            reflection=bool(cfg_local.get("specular_reflection", True)),
                             diffraction=bool(cfg_local.get("diffraction", False)),
+                            scattering=bool(cfg_local.get("diffuse_reflection", False)),
+                            ris=bool(cfg_local.get("ris", True)),
                         )
-                        if cfg_local.get("batch_size"):
-                            kwargs["batch_size"] = int(cfg_local.get("batch_size"))
+                        if cfg_local.get("num_runs"):
+                            kwargs["num_runs"] = int(cfg_local.get("num_runs"))
                         return kwargs
 
                     def _compute_radio_map(
-                        rm_solver: RadioMapSolver,
                         label: str,
                         overrides: Dict[str, Any],
                         suffix: Optional[str],
@@ -299,18 +296,15 @@ def run_simulation(config_path: str) -> Path:
                         progress.update(task_id, description=f"Radio map ({label})")
                         write_progress(step_idx, "running")
                         kwargs = _radio_map_kwargs(radio_map_cfg, overrides)
-                        try:
-                            result = rm_solver(scene, **kwargs)
-                        except TypeError:
-                            kwargs.pop("batch_size", None)
-                            result = rm_solver(scene, **kwargs)
+                        result = scene.coverage_map(**kwargs)
                         timings_key = f"radio_map_{label}_s" if label else "radio_map_s"
                         timings[timings_key] = time.time() - t0
                         radio_map = result
 
                         path_gain = _to_numpy(result.path_gain)
                         cell_centers = _to_numpy(result.cell_centers)
-                        path_gain_db = 10.0 * np.log10(path_gain + 1e-12)
+                        path_gain_tx = path_gain[0] if path_gain.ndim == 3 else path_gain
+                        path_gain_db = 10.0 * np.log10(path_gain_tx + 1e-12)
                         tx_power_dbm = _to_numpy(tx_device.power_dbm).item()
                         rx_power_dbm = tx_power_dbm + path_gain_db
                         path_loss_db = -path_gain_db
@@ -318,7 +312,7 @@ def run_simulation(config_path: str) -> Path:
                         npz_name = "radio_map.npz" if write_default else f"radio_map_{suffix}.npz"
                         np.savez_compressed(
                             data_dir / npz_name,
-                            path_gain_linear=path_gain,
+                            path_gain_linear=path_gain_tx,
                             path_gain_db=path_gain_db,
                             rx_power_dbm=rx_power_dbm,
                             path_loss_db=path_loss_db,
@@ -326,7 +320,7 @@ def run_simulation(config_path: str) -> Path:
                         )
 
                         if write_default:
-                            flat_gain = path_gain_db[0].reshape(-1)
+                            flat_gain = path_gain_db.reshape(-1)
                             flat_centers = cell_centers.reshape(-1, 3)
                             csv_data = np.column_stack([flat_centers, flat_gain])
                             np.savetxt(
@@ -387,9 +381,7 @@ def run_simulation(config_path: str) -> Path:
 
                     write_progress(step_idx, "running")
                     if radio_map_cfg.get("enabled", False):
-                        rm_solver = RadioMapSolver()
                         summary = _compute_radio_map(
-                            rm_solver,
                             label="default",
                             overrides={},
                             suffix=None,
@@ -443,10 +435,13 @@ def run_simulation(config_path: str) -> Path:
                 if vis_cfg.get("enabled", True):
                     try:
                         verts = _to_numpy(paths.vertices)
-                        interactions = _to_numpy(paths.interactions)
-                        valid = _to_numpy(paths.valid).astype(bool)
-                        src = _to_numpy(paths.sources).reshape(3)
-                        tgt = _to_numpy(paths.targets).reshape(3)
+                        interactions = _to_numpy(getattr(paths, "interactions", np.array([])))
+                        objects = _to_numpy(getattr(paths, "objects", np.array([])))
+                        valid = _to_numpy(getattr(paths, "targets_sources_mask", getattr(paths, "mask", np.array([])))).astype(bool)
+                        sources = _to_numpy(paths.sources)
+                        targets = _to_numpy(paths.targets)
+                        src = sources[0].reshape(3)
+                        tgt = targets[0].reshape(3)
                         max_paths = int(vis_cfg.get("max_paths", 200))
 
                         segments = []
@@ -454,13 +449,21 @@ def run_simulation(config_path: str) -> Path:
                         num_vertices = verts.shape[0]
                         num_paths = verts.shape[3]
                         for p in range(num_paths):
-                            if not valid[0, 0, p]:
+                            if valid.size and not valid[0, 0, p]:
                                 continue
                             pts = [src]
-                            inter = interactions[:, 0, 0, p]
+                            if interactions.size:
+                                inter = interactions[:, 0, 0, p]
+                                valid_inter = inter != 0
+                            elif objects.size:
+                                inter = objects[:, 0, 0, p]
+                                valid_inter = inter != -1
+                            else:
+                                inter = None
+                                valid_inter = None
                             v = verts[:, 0, 0, p, :]
                             for i in range(num_vertices):
-                                if inter[i] != 0:
+                                if valid_inter is not None and valid_inter[i]:
                                     pts.append(v[i])
                             pts.append(tgt)
                             if len(pts) < 2:

@@ -1,6 +1,6 @@
 # RIS_SIONNA — 28 GHz Sionna RT Baseline
 
-Starter kit for Sionna RT ray tracing at 28 GHz with a lightweight simulator UI and a math-first RIS Lab. RIS is **not** integrated into Sionna RT yet.
+Starter kit for Sionna RT ray tracing at 28 GHz with a lightweight simulator UI and a math-first RIS Lab. This branch targets Sionna RT v0.19.2 and supports RIS integration.
 
 ## Highlights
 - CLI runs: `python -m app run --config configs/default.yaml`
@@ -11,22 +11,27 @@ Starter kit for Sionna RT ray tracing at 28 GHz with a lightweight simulator UI 
 
 ## Quick Start (macOS CPU)
 ```bash
-python3.12 -m venv .venv
+python3.11 -m venv .venv
 source .venv/bin/activate
 pip install -U pip
 pip install -e .
 python -m app run --config configs/preview.yaml
 ```
-Note: Sionna 1.2.1 requires NumPy <2.0, so use Python 3.10–3.12.
+Note: Sionna 0.19.2 requires TensorFlow 2.13–2.15 and NumPy <2.0, so use Python 3.10–3.11.
 
 ## Quick Start (Ubuntu 24.04 + NVIDIA GPU)
 ```bash
-python3.12 -m venv .venv
+python3.11 -m venv .venv
 source .venv/bin/activate
 pip install -U pip
 pip install -e .
 python -m app diagnose
 python -m app run --config configs/high.yaml
+```
+If you want a clean install that matches Sionna v0.19.2, use:
+```bash
+pip install -r requirements-0.19.2.txt
+pip install -e .
 ```
 
 ## Commands
@@ -58,7 +63,7 @@ Features:
 - Job status, logs, and snapshots
 
 ## RIS Lab (CPU-only)
-RIS Lab is a math-first validation tool for RIS patterns and link metrics. It uses a near-field reflectarray model (Machado/Tang-style sweep) and does **not** enable RIS in Sionna RT.
+RIS Lab is a math-first validation tool for RIS patterns and link metrics. It uses a near-field reflectarray model (Machado/Tang-style sweep).
 
 CLI examples:
 ```bash
@@ -78,6 +83,17 @@ Artifacts (written under `outputs/<run_id>/`):
 - Pattern: `plots/phase_map.png`, `plots/pattern_cartesian.png`, `plots/pattern_polar.png`,
   `data/phase_map.npy`, `data/theta_deg.npy`, `data/pattern_linear.npy`, `data/pattern_db.npy`
 - Validation: `plots/phase_map.png`, `plots/validation_overlay.png`
+
+## RIS in Sionna RT (v0.19.2)
+Enable RIS with a workbench phase map by editing `configs/default.yaml`:
+- Set `ris.enabled: true`
+- Update `ris.workbench.config_path` to point at a RIS Lab YAML (example: `configs/ris_lab_example.yaml`)
+
+Minimal demo script:
+```bash
+python scripts/demo_ris_in_scene.py --ris-config configs/ris_lab_example.yaml
+```
+The demo prints total path-gain with RIS ON vs RIS OFF.
 
 ## GPU Diagnostics
 Run:

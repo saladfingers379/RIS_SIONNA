@@ -42,7 +42,10 @@ def _parse_args() -> argparse.Namespace:
         help="Which metric to plot",
     )
 
-    subparsers.add_parser("diagnose", help="Print environment diagnostics")
+    diagnose_p = subparsers.add_parser("diagnose", help="Print environment diagnostics")
+    diagnose_p.add_argument(
+        "--json", action="store_true", help="Print JSON only (no extra verdict line)"
+    )
     subparsers.add_parser("dashboard", help="Launch the visualization dashboard")
     sim_p = subparsers.add_parser("sim", help="Launch the Omniverse-lite simulator")
     sim_p.add_argument("--host", default="127.0.0.1", help="Host to bind the simulator")
@@ -101,7 +104,7 @@ def main() -> None:
         return
 
     if args.command == "diagnose":
-        print_diagnose_info()
+        print_diagnose_info(json_only=bool(getattr(args, "json", False)))
         return
 
     if args.command == "dashboard":

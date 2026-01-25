@@ -50,13 +50,14 @@ def plot_radio_map(
     tx_pos: np.ndarray | None = None,
     rx_pos: np.ndarray | None = None,
 ) -> Tuple[Path, Path]:
-    # metric_map: [num_tx, y, x]
+    # metric_map: [num_tx, y, x] or [y, x]
     # cell_centers: [y, x, 3]
 
     extent = compute_radio_map_extent(cell_centers)
 
     fig, ax = plt.subplots(figsize=(7, 5))
-    im = ax.imshow(metric_map[0], origin="lower", extent=extent, cmap="viridis")
+    data = metric_map[0] if metric_map.ndim == 3 else metric_map
+    im = ax.imshow(data, origin="lower", extent=extent, cmap="viridis")
     ax.set_title(f"Radio Map ({metric_label})")
     ax.set_xlabel("x [m]")
     ax.set_ylabel("y [m]")
