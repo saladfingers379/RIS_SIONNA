@@ -150,6 +150,7 @@ const ui = {
   radioMapDiffRis: document.getElementById("radioMapDiffRis"),
   customOverridesSection: document.getElementById("customOverridesSection"),
   customBackend: document.getElementById("customBackend"),
+  customFrequencyHz: document.getElementById("customFrequencyHz"),
   customMaxDepth: document.getElementById("customMaxDepth"),
   customSamplesPerSrc: document.getElementById("customSamplesPerSrc"),
   customMaxPathsPerSrc: document.getElementById("customMaxPathsPerSrc"),
@@ -637,6 +638,12 @@ function readNumber(input) {
   return Number.isFinite(val) ? val : null;
 }
 
+function readScientificNumber(input) {
+  if (!input || input.value === "") return null;
+  const val = Number(input.value.trim());
+  return Number.isFinite(val) ? val : null;
+}
+
 function setInputValue(input, value) {
   if (value === undefined || value === null) {
     input.value = "";
@@ -999,6 +1006,9 @@ function applyCustomDefaults(config) {
   setInputValue(ui.customMaxDepth, sim.max_depth);
   setInputValue(ui.customSamplesPerSrc, sim.samples_per_src);
   setInputValue(ui.customMaxPathsPerSrc, sim.max_num_paths_per_src);
+  if (ui.customFrequencyHz) {
+    ui.customFrequencyHz.value = sim.frequency_hz ? Number(sim.frequency_hz).toExponential(3) : "";
+  }
   const radio = (config && config.data && config.data.radio_map) || {};
   setInputValue(ui.customSamplesPerTx, radio.samples_per_tx);
   const runtime = (config && config.data && config.data.runtime) || {};
@@ -2400,9 +2410,11 @@ async function submitJob() {
     const maxDepth = readNumber(ui.customMaxDepth);
     const samplesPerSrc = readNumber(ui.customSamplesPerSrc);
     const maxPathsPerSrc = readNumber(ui.customMaxPathsPerSrc);
+    const frequencyHz = readScientificNumber(ui.customFrequencyHz);
     if (maxDepth !== null) sim.max_depth = maxDepth;
     if (samplesPerSrc !== null) sim.samples_per_src = samplesPerSrc;
     if (maxPathsPerSrc !== null) sim.max_num_paths_per_src = maxPathsPerSrc;
+    if (frequencyHz !== null) sim.frequency_hz = frequencyHz;
     if (Object.keys(sim).length) {
       payload.simulation = sim;
     }
