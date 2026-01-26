@@ -30,6 +30,17 @@ _PHASE_PROFILE_KINDS = {
     "uniform",
 }
 
+def _assign_profile_values(profile: Any, values: Any) -> None:
+    """Assign profile values across TF variable / property setter variants."""
+    try:
+        assign = getattr(profile.values, "assign", None)
+        if callable(assign):
+            assign(values)
+            return
+    except Exception:
+        pass
+    profile.values = values
+
 
 def _direction_from_angles(azimuth_deg: float, elevation_deg: float) -> np.ndarray:
     az = float(azimuth_deg)
@@ -252,16 +263,16 @@ def apply_workbench_to_ris(
     device = _tf_device_for_variant()
     if device:
         with tf.device(device):
-            ris.phase_profile.values = tf.cast(values, phase_dtype)
-            ris.amplitude_profile.values = tf.cast(
-                np.full_like(values, amplitude, dtype=float),
-                amp_dtype,
+            _assign_profile_values(ris.phase_profile, tf.cast(values, phase_dtype))
+            _assign_profile_values(
+                ris.amplitude_profile,
+                tf.cast(np.full_like(values, amplitude, dtype=float), amp_dtype),
             )
     else:
-        ris.phase_profile.values = tf.cast(values, phase_dtype)
-        ris.amplitude_profile.values = tf.cast(
-            np.full_like(values, amplitude, dtype=float),
-            amp_dtype,
+        _assign_profile_values(ris.phase_profile, tf.cast(values, phase_dtype))
+        _assign_profile_values(
+            ris.amplitude_profile,
+            tf.cast(np.full_like(values, amplitude, dtype=float), amp_dtype),
         )
 
 def _ensure_xyz_list(value: Any, name: str) -> List[np.ndarray]:
@@ -355,9 +366,9 @@ def _apply_phase_profile(ris: Any, profile: Dict[str, Any], scene: Any | None = 
         zeros = np.zeros((ris.num_modes, ris.num_rows, ris.num_cols), dtype=float)
         if device:
             with tf.device(device):
-                ris.phase_profile.values = tf.cast(zeros, ris.phase_profile.values.dtype)
+                _assign_profile_values(ris.phase_profile, tf.cast(zeros, ris.phase_profile.values.dtype))
         else:
-            ris.phase_profile.values = tf.cast(zeros, ris.phase_profile.values.dtype)
+            _assign_profile_values(ris.phase_profile, tf.cast(zeros, ris.phase_profile.values.dtype))
     elif kind == "phase_gradient_reflector":
         if not sources or not targets:
             raise ValueError("phase_gradient_reflector requires profile.sources and profile.targets")
@@ -376,11 +387,11 @@ def _apply_phase_profile(ris: Any, profile: Dict[str, Any], scene: Any | None = 
         device = _tf_device_for_variant()
         if device:
             with tf.device(device):
-                ris.phase_profile.values = tf.cast(phase_values, ris.phase_profile.values.dtype)
-                ris.amplitude_profile.values = tf.cast(amp_values, ris.amplitude_profile.values.dtype)
+                _assign_profile_values(ris.phase_profile, tf.cast(phase_values, ris.phase_profile.values.dtype))
+                _assign_profile_values(ris.amplitude_profile, tf.cast(amp_values, ris.amplitude_profile.values.dtype))
         else:
-            ris.phase_profile.values = tf.cast(phase_values, ris.phase_profile.values.dtype)
-            ris.amplitude_profile.values = tf.cast(amp_values, ris.amplitude_profile.values.dtype)
+            _assign_profile_values(ris.phase_profile, tf.cast(phase_values, ris.phase_profile.values.dtype))
+            _assign_profile_values(ris.amplitude_profile, tf.cast(amp_values, ris.amplitude_profile.values.dtype))
 
     if profile.get("phase_bits") is not None:
         import tensorflow as tf
@@ -389,10 +400,10 @@ def _apply_phase_profile(ris: Any, profile: Dict[str, Any], scene: Any | None = 
         if device:
             with tf.device(device):
                 phase_values = _quantize_phase_values(ris.phase_profile.values, profile.get("phase_bits"))
-                ris.phase_profile.values = tf.cast(phase_values, ris.phase_profile.values.dtype)
+                _assign_profile_values(ris.phase_profile, tf.cast(phase_values, ris.phase_profile.values.dtype))
         else:
             phase_values = _quantize_phase_values(ris.phase_profile.values, profile.get("phase_bits"))
-            ris.phase_profile.values = tf.cast(phase_values, ris.phase_profile.values.dtype)
+            _assign_profile_values(ris.phase_profile, tf.cast(phase_values, ris.phase_profile.values.dtype))
 
     amplitude = profile.get("amplitude")
     if amplitude is not None:
@@ -408,9 +419,9 @@ def _apply_phase_profile(ris: Any, profile: Dict[str, Any], scene: Any | None = 
         device = _tf_device_for_variant()
         if device:
             with tf.device(device):
-                ris.amplitude_profile.values = tf.cast(values, ris.amplitude_profile.values.dtype)
+                _assign_profile_values(ris.amplitude_profile, tf.cast(values, ris.amplitude_profile.values.dtype))
         else:
-            ris.amplitude_profile.values = tf.cast(values, ris.amplitude_profile.values.dtype)
+            _assign_profile_values(ris.amplitude_profile, tf.cast(values, ris.amplitude_profile.values.dtype))
 
     mode_powers = profile.get("mode_powers")
     if mode_powers is not None:
@@ -546,12 +557,12 @@ def add_ris_from_config(scene: Any, cfg: Dict[str, Any]) -> Optional[List[Dict[s
         import tensorflow as tf
 
         phase_values = tf.zeros(ris.phase_profile.values.shape, ris.phase_profile.values.dtype)
-        ris.phase_profile.values = phase_values
+        _assign_profile_values(ris.phase_profile, phase_values)
         amp = float(ris_cfg.get("amplitude", 1.0))
         amp_values = tf.ones_like(ris.amplitude_profile.values) * tf.cast(
             amp, ris.amplitude_profile.values.dtype
         )
-        ris.amplitude_profile.values = amp_values
+        _assign_profile_values(ris.amplitude_profile, amp_values)
 
     scene.add(ris)
     summaries.append(

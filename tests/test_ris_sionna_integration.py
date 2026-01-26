@@ -9,6 +9,16 @@ def _has_sionna_rt():
     except Exception:
         return False
 
+def _assign_profile_values(profile, values):
+    try:
+        assign = getattr(profile.values, "assign", None)
+        if callable(assign):
+            assign(values)
+            return
+    except Exception:
+        pass
+    profile.values = values
+
 
 @pytest.mark.skipif(not _has_sionna_rt(), reason="sionna.rt not available")
 def test_ris_on_off_paths_smoke():
@@ -89,9 +99,11 @@ def test_ris_on_off_paths_smoke():
     )
     metrics_on = compute_path_metrics(paths_on, tx_power_dbm=tx.power_dbm)
 
-    ris.phase_profile.values = tf.zeros_like(ris.phase_profile.values)
-    ris.amplitude_profile.values = tf.ones_like(ris.amplitude_profile.values) * tf.cast(
-        workbench.amplitude, ris.amplitude_profile.values.dtype
+    _assign_profile_values(ris.phase_profile, tf.zeros_like(ris.phase_profile.values))
+    _assign_profile_values(
+        ris.amplitude_profile,
+        tf.ones_like(ris.amplitude_profile.values)
+        * tf.cast(workbench.amplitude, ris.amplitude_profile.values.dtype),
     )
     paths_off = scene.compute_paths(
         max_depth=1,

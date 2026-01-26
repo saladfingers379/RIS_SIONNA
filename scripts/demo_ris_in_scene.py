@@ -59,6 +59,16 @@ def _compute_paths(scene):
         ris=True,
     )
 
+def _assign_profile_values(profile, values):
+    try:
+        assign = getattr(profile.values, "assign", None)
+        if callable(assign):
+            assign(values)
+            return
+    except Exception:
+        pass
+    profile.values = values
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="RIS demo using Sionna RT v0.19.2")
@@ -82,11 +92,11 @@ def main() -> None:
 
     # RIS OFF (flat phase, same amplitude)
     phase_values = tf.zeros_like(ris.phase_profile.values)
-    ris.phase_profile.values = phase_values
+    _assign_profile_values(ris.phase_profile, phase_values)
     amp_values = tf.ones_like(ris.amplitude_profile.values) * tf.cast(
         workbench.amplitude, ris.amplitude_profile.values.dtype
     )
-    ris.amplitude_profile.values = amp_values
+    _assign_profile_values(ris.amplitude_profile, amp_values)
     paths_off = _compute_paths(scene)
     metrics_off = compute_path_metrics(paths_off, tx_power_dbm=tx.power_dbm)
 
