@@ -24,10 +24,11 @@ const state = {
   sceneOverride: null,
   sceneOverrideDirty: false,
   meshSourceRunId: null,
-  meshSourceConfig: null,
+  meshSourceBuiltin: null,
   runInfo: null,
   runs: [],
   runConfigs: {},
+  builtinScenes: [],
   configs: [],
   radioMapPlots: [],
   heatmapBase: null,
@@ -1026,19 +1027,6 @@ async function fetchConfigs() {
   }
   const data = await res.json();
   state.configs = data.configs || [];
-  if (ui.meshRunSelect) {
-    ui.meshRunSelect.innerHTML = "";
-    state.configs.forEach((cfg) => {
-      const opt = document.createElement("option");
-      opt.value = cfg.name;
-      opt.textContent = cfg.name;
-      ui.meshRunSelect.appendChild(opt);
-    });
-    if (!state.meshSourceConfig && state.configs.length) {
-      state.meshSourceConfig = state.configs[0].name;
-      ui.meshRunSelect.value = state.meshSourceConfig;
-    }
-  }
   if (!ui.runProfile.value) {
     ui.runProfile.value = "cpu_only";
   }
@@ -1091,6 +1079,29 @@ async function fetchRuns() {
   }
 }
 
+async function fetchBuiltinScenes() {
+  if (!ui.meshRunSelect) return;
+  const res = await fetch("/api/scenes");
+  if (!res.ok) {
+    ui.meshRunSelect.innerHTML = "<option value=\"\">(no scenes)</option>";
+    return;
+  }
+  const data = await res.json();
+  const scenes = data.scenes || [];
+  state.builtinScenes = scenes;
+  ui.meshRunSelect.innerHTML = "";
+  scenes.forEach((name) => {
+    const opt = document.createElement("option");
+    opt.value = name;
+    opt.textContent = name;
+    ui.meshRunSelect.appendChild(opt);
+  });
+  if (!state.meshSourceBuiltin && scenes.length) {
+    state.meshSourceBuiltin = scenes[0];
+    ui.meshRunSelect.value = state.meshSourceBuiltin;
+  }
+}
+
 async function fetchRunDetails(runId) {
   const res = await fetch(`/api/run/${runId}`);
   if (!res.ok) {
@@ -1126,10 +1137,9 @@ function _sceneKey(scene) {
   return `${type}`;
 }
 
-async function resolveMeshRunForConfig(configName) {
-  const cfg = state.configs.find((c) => c.name === configName);
-  if (!cfg || !cfg.data) return null;
-  const targetKey = _sceneKey(cfg.data.scene || {});
+async function resolveMeshRunForBuiltin(builtinName) {
+  if (!builtinName) return null;
+  const targetKey = `builtin:${builtinName}`;
   for (const run of state.runs) {
     if (!run.has_viewer) continue;
     let runConfig = state.runConfigs[run.run_id];
@@ -2457,10 +2467,10 @@ function bindUI() {
 
   if (ui.meshRunSelect) {
     ui.meshRunSelect.addEventListener("change", async () => {
-      state.meshSourceConfig = ui.meshRunSelect.value;
-      const runId = await resolveMeshRunForConfig(state.meshSourceConfig);
+      state.meshSourceBuiltin = ui.meshRunSelect.value;
+      const runId = await resolveMeshRunForBuiltin(state.meshSourceBuiltin);
       if (!runId) {
-        setMeta(`No run with mesh for ${state.meshSourceConfig}`);
+        setMeta(`No run with mesh for ${state.meshSourceBuiltin}`);
         return;
       }
       state.meshSourceRunId = runId;
@@ -2742,7 +2752,7 @@ updateRisControlVisibility();
 updateRisConfigPreview();
 updateRisPreview();
 setMainTab("sim");
-fetchConfigs().then(fetchRuns).then(refreshRisJobs);
+fetchConfigs().then(fetchRuns).then(fetchBuiltinScenes).then(refreshRisJobs);
 setInterval(() => {
   refreshJobs();
   refreshRisJobs();

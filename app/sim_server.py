@@ -120,10 +120,27 @@ class SimRequestHandler(BaseHTTPRequestHandler):
                 )
         return {"configs": configs}
 
+    def _list_scenes(self) -> Dict[str, Any]:
+        scenes = []
+        try:
+            import sionna.rt.scene as sionna_scene
+
+            for name, value in vars(sionna_scene).items():
+                if name.startswith("_"):
+                    continue
+                if isinstance(value, str):
+                    scenes.append(name)
+        except Exception:
+            scenes = []
+        scenes = sorted(set(scenes))
+        return {"scenes": scenes}
+
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
         if parsed.path.startswith("/api/configs"):
             return _json_response(self, self._list_configs())
+        if parsed.path.startswith("/api/scenes"):
+            return _json_response(self, self._list_scenes())
         if parsed.path.startswith("/api/progress/"):
             run_id = parsed.path.split("/", 3)[3]
             run_dir = self.server.output_root / run_id
