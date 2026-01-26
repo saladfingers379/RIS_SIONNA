@@ -241,6 +241,16 @@ def generate_viewer(output_dir: Path, config: Dict[str, Any]) -> Optional[Path]:
             if dst.resolve() != img.resolve():
                 shutil.copyfile(img, dst)
             radio_plots.append({"file": img.name, "label": img.stem})
+        for img in sorted(plots_dir.glob("ris_*_phase.png")):
+            dst = viewer_dir / img.name
+            if dst.resolve() != img.resolve():
+                shutil.copyfile(img, dst)
+            radio_plots.append({"file": img.name, "label": img.stem})
+        for img in sorted(plots_dir.glob("ris_*_amplitude.png")):
+            dst = viewer_dir / img.name
+            if dst.resolve() != img.resolve():
+                shutil.copyfile(img, dst)
+            radio_plots.append({"file": img.name, "label": img.stem})
     (viewer_dir / "radio_map_plots.json").write_text(
         json.dumps({"plots": radio_plots}, indent=2), encoding="utf-8"
     )

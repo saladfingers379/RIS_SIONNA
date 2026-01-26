@@ -38,6 +38,34 @@ def _to_numpy(x):
         return np.asarray(x)
 
 
+def _save_ris_profiles(scene, plots_dir: Path) -> None:
+    try:
+        ris_objects = getattr(scene, "ris", {})
+    except Exception:
+        ris_objects = {}
+    if not ris_objects:
+        return
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+    except Exception:
+        return
+    for name, ris in ris_objects.items():
+        try:
+            fig = ris.phase_profile.show(0)
+            fig.savefig(plots_dir / f"ris_{name}_phase.png", dpi=160, bbox_inches="tight")
+            plt.close(fig)
+        except Exception:
+            pass
+        try:
+            fig = ris.amplitude_profile.show(0)
+            fig.savefig(plots_dir / f"ris_{name}_amplitude.png", dpi=160, bbox_inches="tight")
+            plt.close(fig)
+        except Exception:
+            pass
+
+
 def _rt_backend_from_variant(variant: str | None) -> str:
     if not variant:
         return "unknown"
@@ -116,6 +144,8 @@ def run_simulation(config_path: str) -> Path:
 
     plots_dir = output_dir / "plots"
     data_dir = output_dir / "data"
+    plots_dir.mkdir(parents=True, exist_ok=True)
+    data_dir.mkdir(parents=True, exist_ok=True)
 
     def write_progress(step_index: int, status: str) -> None:
         total = len(steps)
@@ -144,6 +174,8 @@ def run_simulation(config_path: str) -> Path:
                     scene_cfg = cfg.scene
                     progress.advance(task_id)
                     step_idx += 1
+
+                    _save_ris_profiles(scene, plots_dir)
 
                     if need_export:
                         progress.update(task_id, description="Export meshes")
