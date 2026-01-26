@@ -30,8 +30,22 @@ def test_ris_smoke_paths():
 
     scene = rt.load_scene()
     scene.frequency = 28.0e9
-    scene.tx_array = rt.PlanarArray(num_rows=1, num_cols=1, pattern="iso", polarization="V")
-    scene.rx_array = rt.PlanarArray(num_rows=1, num_cols=1, pattern="iso", polarization="V")
+    scene.tx_array = rt.PlanarArray(
+        num_rows=1,
+        num_cols=1,
+        vertical_spacing=0.5,
+        horizontal_spacing=0.5,
+        pattern="iso",
+        polarization="V",
+    )
+    scene.rx_array = rt.PlanarArray(
+        num_rows=1,
+        num_cols=1,
+        vertical_spacing=0.5,
+        horizontal_spacing=0.5,
+        pattern="iso",
+        polarization="V",
+    )
 
     tx = rt.Transmitter(name="tx", position=np.array([-5.0, -4.0, 3.0]), power_dbm=30.0)
     rx = rt.Receiver(name="rx", position=np.array([8.0, 4.0, 1.5]))
@@ -46,11 +60,11 @@ def test_ris_smoke_paths():
         num_modes=1,
         orientation=np.array([0.0, 0.0, 0.0]),
     )
+    scene.add(ris)
     ris.phase_gradient_reflector(
         [np.array(tx.position, dtype=float)],
         [np.array(rx.position, dtype=float)],
     )
-    scene.add(ris)
 
     paths = scene.compute_paths(
         max_depth=1,
