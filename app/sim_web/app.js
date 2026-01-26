@@ -14,6 +14,7 @@ window.onerror = function (msg, url, line) {
 
 const state = {
   runId: null,
+  followLatestRun: true,
   markers: { tx: [0, 0, 0], rx: [0, 0, 0], ris: [] },
   paths: [],
   heatmap: null,
@@ -2135,7 +2136,7 @@ async function refreshJobs() {
   if (needsRunRefresh) {
     await fetchRuns();
   }
-  if (newestCompleted && ui.runSelect.value !== newestCompleted) {
+  if (state.followLatestRun && newestCompleted && ui.runSelect.value !== newestCompleted) {
     ui.runSelect.value = newestCompleted;
     await loadRun(newestCompleted);
   }
@@ -2263,7 +2264,10 @@ function bindUI() {
   ui.refreshRuns.addEventListener("click", fetchRuns);
   
   if (!ui.runSelect) console.error("ui.runSelect is missing");
-  ui.runSelect.addEventListener("change", () => loadRun(ui.runSelect.value));
+  ui.runSelect.addEventListener("change", () => {
+    state.followLatestRun = false;
+    loadRun(ui.runSelect.value);
+  });
   
   if (!ui.sceneRunSelect) console.error("ui.sceneRunSelect is missing");
   ui.sceneRunSelect.addEventListener("change", async () => {
