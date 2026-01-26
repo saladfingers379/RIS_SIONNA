@@ -47,6 +47,12 @@ If RIS paths are detected but the radio map looks unchanged:
 - For a RIS-only view, set `simulation.los: false` and `simulation.specular_reflection: false` in the config (e.g., `configs/ris_rt_demo.yaml`).
 - If Tx/Rx are on opposite sides of the RIS normal, reradiation is disabled and the RIS acts as a blocker.
 - The RIS model is passive; total gain improvements can be small unless the RIS is large/close
+
+## Directional Tx
+If you need a directional transmitter:
+- Set `scene.arrays.tx.pattern` to `tr38901`, `dipole`, or `hw_dipole`.
+- Aim it with `scene.tx.look_at` or `scene.tx.orientation` (radians).
+- In the UI, use **Tx Look-at**, **Tx Pattern**, and **Tx Polarization** before running.
   or the direct path is weak. For a quick sanity check, disable LOS in the run
   and verify `ris_path_gain_db` is non-zero.
 

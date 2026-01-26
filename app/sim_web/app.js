@@ -47,6 +47,12 @@ const ui = {
   txX: document.getElementById("txX"),
   txY: document.getElementById("txY"),
   txZ: document.getElementById("txZ"),
+  txLookX: document.getElementById("txLookX"),
+  txLookY: document.getElementById("txLookY"),
+  txLookZ: document.getElementById("txLookZ"),
+  txPowerDbm: document.getElementById("txPowerDbm"),
+  txPattern: document.getElementById("txPattern"),
+  txPolarization: document.getElementById("txPolarization"),
   rxX: document.getElementById("rxX"),
   rxY: document.getElementById("rxY"),
   rxZ: document.getElementById("rxZ"),
@@ -1317,6 +1323,17 @@ function updateInputs() {
   ui.rxX.value = state.markers.rx[0];
   ui.rxY.value = state.markers.rx[1];
   ui.rxZ.value = state.markers.rx[2];
+  const sceneCfg = state.sceneOverride || (state.runInfo && state.runInfo.config && state.runInfo.config.scene) || {};
+  const txCfg = sceneCfg.tx || {};
+  const txLookAt = Array.isArray(txCfg.look_at) ? txCfg.look_at : null;
+  if (ui.txLookX) ui.txLookX.value = txLookAt ? txLookAt[0] : "";
+  if (ui.txLookY) ui.txLookY.value = txLookAt ? txLookAt[1] : "";
+  if (ui.txLookZ) ui.txLookZ.value = txLookAt ? txLookAt[2] : "";
+  if (ui.txPowerDbm) ui.txPowerDbm.value = txCfg.power_dbm !== undefined ? txCfg.power_dbm : "";
+  const arraysCfg = sceneCfg.arrays || {};
+  const txArr = arraysCfg.tx || {};
+  if (ui.txPattern) ui.txPattern.value = txArr.pattern || "iso";
+  if (ui.txPolarization) ui.txPolarization.value = txArr.polarization || "V";
   if (ui.risList) {
     ui.risList.querySelectorAll(".ris-item").forEach((node) => {
       const autoAim = node.querySelector('[data-field="autoAim"]');
@@ -2236,8 +2253,25 @@ async function submitJob() {
     payload.radio_map = Object.assign(payload.radio_map || {}, { ris: true });
   }
   const scenePayload = JSON.parse(JSON.stringify(state.sceneOverride || {}));
-  scenePayload.tx = { position: state.markers.tx };
-  scenePayload.rx = { position: state.markers.rx };
+  const txPayload = { position: state.markers.tx };
+  const txPower = readNumber(ui.txPowerDbm);
+  if (txPower !== null) txPayload.power_dbm = txPower;
+  const lookX = readNumber(ui.txLookX);
+  const lookY = readNumber(ui.txLookY);
+  const lookZ = readNumber(ui.txLookZ);
+  if (lookX !== null && lookY !== null && lookZ !== null) {
+    txPayload.look_at = [lookX, lookY, lookZ];
+  }
+  scenePayload.tx = Object.assign(scenePayload.tx || {}, txPayload);
+  scenePayload.rx = Object.assign(scenePayload.rx || {}, { position: state.markers.rx });
+  const txPattern = ui.txPattern && ui.txPattern.value ? ui.txPattern.value : null;
+  const txPol = ui.txPolarization && ui.txPolarization.value ? ui.txPolarization.value : null;
+  if (txPattern || txPol) {
+    scenePayload.arrays = scenePayload.arrays || {};
+    scenePayload.arrays.tx = Object.assign(scenePayload.arrays.tx || {}, {});
+    if (txPattern) scenePayload.arrays.tx.pattern = txPattern;
+    if (txPol) scenePayload.arrays.tx.polarization = txPol;
+  }
   payload.scene = scenePayload;
   setMeta("Submitting run...");
   try {

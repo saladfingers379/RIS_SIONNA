@@ -160,12 +160,42 @@
                 </div>
               </div>
               <div>
+                <label>Tx Look-at (x y z)</label>
+                <div class="triple">
+                  <input id="txLookX" type="number" step="0.1" />
+                  <input id="txLookY" type="number" step="0.1" />
+                  <input id="txLookZ" type="number" step="0.1" />
+                </div>
+              </div>
+              <div>
                 <label>Rx Position (x y z)</label>
                 <div class="triple">
                   <input id="rxX" type="number" step="0.1" />
                   <input id="rxY" type="number" step="0.1" />
                   <input id="rxZ" type="number" step="0.1" />
                 </div>
+              </div>
+              <div>
+                <label>Tx Power (dBm)</label>
+                <input id="txPowerDbm" type="number" step="0.5" />
+              </div>
+              <div>
+                <label>Tx Pattern</label>
+                <select id="txPattern">
+                  <option value="iso">iso</option>
+                  <option value="dipole">dipole</option>
+                  <option value="hw_dipole">hw_dipole</option>
+                  <option value="tr38901">tr38901</option>
+                </select>
+              </div>
+              <div>
+                <label>Tx Polarization</label>
+                <select id="txPolarization">
+                  <option value="V">V</option>
+                  <option value="H">H</option>
+                  <option value="VH">VH</option>
+                  <option value="cross">cross</option>
+                </select>
               </div>
               <button id="applyMarkers">Apply Markers</button>
               <button id="randomizeMarkers" type="button">Randomize Tx/Rx</button>

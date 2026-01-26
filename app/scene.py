@@ -266,9 +266,11 @@ def build_scene(cfg: Dict[str, Any], mitsuba_variant: Optional[str] = None):
     rx_cfg = scene_cfg.get("rx", {})
 
     tx_look_at = tx_cfg.get("look_at")
+    tx_orientation = tx_cfg.get("orientation")
     tx = rt.Transmitter(
         name=tx_cfg.get("name", "tx"),
         position=np.array(tx_cfg.get("position", [0.0, 0.0, 10.0])),
+        orientation=np.array(tx_orientation) if tx_orientation is not None else (0.0, 0.0, 0.0),
         look_at=np.array(tx_look_at) if tx_look_at is not None else None,
         power_dbm=float(tx_cfg.get("power_dbm", 30.0)),
     )
