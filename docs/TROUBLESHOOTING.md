@@ -37,12 +37,17 @@ Fix:
 ## RIS Visible but No Radio Map Change
 If RIS paths are detected but the radio map looks unchanged:
 - Check `run.log` for `RIS paths detected: N` (N should be > 0).
+- Check `summary.json` for `metrics.ris_path_gain_db` (should be finite when RIS paths are active).
 - Ensure the radio map plane is near the Rx height. The default map is at `z=1.5`.
 - Use the Simulator UI “Debug Boost + Center Map” button to:
-  - place a large RIS between Tx/Rx,
+  - place a large RIS on the same side of the RIS normal as Tx/Rx,
   - auto-aim toward Rx,
   - center the radio map at the Rx height.
 - Compare against a baseline run (RIS off) using the diff toggle in the UI.
+- If Tx/Rx are on opposite sides of the RIS normal, reradiation is disabled and the RIS acts as a blocker.
+- The RIS model is passive; total gain improvements can be small unless the RIS is large/close
+  or the direct path is weak. For a quick sanity check, disable LOS in the run
+  and verify `ris_path_gain_db` is non-zero.
 
 ## OptiX Initialization Failed (Driver Version)
 If `diagnose` reports `Could not initialize OptiX` or Dr.Jit warns about the driver,

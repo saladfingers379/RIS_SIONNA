@@ -30,6 +30,67 @@ def _paths_mask(paths) -> Optional[np.ndarray]:
     return None
 
 
+def _path_types(paths) -> Optional[np.ndarray]:
+    try:
+        types = _to_numpy(paths.types)
+    except Exception:
+        return None
+    if types is None:
+        return None
+    types = np.asarray(types)
+    if types.ndim == 0:
+        return types.reshape(1)
+    return types.reshape(-1)
+
+
+def _path_power_by_type(paths) -> Optional[Dict[str, float]]:
+    types = _path_types(paths)
+    if types is None or types.size == 0:
+        return None
+    try:
+        a = _paths_coefficients(paths)
+    except Exception:
+        return None
+    power = np.abs(a) ** 2
+    num_paths = types.shape[-1]
+    path_axis = None
+    if power.ndim >= 1 and power.shape[-1] == num_paths:
+        path_axis = -1
+    else:
+        for idx, size in enumerate(power.shape):
+            if size == num_paths:
+                path_axis = idx
+                break
+    if path_axis is None:
+        return None
+    sum_axes = tuple(i for i in range(power.ndim) if i != path_axis)
+    per_path = power.sum(axis=sum_axes)
+
+    mask = _paths_mask(paths)
+    valid = None
+    if mask is not None:
+        mask = np.asarray(mask).reshape(-1, mask.shape[-1])
+        valid = mask.any(axis=0)
+    if valid is None or valid.shape[-1] != per_path.shape[-1]:
+        valid = np.ones_like(per_path, dtype=bool)
+
+    types = types[: per_path.shape[-1]]
+    valid = valid[: per_path.shape[-1]]
+
+    try:
+        ris_value = int(getattr(paths, "RIS"))
+    except Exception:
+        ris_value = None
+    if ris_value is None:
+        return None
+    ris_mask = (types == ris_value) & valid
+    non_ris_mask = (types != ris_value) & valid
+    return {
+        "ris_power_linear": float(per_path[ris_mask].sum()),
+        "non_ris_power_linear": float(per_path[non_ris_mask].sum()),
+    }
+
+
 def _count_ris_paths(paths, scene: Optional[Any] = None) -> Optional[int]:
     try:
         objects = _to_numpy(getattr(paths, "objects", None))
@@ -119,6 +180,14 @@ def compute_path_metrics(paths, tx_power_dbm: float, scene: Optional[Any] = None
         "rx_power_dbm_estimate": tx_power_dbm + total_path_gain_db,
         "num_valid_paths": num_valid_paths,
     }
+    type_power = _path_power_by_type(paths)
+    if type_power:
+        ris_power = type_power["ris_power_linear"]
+        non_ris_power = type_power["non_ris_power_linear"]
+        metrics["ris_path_gain_linear"] = ris_power
+        metrics["ris_path_gain_db"] = 10.0 * np.log10(ris_power + 1e-12)
+        metrics["non_ris_path_gain_linear"] = non_ris_power
+        metrics["non_ris_path_gain_db"] = 10.0 * np.log10(non_ris_power + 1e-12)
     ris_count = _count_ris_paths(paths, scene=scene)
     if ris_count is not None:
         metrics["num_ris_paths"] = ris_count
