@@ -1541,16 +1541,12 @@ function updateHeatmapControls() {
   const max = Math.max(...values);
   const minVal = Math.floor(min);
   const maxVal = Math.ceil(max);
-  ui.heatmapMin.min = String(minVal);
-  ui.heatmapMin.max = String(maxVal);
-  ui.heatmapMax.min = String(minVal);
-  ui.heatmapMax.max = String(maxVal);
-  ui.heatmapMin.value = String(minVal);
-  ui.heatmapMax.value = String(maxVal);
-  ui.heatmapMinLabel.textContent = `${minVal}`;
-  ui.heatmapMaxLabel.textContent = `${maxVal}`;
-  ui.heatmapMinInput.value = String(minVal);
-  ui.heatmapMaxInput.value = String(maxVal);
+  if (!ui.heatmapMin.value) ui.heatmapMin.value = String(minVal);
+  if (!ui.heatmapMax.value) ui.heatmapMax.value = String(maxVal);
+  ui.heatmapMinLabel.textContent = `${ui.heatmapMin.value}`;
+  ui.heatmapMaxLabel.textContent = `${ui.heatmapMax.value}`;
+  if (!ui.heatmapMinInput.value) ui.heatmapMinInput.value = ui.heatmapMin.value;
+  if (!ui.heatmapMaxInput.value) ui.heatmapMaxInput.value = ui.heatmapMax.value;
   updateHeatmapScaleLabels();
   updateHeatmapScaleVisibility();
 }
