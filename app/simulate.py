@@ -299,7 +299,10 @@ def run_simulation(config_path: str) -> Path:
                         cfg_local = dict(target_cfg)
                         cfg_local.update(overrides)
                         cfg_local = _maybe_autosize(cfg_local)
-                        use_ris_map = bool(cfg_local.get("ris", False) or ris_runtime)
+                        if "ris" in overrides:
+                            use_ris_map = bool(overrides.get("ris"))
+                        else:
+                            use_ris_map = bool(cfg_local.get("ris", False) or ris_runtime)
                         kwargs = dict(
                             cm_center=cfg_local.get("center"),
                             cm_orientation=cfg_local.get("orientation", [0.0, 0.0, 0.0]),
