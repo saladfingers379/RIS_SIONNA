@@ -140,6 +140,7 @@ const ui = {
   radioMapPlotShowTx: document.getElementById("radioMapPlotShowTx"),
   radioMapPlotShowRx: document.getElementById("radioMapPlotShowRx"),
   radioMapPlotShowRis: document.getElementById("radioMapPlotShowRis"),
+  radioMapDiffRis: document.getElementById("radioMapDiffRis"),
   customOverridesSection: document.getElementById("customOverridesSection"),
   customBackend: document.getElementById("customBackend"),
   customMaxDepth: document.getElementById("customMaxDepth"),
@@ -944,6 +945,7 @@ function applyRadioMapDefaults(config) {
   if (ui.radioMapPlotShowTx) ui.radioMapPlotShowTx.checked = radio.plot_show_tx !== undefined ? Boolean(radio.plot_show_tx) : true;
   if (ui.radioMapPlotShowRx) ui.radioMapPlotShowRx.checked = Boolean(radio.plot_show_rx);
   if (ui.radioMapPlotShowRis) ui.radioMapPlotShowRis.checked = Boolean(radio.plot_show_ris);
+  if (ui.radioMapDiffRis) ui.radioMapDiffRis.checked = Boolean(radio.diff_ris);
   if (ui.toggleHeatmap && radio.plot_style) {
     ui.toggleHeatmap.checked = radio.plot_style !== "sionna";
   }
@@ -2277,6 +2279,9 @@ async function submitJob() {
     if (ui.radioMapPlotShowRis) {
       radio.plot_show_ris = ui.radioMapPlotShowRis.checked;
     }
+    if (ui.radioMapDiffRis) {
+      radio.diff_ris = ui.radioMapDiffRis.checked;
+    }
     const cellX = readNumber(ui.radioMapCellX);
     const cellY = readNumber(ui.radioMapCellY);
     if (cellX !== null && cellY !== null) {
@@ -2311,6 +2316,7 @@ async function submitJob() {
   if (ui.radioMapPlotShowTx) radioStyle.plot_show_tx = ui.radioMapPlotShowTx.checked;
   if (ui.radioMapPlotShowRx) radioStyle.plot_show_rx = ui.radioMapPlotShowRx.checked;
   if (ui.radioMapPlotShowRis) radioStyle.plot_show_ris = ui.radioMapPlotShowRis.checked;
+  if (ui.radioMapDiffRis) radioStyle.diff_ris = ui.radioMapDiffRis.checked;
   if (Object.keys(radioStyle).length) {
     payload.radio_map = Object.assign(payload.radio_map || {}, radioStyle);
   }
