@@ -24,7 +24,10 @@ const state = {
   sceneOverride: null,
   sceneOverrideDirty: false,
   meshSourceRunId: null,
+  meshSourceConfig: null,
   runInfo: null,
+  runs: [],
+  runConfigs: {},
   configs: [],
   radioMapPlots: [],
   heatmapBase: null,
@@ -1023,6 +1026,19 @@ async function fetchConfigs() {
   }
   const data = await res.json();
   state.configs = data.configs || [];
+  if (ui.meshRunSelect) {
+    ui.meshRunSelect.innerHTML = "";
+    state.configs.forEach((cfg) => {
+      const opt = document.createElement("option");
+      opt.value = cfg.name;
+      opt.textContent = cfg.name;
+      ui.meshRunSelect.appendChild(opt);
+    });
+    if (!state.meshSourceConfig && state.configs.length) {
+      state.meshSourceConfig = state.configs[0].name;
+      ui.meshRunSelect.value = state.meshSourceConfig;
+    }
+  }
   if (!ui.runProfile.value) {
     ui.runProfile.value = "cpu_only";
   }
@@ -1035,13 +1051,13 @@ async function fetchConfigs() {
 async function fetchRuns() {
   const res = await fetch("/api/runs");
   const data = await res.json();
+  state.runs = data.runs || [];
   const previous = state.runId;
   const previousDiff = ui.radioMapDiffRun ? ui.radioMapDiffRun.value : null;
   ui.runSelect.innerHTML = "";
   ui.sceneRunSelect.innerHTML = "";
-  if (ui.meshRunSelect) ui.meshRunSelect.innerHTML = "";
   if (ui.radioMapDiffRun) ui.radioMapDiffRun.innerHTML = "";
-  data.runs.forEach((run) => {
+  state.runs.forEach((run) => {
     const opt = document.createElement("option");
     opt.value = run.run_id;
     opt.textContent = run.run_id;
@@ -1051,13 +1067,6 @@ async function fetchRuns() {
     sceneOpt.value = run.run_id;
     sceneOpt.textContent = run.run_id;
     ui.sceneRunSelect.appendChild(sceneOpt);
-
-    if (ui.meshRunSelect) {
-      const meshOpt = document.createElement("option");
-      meshOpt.value = run.run_id;
-      meshOpt.textContent = run.run_id;
-      ui.meshRunSelect.appendChild(meshOpt);
-    }
 
     if (ui.radioMapDiffRun) {
       const diffOpt = document.createElement("option");
@@ -1071,10 +1080,6 @@ async function fetchRuns() {
     ui.runSelect.value = state.runId;
     state.sceneSourceRunId = state.sceneSourceRunId || state.runId;
     ui.sceneRunSelect.value = state.sceneSourceRunId;
-    if (ui.meshRunSelect) {
-      state.meshSourceRunId = state.meshSourceRunId || state.runId;
-      ui.meshRunSelect.value = state.meshSourceRunId;
-    }
     if (ui.radioMapDiffRun) {
       ui.radioMapDiffRun.value = previousDiff || state.runId;
     }
@@ -1103,6 +1108,43 @@ async function refreshMeshFromRun(runId) {
   }
   state.manifest = manifest;
   rebuildScene();
+}
+
+function _sceneKey(scene) {
+  if (!scene || typeof scene !== "object") return "builtin:etoile";
+  const type = scene.type || "builtin";
+  if (type === "builtin") {
+    return `builtin:${scene.builtin || "etoile"}`;
+  }
+  if (type === "file") {
+    return `file:${scene.file || ""}`;
+  }
+  if (type === "procedural") {
+    const spec = scene.procedural || {};
+    return `procedural:${JSON.stringify(spec)}`;
+  }
+  return `${type}`;
+}
+
+async function resolveMeshRunForConfig(configName) {
+  const cfg = state.configs.find((c) => c.name === configName);
+  if (!cfg || !cfg.data) return null;
+  const targetKey = _sceneKey(cfg.data.scene || {});
+  for (const run of state.runs) {
+    if (!run.has_viewer) continue;
+    let runConfig = state.runConfigs[run.run_id];
+    if (!runConfig) {
+      const details = await fetchRunDetails(run.run_id);
+      runConfig = details && details.config ? details.config : null;
+      if (runConfig) state.runConfigs[run.run_id] = runConfig;
+    }
+    if (!runConfig) continue;
+    const runKey = _sceneKey(runConfig.scene || {});
+    if (runKey === targetKey) {
+      return run.run_id;
+    }
+  }
+  return null;
 }
 
 async function fetchProgress(runId) {
@@ -2415,7 +2457,13 @@ function bindUI() {
 
   if (ui.meshRunSelect) {
     ui.meshRunSelect.addEventListener("change", async () => {
-      state.meshSourceRunId = ui.meshRunSelect.value;
+      state.meshSourceConfig = ui.meshRunSelect.value;
+      const runId = await resolveMeshRunForConfig(state.meshSourceConfig);
+      if (!runId) {
+        setMeta(`No run with mesh for ${state.meshSourceConfig}`);
+        return;
+      }
+      state.meshSourceRunId = runId;
       await refreshMeshFromRun(state.meshSourceRunId);
     });
   }
