@@ -35,6 +35,24 @@ def _count_ris_paths(paths, scene: Optional[Any] = None) -> Optional[int]:
         objects = _to_numpy(getattr(paths, "objects", None))
     except Exception:
         objects = None
+    try:
+        types = _to_numpy(getattr(paths, "types", None))
+    except Exception:
+        types = None
+    ris_type = getattr(paths, "RIS", None)
+    if types is not None and ris_type is not None:
+        mask = _paths_mask(paths)
+        if types.ndim >= 2:
+            types_flat = types.reshape(-1, types.shape[-1])
+            types_per_path = types_flat[0] if types_flat.size else types.reshape(-1)
+        else:
+            types_per_path = types.reshape(-1)
+        ris_hit = types_per_path == int(ris_type)
+        if mask is not None and mask.ndim >= 1 and mask.shape[-1] == ris_hit.shape[-1]:
+            per_path = mask.reshape(-1, mask.shape[-1]).any(axis=0) & ris_hit
+        else:
+            per_path = ris_hit
+        return int(np.sum(per_path))
     if scene is not None and objects is not None and hasattr(scene, "ris") and objects is not None:
         try:
             ris_ids = [int(getattr(ris, "object_id")) for ris in scene.ris.values()]
