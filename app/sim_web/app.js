@@ -163,8 +163,6 @@ const ui = {
   toggleHeatmap: document.getElementById("toggleHeatmap"),
   toggleGuides: document.getElementById("toggleGuides"),
   toggleRisFocus: document.getElementById("toggleRisFocus"),
-  meshRotation: document.getElementById("meshRotation"),
-  meshRotationLabel: document.getElementById("meshRotationLabel"),
   heatmapRotation: document.getElementById("heatmapRotation"),
   heatmapRotationLabel: document.getElementById("heatmapRotationLabel"),
   heatmapScale: document.getElementById("heatmapScale"),
@@ -1736,12 +1734,8 @@ async function loadMeshes() {
   }
   if (state.manifest.mesh_files && state.manifest.mesh_files.length) {
     const loader = new PLYLoader();
-    // Get rotation from UI slider (degrees); default stays 0 to match ray paths.
-    const meshRotationDeg = parseFloat(ui.meshRotation?.value || 0);
     state.manifest.mesh_files.forEach((name) => {
       loader.load(`/runs/${state.runId}/viewer/${name}`, (geom) => {
-        // Apply Z-axis rotation to align mesh with radio map coordinates
-        geom.rotateZ((meshRotationDeg * Math.PI) / 180);
         geom.computeVertexNormals();
         const mat = new THREE.MeshStandardMaterial({ color: 0x9aa8b1, opacity: 0.6, transparent: true });
         const mesh = new THREE.Mesh(geom, mat);
@@ -2557,12 +2551,6 @@ function bindUI() {
     state.markers.tx = [parseFloat(ui.txX.value), parseFloat(ui.txY.value), parseFloat(ui.txZ.value)];
     state.markers.rx = [parseFloat(ui.rxX.value), parseFloat(ui.rxY.value), parseFloat(ui.rxZ.value)];
     updateSceneOverrideTxFromUi();
-    rebuildScene();
-  });
-  
-  if (!ui.meshRotation) console.error("ui.meshRotation is missing");
-  ui.meshRotation.addEventListener("input", () => {
-    ui.meshRotationLabel.textContent = `${ui.meshRotation.value}`;
     rebuildScene();
   });
   
