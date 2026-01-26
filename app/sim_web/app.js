@@ -38,6 +38,7 @@ const state = {
     runs: [],
     activeRunId: null,
     activeJobId: null,
+    selectedPlot: null,
   },
 };
 
@@ -1343,7 +1344,7 @@ async function loadRisResults(runId) {
     fetchProgress(runId),
   ]);
   renderRisMetrics(metrics);
-  const defaultPlot = "phase_map.png";
+  const defaultPlot = state.ris.selectedPlot || "phase_map.png";
   renderRisPlotSingle(runId, defaultPlot);
   if (ui.risPlotTabs) {
     ui.risPlotTabs.querySelectorAll(".plot-tab-button").forEach((btn) => {
@@ -2617,6 +2618,7 @@ function bindUI() {
     if (!(target instanceof HTMLButtonElement)) return;
     const file = target.dataset.plot;
     if (!file || !state.ris.activeRunId) return;
+    state.ris.selectedPlot = file;
     ui.risPlotTabs.querySelectorAll(".plot-tab-button").forEach((btn) => {
       btn.classList.toggle("is-active", btn === target);
     });
