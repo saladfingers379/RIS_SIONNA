@@ -338,6 +338,17 @@ function addRisItem(initial) {
       }
     });
   }
+  const disableAutoAim = () => {
+    if (autoAim && autoAim.checked) {
+      autoAim.checked = false;
+    }
+  };
+  ["sourceX", "sourceY", "sourceZ", "targetX", "targetY", "targetZ"].forEach((name) => {
+    const el = fields(name);
+    if (!el) return;
+    el.addEventListener("input", disableAutoAim);
+    el.addEventListener("change", disableAutoAim);
+  });
   ui.risList.appendChild(node);
 }
 
