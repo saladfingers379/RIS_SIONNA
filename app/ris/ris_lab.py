@@ -51,6 +51,41 @@ def _resolve_tx_angle_deg(experiment_cfg: Dict[str, Any]) -> float:
     return float(experiment_cfg.get("tx_incident_angle_deg", 0.0))
 
 
+def _desired_theta_deg(config: Dict[str, Any], geometry: Any, ris_center: np.ndarray) -> Optional[float]:
+    control_cfg = config.get("control", {})
+    mode = control_cfg.get("mode", "uniform")
+    params = control_cfg.get("params", {}) or {}
+    direction = None
+    if mode == "steer":
+        direction = params.get("direction")
+        if direction is None:
+            az = params.get("azimuth_deg")
+            el = params.get("elevation_deg")
+            if az is None or el is None:
+                return None
+            direction = _direction_from_angles(float(az), float(el))
+    elif mode == "focus":
+        focal_point = params.get("focal_point")
+        if focal_point is None:
+            return None
+        direction = np.array(focal_point, dtype=float) - np.array(ris_center, dtype=float)
+    else:
+        return None
+
+    direction = np.array(direction, dtype=float).reshape(3)
+    norm = np.linalg.norm(direction)
+    if norm <= 0.0:
+        return None
+    direction = direction / norm
+    frame = geometry.frame
+    w_comp = float(np.dot(direction, frame.w))
+    u_comp = float(np.dot(direction, frame.u))
+    if abs(w_comp) < 1e-9 and abs(u_comp) < 1e-9:
+        return None
+    theta_rad = np.arctan2(u_comp, w_comp)
+    return float(np.degrees(theta_rad))
+
+
 def _compute_ris_center(geometry: Any) -> np.ndarray:
     return geometry.centers.reshape(-1, 3).mean(axis=0)
 
@@ -285,10 +320,18 @@ def _plot_phase_map(
     return path
 
 
-def _plot_pattern(theta_deg: np.ndarray, pattern_db: np.ndarray, output_dir: Path) -> Tuple[Path, Path]:
+def _plot_pattern(
+    theta_deg: np.ndarray,
+    pattern_db: np.ndarray,
+    output_dir: Path,
+    desired_theta_deg: Optional[float] = None,
+) -> Tuple[Path, Path]:
     _validate_theta_pattern_lengths(theta_deg, pattern_db, "pattern_db")
     fig, ax = plt.subplots(figsize=(7, 4))
     ax.plot(theta_deg, pattern_db, color="#005f73", linewidth=2.0)
+    if desired_theta_deg is not None:
+        ax.axvline(desired_theta_deg, color="#ee9b00", linestyle="--", linewidth=1.8, label="Design")
+        ax.legend(loc="best")
     ax.set_title("RIS Pattern (Normalized)")
     ax.set_xlabel("Rx angle [deg]")
     ax.set_ylabel("Gain [dB]")
@@ -301,6 +344,10 @@ def _plot_pattern(theta_deg: np.ndarray, pattern_db: np.ndarray, output_dir: Pat
     fig = plt.figure(figsize=(6, 6))
     ax = fig.add_subplot(111, projection="polar")
     ax.plot(np.deg2rad(theta_deg), pattern_db, color="#0a9396", linewidth=2.0)
+    if desired_theta_deg is not None:
+        theta_rad = np.deg2rad(desired_theta_deg)
+        idx = int(np.argmin(np.abs(theta_deg - desired_theta_deg)))
+        ax.plot([theta_rad], [pattern_db[idx]], marker="o", color="#ee9b00")
     ax.set_title("RIS Pattern (Polar)")
     ax.set_theta_zero_location("N")
     ax.set_theta_direction(-1)
@@ -544,7 +591,8 @@ def run_ris_lab(config_path: str, mode: str) -> Path:
             np.save(data_dir / "theta_deg.npy", theta_deg)
             np.save(data_dir / "pattern_linear.npy", linear_norm)
             np.save(data_dir / "pattern_db.npy", pattern_db)
-            _plot_pattern(theta_deg, pattern_db, plots_dir)
+            desired_theta = _desired_theta_deg(config, geometry, ris_center)
+            _plot_pattern(theta_deg, pattern_db, plots_dir, desired_theta_deg=desired_theta)
 
             peak_idx = int(np.argmax(pattern_db))
             sidelobe_metrics = _compute_sidelobe_metrics(theta_deg, pattern_db)
@@ -716,6 +764,9 @@ def validate_ris_lab(config_path: str, ref_path: str) -> Path:
         fig, ax = plt.subplots(figsize=(7, 4))
         ax.plot(theta_ref, ref_db, color="#9b2226", linewidth=2.0, label="Reference")
         ax.plot(theta_ref, sim_db, color="#005f73", linewidth=2.0, label="Sim")
+        desired_theta = _desired_theta_deg(config, geometry, ris_center)
+        if desired_theta is not None:
+            ax.axvline(desired_theta, color="#ee9b00", linestyle="--", linewidth=1.8, label="Design")
         ax.set_title("RIS Validation Overlay")
         ax.set_xlabel("Rx angle [deg]")
         ax.set_ylabel("Gain [dB]")
