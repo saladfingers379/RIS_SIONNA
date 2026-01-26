@@ -13,8 +13,8 @@ simulation:
   frequency_hz: 28.0e9
   max_depth: 2
   samples_per_src: 20000
-  los: true
-  specular_reflection: true
+  los: false
+  specular_reflection: false
   diffuse_reflection: false
   refraction: false
   diffraction: false

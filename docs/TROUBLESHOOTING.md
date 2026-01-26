@@ -44,6 +44,7 @@ If RIS paths are detected but the radio map looks unchanged:
   - auto-aim toward Rx,
   - center the radio map at the Rx height.
 - Compare against a baseline run (RIS off) using the diff toggle in the UI.
+- For a RIS-only view, set `simulation.los: false` and `simulation.specular_reflection: false` in the config (e.g., `configs/ris_rt_demo.yaml`).
 - If Tx/Rx are on opposite sides of the RIS normal, reradiation is disabled and the RIS acts as a blocker.
 - The RIS model is passive; total gain improvements can be small unless the RIS is large/close
   or the direct path is weak. For a quick sanity check, disable LOS in the run
