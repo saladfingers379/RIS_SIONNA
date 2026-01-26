@@ -2135,34 +2135,48 @@ function addHeatmap() {
   heatmapGroup.visible = ui.toggleHeatmap.checked;
 }
 
-function heatmapColor(t) {
-  const c1 = [34, 197, 94];
-  const c2 = [249, 115, 22];
+function _lerpColor(a, b, t) {
   return [
-    Math.round(c1[0] + (c2[0] - c1[0]) * t),
-    Math.round(c1[1] + (c2[1] - c1[1]) * t),
-    Math.round(c1[2] + (c2[2] - c1[2]) * t),
+    Math.round(a[0] + (b[0] - a[0]) * t),
+    Math.round(a[1] + (b[1] - a[1]) * t),
+    Math.round(a[2] + (b[2] - a[2]) * t),
   ];
 }
 
-function heatmapColorDiff(t) {
-  const c1 = [59, 130, 246];
-  const c2 = [255, 255, 255];
-  const c3 = [239, 68, 68];
-  if (t <= 0.5) {
-    const k = t / 0.5;
-    return [
-      Math.round(c1[0] + (c2[0] - c1[0]) * k),
-      Math.round(c1[1] + (c2[1] - c1[1]) * k),
-      Math.round(c1[2] + (c2[2] - c1[2]) * k),
-    ];
+function _gradientColor(stops, t) {
+  if (t <= 0) return stops[0].color;
+  if (t >= 1) return stops[stops.length - 1].color;
+  for (let i = 0; i < stops.length - 1; i++) {
+    const a = stops[i];
+    const b = stops[i + 1];
+    if (t >= a.pos && t <= b.pos) {
+      const k = (t - a.pos) / (b.pos - a.pos || 1);
+      return _lerpColor(a.color, b.color, k);
+    }
   }
-  const k = (t - 0.5) / 0.5;
-  return [
-    Math.round(c2[0] + (c3[0] - c2[0]) * k),
-    Math.round(c2[1] + (c3[1] - c2[1]) * k),
-    Math.round(c2[2] + (c3[2] - c2[2]) * k),
+  return stops[stops.length - 1].color;
+}
+
+function heatmapColor(t) {
+  const stops = [
+    { pos: 0.0, color: [12, 74, 110] },
+    { pos: 0.25, color: [20, 184, 166] },
+    { pos: 0.5, color: [250, 204, 21] },
+    { pos: 0.75, color: [249, 115, 22] },
+    { pos: 1.0, color: [220, 38, 38] },
   ];
+  return _gradientColor(stops, t);
+}
+
+function heatmapColorDiff(t) {
+  const stops = [
+    { pos: 0.0, color: [30, 64, 175] },
+    { pos: 0.35, color: [59, 130, 246] },
+    { pos: 0.5, color: [255, 255, 255] },
+    { pos: 0.65, color: [248, 113, 113] },
+    { pos: 1.0, color: [190, 24, 93] },
+  ];
+  return _gradientColor(stops, t);
 }
 
 function fitCamera() {
