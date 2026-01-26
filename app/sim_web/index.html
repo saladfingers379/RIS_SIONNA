@@ -168,6 +168,10 @@
                 </div>
               </div>
               <div>
+                <label>Tx Yaw (deg)</label>
+                <input id="txYawDeg" type="number" step="1" />
+              </div>
+              <div>
                 <label>Rx Position (x y z)</label>
                 <div class="triple">
                   <input id="rxX" type="number" step="0.1" />
@@ -197,6 +201,10 @@
                   <option value="cross">cross</option>
                 </select>
               </div>
+              <label class="toggle">
+                <input id="showTxDirection" type="checkbox" />
+                Show Tx direction
+              </label>
               <button id="applyMarkers">Apply Markers</button>
               <button id="randomizeMarkers" type="button">Randomize Tx/Rx</button>
               <label class="toggle">

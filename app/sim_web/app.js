@@ -22,6 +22,7 @@ const state = {
   selectedPath: null,
   sceneSourceRunId: null,
   sceneOverride: null,
+  sceneOverrideDirty: false,
   runInfo: null,
   configs: [],
   radioMapPlots: [],
@@ -50,9 +51,11 @@ const ui = {
   txLookX: document.getElementById("txLookX"),
   txLookY: document.getElementById("txLookY"),
   txLookZ: document.getElementById("txLookZ"),
+  txYawDeg: document.getElementById("txYawDeg"),
   txPowerDbm: document.getElementById("txPowerDbm"),
   txPattern: document.getElementById("txPattern"),
   txPolarization: document.getElementById("txPolarization"),
+  showTxDirection: document.getElementById("showTxDirection"),
   rxX: document.getElementById("rxX"),
   rxY: document.getElementById("rxY"),
   rxZ: document.getElementById("rxZ"),
@@ -1061,7 +1064,9 @@ async function fetchRuns() {
     }
     await loadRun(state.runId);
     const sceneDetails = await fetchRunDetails(state.sceneSourceRunId);
-    state.sceneOverride = sceneDetails && sceneDetails.config ? sceneDetails.config.scene : null;
+    if (!state.sceneOverrideDirty) {
+      state.sceneOverride = sceneDetails && sceneDetails.config ? sceneDetails.config.scene : null;
+    }
   }
 }
 
@@ -1326,10 +1331,15 @@ function updateInputs() {
   const sceneCfg = state.sceneOverride || (state.runInfo && state.runInfo.config && state.runInfo.config.scene) || {};
   const txCfg = sceneCfg.tx || {};
   const txLookAt = Array.isArray(txCfg.look_at) ? txCfg.look_at : null;
-  if (ui.txLookX) ui.txLookX.value = txLookAt ? txLookAt[0] : "";
-  if (ui.txLookY) ui.txLookY.value = txLookAt ? txLookAt[1] : "";
-  if (ui.txLookZ) ui.txLookZ.value = txLookAt ? txLookAt[2] : "";
-  if (ui.txPowerDbm) ui.txPowerDbm.value = txCfg.power_dbm !== undefined ? txCfg.power_dbm : "";
+  if (ui.txLookX) setInputValue(ui.txLookX, txLookAt ? txLookAt[0] : null);
+  if (ui.txLookY) setInputValue(ui.txLookY, txLookAt ? txLookAt[1] : null);
+  if (ui.txLookZ) setInputValue(ui.txLookZ, txLookAt ? txLookAt[2] : null);
+  if (ui.txPowerDbm) setInputValue(ui.txPowerDbm, txCfg.power_dbm);
+  const txOrientation = Array.isArray(txCfg.orientation) ? txCfg.orientation : null;
+  if (ui.txYawDeg) {
+    const yaw = txOrientation && txOrientation.length >= 3 ? txOrientation[2] : null;
+    setInputValue(ui.txYawDeg, yaw !== null ? (yaw * 180) / Math.PI : null);
+  }
   const arraysCfg = sceneCfg.arrays || {};
   const txArr = arraysCfg.tx || {};
   if (ui.txPattern) ui.txPattern.value = txArr.pattern || "iso";
@@ -1352,6 +1362,42 @@ function updateInputs() {
       setVal("targetZ", state.markers.rx[2]);
     });
   }
+}
+
+function updateSceneOverrideTxFromUi() {
+  const sceneCfg = state.sceneOverride || {};
+  sceneCfg.tx = Object.assign(sceneCfg.tx || {}, { position: state.markers.tx });
+  const txPower = readNumber(ui.txPowerDbm);
+  if (txPower !== null) {
+    sceneCfg.tx.power_dbm = txPower;
+  } else if (sceneCfg.tx && "power_dbm" in sceneCfg.tx) {
+    delete sceneCfg.tx.power_dbm;
+  }
+  const lookX = readNumber(ui.txLookX);
+  const lookY = readNumber(ui.txLookY);
+  const lookZ = readNumber(ui.txLookZ);
+  if (lookX !== null && lookY !== null && lookZ !== null) {
+    sceneCfg.tx.look_at = [lookX, lookY, lookZ];
+    if ("orientation" in sceneCfg.tx) delete sceneCfg.tx.orientation;
+  } else if (sceneCfg.tx && "look_at" in sceneCfg.tx) {
+    delete sceneCfg.tx.look_at;
+  }
+  const yawDeg = readNumber(ui.txYawDeg);
+  if (yawDeg !== null && (sceneCfg.tx.look_at === undefined || sceneCfg.tx.look_at === null)) {
+    const yawRad = (yawDeg * Math.PI) / 180.0;
+    sceneCfg.tx.orientation = [0.0, 0.0, yawRad];
+  } else if (sceneCfg.tx && "orientation" in sceneCfg.tx) {
+    delete sceneCfg.tx.orientation;
+  }
+  const txPattern = ui.txPattern && ui.txPattern.value ? ui.txPattern.value : "iso";
+  const txPol = ui.txPolarization && ui.txPolarization.value ? ui.txPolarization.value : "V";
+  sceneCfg.arrays = sceneCfg.arrays || {};
+  sceneCfg.arrays.tx = Object.assign(sceneCfg.arrays.tx || {}, {
+    pattern: txPattern,
+    polarization: txPol,
+  });
+  state.sceneOverride = sceneCfg;
+  state.sceneOverrideDirty = true;
 }
 
 function renderRunStats() {
@@ -1616,6 +1662,29 @@ function addMarkers() {
   tx.position.set(...state.markers.tx);
   rx.position.set(...state.markers.rx);
   markerGroup.add(tx, rx);
+  if (ui.showTxDirection && ui.showTxDirection.checked) {
+    const sceneCfg = state.sceneOverride || (state.runInfo && state.runInfo.config && state.runInfo.config.scene) || {};
+    const txCfg = sceneCfg.tx || {};
+    const origin = new THREE.Vector3(...state.markers.tx);
+    let direction = new THREE.Vector3(1, 0, 0);
+    if (Array.isArray(txCfg.look_at) && txCfg.look_at.length >= 3) {
+      direction = new THREE.Vector3(
+        txCfg.look_at[0] - origin.x,
+        txCfg.look_at[1] - origin.y,
+        txCfg.look_at[2] - origin.z
+      );
+    } else if (Array.isArray(txCfg.orientation) && txCfg.orientation.length >= 3) {
+      const yaw = txCfg.orientation[2];
+      direction = new THREE.Vector3(Math.cos(yaw), Math.sin(yaw), 0);
+    }
+    if (direction.lengthSq() < 1e-6) {
+      direction = new THREE.Vector3(1, 0, 0);
+    }
+    direction.normalize();
+    const arrow = new THREE.ArrowHelper(direction, origin, 18, 0xf97316, 4, 2);
+    arrow.name = "tx_direction";
+    markerGroup.add(arrow);
+  }
   const risMat = new THREE.MeshStandardMaterial({ color: 0x111827, emissive: 0x111827, emissiveIntensity: 0.4 });
   const risGeo = new THREE.BoxGeometry(0.3, 3.5, 3.5);
   const risItems = ui.simRisEnabled && ui.simRisEnabled.checked ? readRisItems() : [];
@@ -2300,11 +2369,13 @@ function bindUI() {
   if (!ui.runSelect) console.error("ui.runSelect is missing");
   ui.runSelect.addEventListener("change", () => {
     state.followLatestRun = false;
+    state.sceneOverrideDirty = false;
     loadRun(ui.runSelect.value);
   });
   
   if (!ui.sceneRunSelect) console.error("ui.sceneRunSelect is missing");
   ui.sceneRunSelect.addEventListener("change", async () => {
+    state.sceneOverrideDirty = false;
     state.sceneSourceRunId = ui.sceneRunSelect.value;
     const details = await fetchRunDetails(state.sceneSourceRunId);
     state.sceneOverride = details && details.config ? details.config.scene : null;
@@ -2323,6 +2394,7 @@ function bindUI() {
   ui.applyMarkers.addEventListener("click", () => {
     state.markers.tx = [parseFloat(ui.txX.value), parseFloat(ui.txY.value), parseFloat(ui.txZ.value)];
     state.markers.rx = [parseFloat(ui.rxX.value), parseFloat(ui.rxY.value), parseFloat(ui.rxZ.value)];
+    updateSceneOverrideTxFromUi();
     rebuildScene();
   });
   
@@ -2344,6 +2416,14 @@ function bindUI() {
   if (ui.risList) {
     ui.risList.addEventListener("change", () => rebuildScene());
   }
+  if (ui.txPattern) ui.txPattern.addEventListener("change", updateSceneOverrideTxFromUi);
+  if (ui.txPolarization) ui.txPolarization.addEventListener("change", updateSceneOverrideTxFromUi);
+  if (ui.txPowerDbm) ui.txPowerDbm.addEventListener("change", updateSceneOverrideTxFromUi);
+  if (ui.txLookX) ui.txLookX.addEventListener("change", updateSceneOverrideTxFromUi);
+  if (ui.txLookY) ui.txLookY.addEventListener("change", updateSceneOverrideTxFromUi);
+  if (ui.txLookZ) ui.txLookZ.addEventListener("change", updateSceneOverrideTxFromUi);
+  if (ui.txYawDeg) ui.txYawDeg.addEventListener("change", updateSceneOverrideTxFromUi);
+  if (ui.showTxDirection) ui.showTxDirection.addEventListener("change", rebuildScene);
   
   console.log("Binding RIS controls...");
   if (!ui.mainTabStrip) console.error("ui.mainTabStrip is missing");
