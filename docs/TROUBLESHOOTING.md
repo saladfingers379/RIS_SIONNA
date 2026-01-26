@@ -45,6 +45,7 @@ If RIS paths are detected but the radio map looks unchanged:
   - center the radio map at the Rx height.
 - Compare against a baseline run (RIS off) using the diff toggle in the UI.
 - For a RIS-only view, set `simulation.los: false` and `simulation.specular_reflection: false` in the config (e.g., `configs/ris_rt_demo.yaml`).
+- For a Sionna tutorial-style diff map, set `radio_map.diff_ris: true` (see `configs/ris_doc_street_canyon.yaml`).
 - If Tx/Rx are on opposite sides of the RIS normal, reradiation is disabled and the RIS acts as a blocker.
 - The RIS model is passive; total gain improvements can be small unless the RIS is large/close
 

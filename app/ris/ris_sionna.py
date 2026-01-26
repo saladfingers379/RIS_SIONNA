@@ -435,7 +435,7 @@ def _build_ris_object(obj_cfg: Dict[str, Any]) -> Any:
     position = np.array(obj_cfg.get("position", [0.0, 0.0, 0.0]), dtype=float)
     orientation = obj_cfg.get("orientation")
     look_at = obj_cfg.get("look_at")
-    if orientation is None and look_at is None:
+    if orientation is None:
         orientation = [0.0, 0.0, 0.0]
 
     num_rows = int(obj_cfg.get("num_rows", 8))

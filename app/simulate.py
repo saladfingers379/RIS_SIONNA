@@ -263,6 +263,7 @@ def run_simulation(config_path: str) -> Path:
                     radio_map_cfg = cfg.radio_map
                     radio_map = None
                     radio_map_summaries = []
+                    radio_map_default_data = None
 
                     def _maybe_autosize(target_cfg: Dict[str, Any]) -> Dict[str, Any]:
                         if not target_cfg.get("auto_size"):
@@ -321,7 +322,7 @@ def run_simulation(config_path: str) -> Path:
                         overrides: Dict[str, Any],
                         suffix: Optional[str],
                         write_default: bool,
-                    ) -> Dict[str, Any]:
+                    ) -> tuple[Dict[str, Any], Dict[str, Any]]:
                         nonlocal radio_map
                         t0 = time.time()
                         progress.update(task_id, description=f"Radio map ({label})")
@@ -436,16 +437,23 @@ def run_simulation(config_path: str) -> Path:
                             "path_loss_db_max": float(np.max(path_loss_db)),
                             "grid_shape": list(path_gain_db.shape[-2:]),
                         }
-                        return {
+                        summary = {
                             "label": label,
                             "suffix": suffix,
                             "stats": stats,
                             "parameters": kwargs,
                         }
+                        data = {
+                            "path_gain_db": path_gain_db,
+                            "rx_power_dbm": rx_power_dbm,
+                            "path_loss_db": path_loss_db,
+                            "cell_centers": cell_centers,
+                        }
+                        return summary, data
 
                     write_progress(step_idx, "running")
                     if radio_map_cfg.get("enabled", False):
-                        summary = _compute_radio_map(
+                        summary, radio_map_default_data = _compute_radio_map(
                             label="default",
                             overrides={},
                             suffix=None,
@@ -458,6 +466,50 @@ def run_simulation(config_path: str) -> Path:
                         progress.update(task_id, description="Radio map (skipped)")
                         progress.advance(task_id)
                         step_idx += 1
+
+                    if radio_map_cfg.get("diff_ris", False) and radio_map_default_data is not None:
+                        default_ris = bool(radio_map_cfg.get("ris", False) or ris_runtime)
+                        alt_ris = not default_ris
+                        alt_label = "ris_on" if alt_ris else "no_ris"
+                        summary_alt, radio_map_alt_data = _compute_radio_map(
+                            label=alt_label,
+                            overrides={"ris": alt_ris},
+                            suffix=alt_label,
+                            write_default=False,
+                        )
+                        radio_map_summaries.append(summary_alt)
+
+                        base_data = radio_map_alt_data if default_ris else radio_map_default_data
+                        ris_data = radio_map_default_data if default_ris else radio_map_alt_data
+                        try:
+                            base_centers = base_data["cell_centers"]
+                            ris_centers = ris_data["cell_centers"]
+                            if base_centers.shape != ris_centers.shape or not np.allclose(base_centers, ris_centers):
+                                logger.warning("Radio map diff skipped: grid mismatch between RIS and baseline.")
+                            else:
+                                diff_db = ris_data["path_gain_db"] - base_data["path_gain_db"]
+                                np.savez_compressed(
+                                    data_dir / "radio_map_diff.npz",
+                                    path_gain_db=diff_db,
+                                    cell_centers=ris_centers,
+                                )
+                                plot_radio_map(
+                                    diff_db,
+                                    ris_centers,
+                                    plots_dir,
+                                    metric_label="RIS ΔPath gain [dB]",
+                                    filename_prefix="radio_map_diff_path_gain_db",
+                                    tx_pos=tx_pos,
+                                    rx_pos=rx_pos,
+                                    ris_positions=[np.asarray(r.position).reshape(-1) for r in scene.ris.values()] if hasattr(scene, "ris") else [],
+                                )
+                                metrics["radio_map_diff"] = {
+                                    "path_gain_db_min": float(np.min(diff_db)),
+                                    "path_gain_db_mean": float(np.mean(diff_db)),
+                                    "path_gain_db_max": float(np.max(diff_db)),
+                                }
+                        except Exception as exc:
+                            logger.warning("Radio map diff failed: %s", exc)
 
                     write_progress(step_idx, "running")
                     if radio_map is not None:
