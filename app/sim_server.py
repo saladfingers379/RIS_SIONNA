@@ -132,6 +132,19 @@ class SimRequestHandler(BaseHTTPRequestHandler):
                     scenes.append(name)
         except Exception:
             scenes = []
+        if not scenes:
+            scenes = [
+                "etoile",
+                "simple_street_canyon",
+                "simple_street_canyon_with_cars",
+                "munich",
+                "floor_wall",
+                "simple_wedge",
+                "simple_reflector",
+                "double_reflector",
+                "triple_reflector",
+                "box",
+            ]
         scenes = sorted(set(scenes))
         return {"scenes": scenes}
 
