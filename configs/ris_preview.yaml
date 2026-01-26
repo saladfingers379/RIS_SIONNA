@@ -23,7 +23,7 @@ simulation:
 scene:
   type: builtin
   builtin: etoile
-  export_mesh: false
+  export_mesh: true
   tx:
     name: tx
     position: [-5.0, -4.0, 3.0]

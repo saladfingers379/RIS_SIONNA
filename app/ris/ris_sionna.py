@@ -464,6 +464,33 @@ def _ris_runtime_summary(ris: Any, profile: Dict[str, Any]) -> Dict[str, Any]:
         "mode_powers": profile.get("mode_powers"),
     }
 
+def _warn_if_backside(ris: Any, scene: Any) -> None:
+    try:
+        ris_pos = np.array(ris.position, dtype=float).reshape(3)
+        normal = np.array(ris.world_normal, dtype=float).reshape(3)
+        tx = next(iter(scene.transmitters.values()), None)
+        rx = next(iter(scene.receivers.values()), None)
+        if tx is None or rx is None:
+            return
+        tx_vec = np.array(tx.position, dtype=float).reshape(3) - ris_pos
+        rx_vec = np.array(rx.position, dtype=float).reshape(3) - ris_pos
+        tx_side = float(np.dot(normal, tx_vec))
+        rx_side = float(np.dot(normal, rx_vec))
+        if tx_side <= 0.0:
+            logger.warning("RIS %s: Tx is on the back side of the RIS normal; no reradiation.", ris.name)
+        if rx_side <= 0.0:
+            logger.warning("RIS %s: Rx is on the back side of the RIS normal; no reradiation.", ris.name)
+        if tx_side == 0.0 or rx_side == 0.0:
+            return
+        if np.sign(tx_side) != np.sign(rx_side):
+            logger.warning(
+                "RIS %s: Tx and Rx are on opposite sides of the RIS. "
+                "This model reflects only on the front side; move RIS to one side of both.",
+                ris.name,
+            )
+    except Exception:
+        return
+
 
 def add_ris_from_config(scene: Any, cfg: Dict[str, Any]) -> Optional[List[Dict[str, Any]]]:
     ris_cfg = cfg.get("ris", {})
@@ -481,6 +508,7 @@ def add_ris_from_config(scene: Any, cfg: Dict[str, Any]) -> Optional[List[Dict[s
             ris = _build_ris_object(obj_cfg)
             scene.add(ris)
             _apply_phase_profile(ris, profile_cfg, scene=scene)
+            _warn_if_backside(ris, scene)
             summary = _ris_runtime_summary(ris, profile_cfg)
             summaries.append(summary)
             logger.info(
@@ -565,6 +593,7 @@ def add_ris_from_config(scene: Any, cfg: Dict[str, Any]) -> Optional[List[Dict[s
         _assign_profile_values(ris.amplitude_profile, amp_values)
 
     scene.add(ris)
+    _warn_if_backside(ris, scene)
     summaries.append(
         {
             "name": name,

@@ -23,13 +23,13 @@ simulation:
 scene:
   type: builtin
   builtin: etoile
-  export_mesh: false
+  export_mesh: true
   tx:
     name: tx
-    position: [-5.0, -4.0, 3.0]
+    position: [10.0, 0.0, 2.0]
   rx:
     name: rx
-    position: [8.0, 4.0, 1.5]
+    position: [6.0, 2.0, 2.0]
   arrays:
     tx:
       num_rows: 1
@@ -64,6 +64,10 @@ ris:
     config_path: configs/ris_lab_example.yaml
     amplitude: 0.84
     geometry_override:
+      nx: 50
+      ny: 50
+      dx: 0.02
+      dy: 0.02
       normal: [1.0, 0.0, 0.0]
       x_axis_hint: [0.0, 1.0, 0.0]
     mapping:
