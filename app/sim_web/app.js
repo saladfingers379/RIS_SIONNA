@@ -406,8 +406,18 @@ function readRisItems() {
 
 function applyRisDebugPreset() {
   if (ui.simRisEnabled) ui.simRisEnabled.checked = true;
-  const tx = state.markers.tx || [0, 0, 0];
-  const rx = state.markers.rx || [0, 0, 0];
+  const tx = [10.0, 0.0, 2.0];
+  const rx = [6.0, 2.0, 2.0];
+  const risPos = [0.0, 0.0, 2.0];
+  if (ui.txX) ui.txX.value = tx[0];
+  if (ui.txY) ui.txY.value = tx[1];
+  if (ui.txZ) ui.txZ.value = tx[2];
+  if (ui.rxX) ui.rxX.value = rx[0];
+  if (ui.rxY) ui.rxY.value = rx[1];
+  if (ui.rxZ) ui.rxZ.value = rx[2];
+  state.markers.tx = [...tx];
+  state.markers.rx = [...rx];
+  state.markers.ris = [risPos];
   const mid = [(tx[0] + rx[0]) / 2, (tx[1] + rx[1]) / 2, (tx[2] + rx[2]) / 2];
   if (ui.risList) {
     if (!ui.risList.children.length) {
@@ -419,11 +429,11 @@ function applyRisDebugPreset() {
         const el = node.querySelector(`[data-field="${name}"]`);
         if (el) el.value = value;
       };
-      setVal("posX", mid[0].toFixed(2));
-      setVal("posY", mid[1].toFixed(2));
-      setVal("posZ", mid[2].toFixed(2));
-      setVal("rows", 64);
-      setVal("cols", 64);
+      setVal("posX", risPos[0].toFixed(2));
+      setVal("posY", risPos[1].toFixed(2));
+      setVal("posZ", risPos[2].toFixed(2));
+      setVal("rows", 50);
+      setVal("cols", 50);
       setVal("modes", 1);
       setVal("profileKind", "phase_gradient_reflector");
       const autoAim = node.querySelector('[data-field="autoAim"]');
