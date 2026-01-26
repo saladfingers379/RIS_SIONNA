@@ -14,7 +14,7 @@ window.onerror = function (msg, url, line) {
 
 const state = {
   runId: null,
-  markers: { tx: [0, 0, 0], rx: [0, 0, 0] },
+  markers: { tx: [0, 0, 0], rx: [0, 0, 0], ris: [] },
   paths: [],
   heatmap: null,
   manifest: null,
@@ -23,6 +23,9 @@ const state = {
   sceneOverride: null,
   runInfo: null,
   configs: [],
+  radioMapPlots: [],
+  heatmapBase: null,
+  heatmapDiff: null,
   ris: {
     jobs: [],
     runs: [],
@@ -122,12 +125,19 @@ const ui = {
   radioMapCenterX: document.getElementById("radioMapCenterX"),
   radioMapCenterY: document.getElementById("radioMapCenterY"),
   radioMapCenterZ: document.getElementById("radioMapCenterZ"),
+  radioMapPlotStyle: document.getElementById("radioMapPlotStyle"),
+  radioMapPlotMetric: document.getElementById("radioMapPlotMetric"),
+  radioMapPlotShowTx: document.getElementById("radioMapPlotShowTx"),
+  radioMapPlotShowRx: document.getElementById("radioMapPlotShowRx"),
+  radioMapPlotShowRis: document.getElementById("radioMapPlotShowRis"),
   customOverridesSection: document.getElementById("customOverridesSection"),
   customBackend: document.getElementById("customBackend"),
   customMaxDepth: document.getElementById("customMaxDepth"),
   customSamplesPerSrc: document.getElementById("customSamplesPerSrc"),
   customMaxPathsPerSrc: document.getElementById("customMaxPathsPerSrc"),
   customSamplesPerTx: document.getElementById("customSamplesPerTx"),
+  simRisEnabled: document.getElementById("simRisEnabled"),
+  simRisObjects: document.getElementById("simRisObjects"),
   viewerMeta: document.getElementById("viewerMeta"),
   toggleGeometry: document.getElementById("toggleGeometry"),
   toggleMarkers: document.getElementById("toggleMarkers"),
@@ -147,11 +157,18 @@ const ui = {
   heatmapMaxLabel: document.getElementById("heatmapMaxLabel"),
   heatmapMinInput: document.getElementById("heatmapMinInput"),
   heatmapMaxInput: document.getElementById("heatmapMaxInput"),
+  radioMapPreviewSelect: document.getElementById("radioMapPreviewSelect"),
+  radioMapPreviewImage: document.getElementById("radioMapPreviewImage"),
+  radioMapDiffRun: document.getElementById("radioMapDiffRun"),
+  radioMapDiffToggle: document.getElementById("radioMapDiffToggle"),
   pathTypeFilter: document.getElementById("pathTypeFilter"),
   pathOrderFilter: document.getElementById("pathOrderFilter"),
   pathTableBody: document.getElementById("pathTableBody"),
   pathStats: document.getElementById("pathStats"),
   randomizeMarkers: document.getElementById("randomizeMarkers"),
+  addRis: document.getElementById("addRis"),
+  debugRis: document.getElementById("debugRis"),
+  risList: document.getElementById("risList"),
 };
 
 const RUN_PROFILES = {
@@ -204,7 +221,271 @@ let heatmapGroup;
 let alignmentGroup;
 let highlightLine;
 let dragging = null;
+let dragMode = null;
+let dragRisIndex = null;
+let dragStartYaw = 0;
+let dragStartMouse = null;
 let debugHeatmapMesh = null;
+
+function clearRisList() {
+  if (!ui.risList) return;
+  ui.risList.innerHTML = "";
+}
+
+function addRisItem(initial) {
+  if (!ui.risList) return;
+  const template = document.getElementById("risItemTemplate");
+  if (!template) return;
+  const node = template.content.firstElementChild.cloneNode(true);
+  const fields = (name) => node.querySelector(`[data-field="${name}"]`);
+  const setVal = (name, value) => {
+    const el = fields(name);
+    if (el && value !== undefined && value !== null) el.value = value;
+  };
+  setVal("name", initial?.name || `ris${ui.risList.children.length + 1}`);
+  const pos = initial?.position || [0, 0, 2];
+  setVal("posX", pos[0]);
+  setVal("posY", pos[1]);
+  setVal("posZ", pos[2]);
+  const ori = initial?.orientation || [0, 0, 0];
+  setVal("oriX", ori[0]);
+  setVal("oriY", ori[1]);
+  setVal("oriZ", ori[2]);
+  const look = initial?.look_at || [];
+  if (look.length >= 3) {
+    setVal("lookX", look[0]);
+    setVal("lookY", look[1]);
+    setVal("lookZ", look[2]);
+  }
+  setVal("rows", initial?.num_rows || 12);
+  setVal("cols", initial?.num_cols || 12);
+  setVal("modes", initial?.num_modes || 1);
+  setVal("profileKind", initial?.profile?.kind || "flat");
+  if (initial?.profile?.auto_aim) {
+    const autoAim = fields("autoAim");
+    if (autoAim) autoAim.checked = true;
+  }
+  const sources = initial?.profile?.sources;
+  if (Array.isArray(sources) && sources.length >= 3 && !Array.isArray(sources[0])) {
+    setVal("sourceX", sources[0]);
+    setVal("sourceY", sources[1]);
+    setVal("sourceZ", sources[2]);
+  } else if (Array.isArray(sources) && Array.isArray(sources[0])) {
+    setVal("sourceX", sources[0][0]);
+    setVal("sourceY", sources[0][1]);
+    setVal("sourceZ", sources[0][2]);
+  }
+  const targets = initial?.profile?.targets;
+  if (Array.isArray(targets) && targets.length >= 3 && !Array.isArray(targets[0])) {
+    setVal("targetX", targets[0]);
+    setVal("targetY", targets[1]);
+    setVal("targetZ", targets[2]);
+  } else if (Array.isArray(targets) && Array.isArray(targets[0])) {
+    setVal("targetX", targets[0][0]);
+    setVal("targetY", targets[0][1]);
+    setVal("targetZ", targets[0][2]);
+  }
+  setVal("amplitude", initial?.profile?.amplitude);
+  setVal("phaseBits", initial?.profile?.phase_bits);
+  node.querySelector(".ris-remove").addEventListener("click", () => {
+    node.remove();
+  });
+  const profileSelect = fields("profileKind");
+  if (profileSelect) {
+    profileSelect.addEventListener("change", () => {
+      if (profileSelect.value === "phase_gradient_reflector") {
+        const src = state.markers.tx || [0, 0, 0];
+        const tgt = state.markers.rx || [0, 0, 0];
+        setVal("sourceX", src[0]);
+        setVal("sourceY", src[1]);
+        setVal("sourceZ", src[2]);
+        setVal("targetX", tgt[0]);
+        setVal("targetY", tgt[1]);
+        setVal("targetZ", tgt[2]);
+      }
+    });
+  }
+  const autoAim = fields("autoAim");
+  if (autoAim) {
+    autoAim.addEventListener("change", () => {
+      if (autoAim.checked && profileSelect) {
+        profileSelect.value = "phase_gradient_reflector";
+        const src = state.markers.tx || [0, 0, 0];
+        const tgt = state.markers.rx || [0, 0, 0];
+        setVal("sourceX", src[0]);
+        setVal("sourceY", src[1]);
+        setVal("sourceZ", src[2]);
+        setVal("targetX", tgt[0]);
+        setVal("targetY", tgt[1]);
+        setVal("targetZ", tgt[2]);
+      }
+    });
+  }
+  ui.risList.appendChild(node);
+}
+
+function readRisItems() {
+  if (!ui.risList) return [];
+  const items = [];
+  const readNum = (el) => {
+    if (!el || el.value === "") return null;
+    const num = parseFloat(el.value);
+    return Number.isFinite(num) ? num : null;
+  };
+  ui.risList.querySelectorAll(".ris-item").forEach((node) => {
+    const field = (name) => node.querySelector(`[data-field="${name}"]`);
+    const name = (field("name")?.value || "").trim() || `ris${items.length + 1}`;
+    const pos = [
+      readNum(field("posX")),
+      readNum(field("posY")),
+      readNum(field("posZ")),
+    ];
+    const position = pos.every((v) => v !== null) ? pos : [0, 0, 2];
+    const look = [
+      readNum(field("lookX")),
+      readNum(field("lookY")),
+      readNum(field("lookZ")),
+    ];
+    const orientation = [
+      readNum(field("oriX")),
+      readNum(field("oriY")),
+      readNum(field("oriZ")),
+    ];
+    const obj = {
+      name,
+      position,
+      num_rows: Math.max(1, parseInt(field("rows")?.value || "12", 10)),
+      num_cols: Math.max(1, parseInt(field("cols")?.value || "12", 10)),
+      num_modes: Math.max(1, parseInt(field("modes")?.value || "1", 10)),
+    };
+    if (look.every((v) => v !== null)) {
+      obj.look_at = look;
+    } else if (orientation.every((v) => v !== null)) {
+      obj.orientation = orientation;
+    } else if (state.markers && Array.isArray(state.markers.rx)) {
+      obj.look_at = state.markers.rx;
+    }
+    let profileKind = field("profileKind")?.value || "flat";
+    const profile = { kind: profileKind };
+    const autoAim = field("autoAim");
+    if (autoAim && autoAim.checked) {
+      profile.auto_aim = true;
+      profileKind = "phase_gradient_reflector";
+      profile.kind = profileKind;
+    }
+    const src = [
+      readNum(field("sourceX")),
+      readNum(field("sourceY")),
+      readNum(field("sourceZ")),
+    ];
+    const tgt = [
+      readNum(field("targetX")),
+      readNum(field("targetY")),
+      readNum(field("targetZ")),
+    ];
+    if (profile.auto_aim && state.markers) {
+      profile.sources = state.markers.tx || src;
+      profile.targets = state.markers.rx || tgt;
+    } else {
+      if (src.every((v) => v !== null)) {
+        profile.sources = src;
+      }
+      if (tgt.every((v) => v !== null)) {
+        profile.targets = tgt;
+      }
+    }
+    const amplitude = readNum(field("amplitude"));
+    if (amplitude !== null) profile.amplitude = amplitude;
+    const phaseBits = readNum(field("phaseBits"));
+    if (phaseBits !== null) profile.phase_bits = Math.max(0, Math.round(phaseBits));
+    obj.profile = profile;
+    items.push(obj);
+  });
+  return items;
+}
+
+function applyRisDebugPreset() {
+  if (ui.simRisEnabled) ui.simRisEnabled.checked = true;
+  const tx = state.markers.tx || [0, 0, 0];
+  const rx = state.markers.rx || [0, 0, 0];
+  const mid = [(tx[0] + rx[0]) / 2, (tx[1] + rx[1]) / 2, (tx[2] + rx[2]) / 2];
+  if (ui.risList) {
+    if (!ui.risList.children.length) {
+      addRisItem();
+    }
+    const node = ui.risList.querySelector(".ris-item");
+    if (node) {
+      const setVal = (name, value) => {
+        const el = node.querySelector(`[data-field="${name}"]`);
+        if (el) el.value = value;
+      };
+      setVal("posX", mid[0].toFixed(2));
+      setVal("posY", mid[1].toFixed(2));
+      setVal("posZ", mid[2].toFixed(2));
+      setVal("rows", 64);
+      setVal("cols", 64);
+      setVal("modes", 1);
+      setVal("profileKind", "phase_gradient_reflector");
+      const autoAim = node.querySelector('[data-field="autoAim"]');
+      if (autoAim) autoAim.checked = true;
+      setVal("sourceX", tx[0].toFixed(2));
+      setVal("sourceY", tx[1].toFixed(2));
+      setVal("sourceZ", tx[2].toFixed(2));
+      setVal("targetX", rx[0].toFixed(2));
+      setVal("targetY", rx[1].toFixed(2));
+      setVal("targetZ", rx[2].toFixed(2));
+      setVal("amplitude", 1.0);
+      setVal("phaseBits", 0);
+    }
+  }
+  if (ui.radioMapAuto) ui.radioMapAuto.checked = false;
+  if (ui.radioMapCenterX) setInputValue(ui.radioMapCenterX, mid[0].toFixed(2));
+  if (ui.radioMapCenterY) setInputValue(ui.radioMapCenterY, mid[1].toFixed(2));
+  if (ui.radioMapCenterZ) setInputValue(ui.radioMapCenterZ, rx[2].toFixed(2));
+  if (ui.radioMapPlotStyle) ui.radioMapPlotStyle.value = "heatmap";
+  if (ui.radioMapPlotMetric) ui.radioMapPlotMetric.value = "path_gain";
+  if (ui.radioMapDiffToggle) ui.radioMapDiffToggle.checked = false;
+  rebuildScene();
+  refreshHeatmap();
+  setMeta("Applied RIS debug preset");
+}
+
+function getRisItemNode(index) {
+  if (!ui.risList) return null;
+  return ui.risList.querySelectorAll(".ris-item")[index] || null;
+}
+
+function updateRisItemPosition(index, pos) {
+  const node = getRisItemNode(index);
+  if (!node) return;
+  const field = (name) => node.querySelector(`[data-field="${name}"]`);
+  const setVal = (name, value) => {
+    const el = field(name);
+    if (el) el.value = value;
+  };
+  setVal("posX", pos[0].toFixed(3));
+  setVal("posY", pos[1].toFixed(3));
+  setVal("posZ", pos[2].toFixed(3));
+}
+
+function getRisItemYaw(index) {
+  const node = getRisItemNode(index);
+  if (!node) return 0;
+  const el = node.querySelector('[data-field="oriZ"]');
+  const val = el && el.value !== "" ? parseFloat(el.value) : 0;
+  return Number.isFinite(val) ? val : 0;
+}
+
+function updateRisItemYaw(index, yawRad) {
+  const node = getRisItemNode(index);
+  if (!node) return;
+  const el = node.querySelector('[data-field="oriZ"]');
+  if (el) el.value = yawRad.toFixed(3);
+  ["lookX", "lookY", "lookZ"].forEach((name) => {
+    const lookEl = node.querySelector(`[data-field="${name}"]`);
+    if (lookEl) lookEl.value = "";
+  });
+}
 
 function refreshHeatmap() {
   heatmapGroup.clear();
@@ -632,6 +913,21 @@ function applyRadioMapDefaults(config) {
   const radio = (config && config.data && config.data.radio_map) || {};
   ui.radioMapAuto.checked = Boolean(radio.auto_size);
   setInputValue(ui.radioMapPadding, radio.auto_padding);
+  if (ui.radioMapPlotStyle) {
+    ui.radioMapPlotStyle.value = (radio.plot_style || "heatmap").toLowerCase();
+  }
+  if (ui.radioMapPlotMetric) {
+    const metrics = radio.plot_metrics;
+    const metric = Array.isArray(metrics) ? metrics[0] : metrics;
+    ui.radioMapPlotMetric.value = metric || "path_gain";
+  }
+  if (ui.radioMapPlotShowTx) ui.radioMapPlotShowTx.checked = radio.plot_show_tx !== undefined ? Boolean(radio.plot_show_tx) : true;
+  if (ui.radioMapPlotShowRx) ui.radioMapPlotShowRx.checked = Boolean(radio.plot_show_rx);
+  if (ui.radioMapPlotShowRis) ui.radioMapPlotShowRis.checked = Boolean(radio.plot_show_ris);
+  if (ui.toggleHeatmap && radio.plot_style) {
+    ui.toggleHeatmap.checked = radio.plot_style !== "sionna";
+  }
+  refreshHeatmap();
   if (Array.isArray(radio.cell_size)) {
     setInputValue(ui.radioMapCellX, radio.cell_size[0]);
     setInputValue(ui.radioMapCellY, radio.cell_size[1]);
@@ -672,6 +968,19 @@ function applyCustomDefaults(config) {
   }
 }
 
+function applyRisSimDefaults(config) {
+  const ris = (config && config.data && config.data.ris) || {};
+  if (ui.simRisEnabled) ui.simRisEnabled.checked = Boolean(ris.enabled);
+  if (ui.risList) {
+    clearRisList();
+    if (Array.isArray(ris.objects) && ris.objects.length) {
+      ris.objects.forEach((obj) => addRisItem(obj));
+    } else {
+      addRisItem();
+    }
+  }
+}
+
 function updateCustomVisibility() {
   const isCustom = ui.runProfile.value === "custom";
   ui.customOverridesSection.open = isCustom;
@@ -695,6 +1004,7 @@ async function fetchConfigs() {
   }
   applyRadioMapDefaults(getProfileConfig());
   applyCustomDefaults(getProfileConfig());
+  applyRisSimDefaults(getProfileConfig());
   updateCustomVisibility();
 }
 
@@ -702,8 +1012,10 @@ async function fetchRuns() {
   const res = await fetch("/api/runs");
   const data = await res.json();
   const previous = state.runId;
+  const previousDiff = ui.radioMapDiffRun ? ui.radioMapDiffRun.value : null;
   ui.runSelect.innerHTML = "";
   ui.sceneRunSelect.innerHTML = "";
+  if (ui.radioMapDiffRun) ui.radioMapDiffRun.innerHTML = "";
   data.runs.forEach((run) => {
     const opt = document.createElement("option");
     opt.value = run.run_id;
@@ -714,12 +1026,22 @@ async function fetchRuns() {
     sceneOpt.value = run.run_id;
     sceneOpt.textContent = run.run_id;
     ui.sceneRunSelect.appendChild(sceneOpt);
+
+    if (ui.radioMapDiffRun) {
+      const diffOpt = document.createElement("option");
+      diffOpt.value = run.run_id;
+      diffOpt.textContent = run.run_id;
+      ui.radioMapDiffRun.appendChild(diffOpt);
+    }
   });
   if (data.runs.length > 0) {
     state.runId = data.runs.find((r) => r.run_id === previous)?.run_id || data.runs[0].run_id;
     ui.runSelect.value = state.runId;
     state.sceneSourceRunId = state.sceneSourceRunId || state.runId;
     ui.sceneRunSelect.value = state.sceneSourceRunId;
+    if (ui.radioMapDiffRun) {
+      ui.radioMapDiffRun.value = previousDiff || state.runId;
+    }
     await loadRun(state.runId);
     const sceneDetails = await fetchRunDetails(state.sceneSourceRunId);
     state.sceneOverride = sceneDetails && sceneDetails.config ? sceneDetails.config.scene : null;
@@ -929,25 +1251,49 @@ async function loadRun(runId) {
   state.runId = runId;
   setMeta(`Loading ${runId}...`);
   try {
-    const [markers, paths, manifest, heatmap, runInfo] = await Promise.all([
+    const [markers, paths, manifest, heatmap, radioPlots, runInfo] = await Promise.all([
       fetch(`/runs/${runId}/viewer/markers.json`).then((r) => (r.ok ? r.json() : null)),
       fetch(`/runs/${runId}/viewer/paths.json`).then((r) => (r.ok ? r.json() : [])),
       fetch(`/runs/${runId}/viewer/scene_manifest.json`).then((r) => (r.ok ? r.json() : null)),
       fetch(`/runs/${runId}/viewer/heatmap.json`).then((r) => (r.ok ? r.json() : null)),
+      fetch(`/runs/${runId}/viewer/radio_map_plots.json`).then((r) => (r.ok ? r.json() : null)),
       fetchRunDetails(runId),
     ]);
     state.markers = markers || state.markers;
+    if (!state.markers.ris) {
+      state.markers.ris = [];
+    }
     state.paths = paths || [];
     state.manifest = manifest;
     state.heatmap = heatmap;
+    state.radioMapPlots = (radioPlots && radioPlots.plots) ? radioPlots.plots : [];
     state.runInfo = runInfo;
+    if (state.markers.ris.length === 0) {
+      const risObjects = (runInfo && runInfo.config && runInfo.config.ris && runInfo.config.ris.objects) || [];
+      if (Array.isArray(risObjects) && risObjects.length) {
+        state.markers.ris = risObjects.map((obj) => obj.position || [0, 0, 0]);
+      }
+    }
+    const configWrapper = runInfo && runInfo.config ? { data: runInfo.config } : getProfileConfig();
+    if (state.markers.ris.length === 0) {
+      const risObjects = (configWrapper.data && configWrapper.data.ris && configWrapper.data.ris.objects) || [];
+      if (Array.isArray(risObjects) && risObjects.length) {
+        state.markers.ris = risObjects.map((obj) => obj.position || [0, 0, 0]);
+      }
+    }
     updateInputs();
     renderRunStats();
     updateHeatmapControls();
+    updateRadioMapPreview();
+    applyRadioMapDefaults(configWrapper);
+    applyRisSimDefaults(configWrapper);
     rebuildScene();
     renderPathTable();
     renderPathStats();
     setMeta(`${runId} · ${state.paths.length} paths`);
+    if (ui.radioMapDiffToggle && ui.radioMapDiffToggle.checked) {
+      await refreshHeatmapDiff();
+    }
   } catch (err) {
     setMeta(`Failed to load ${runId}`);
   }
@@ -960,6 +1306,24 @@ function updateInputs() {
   ui.rxX.value = state.markers.rx[0];
   ui.rxY.value = state.markers.rx[1];
   ui.rxZ.value = state.markers.rx[2];
+  if (ui.risList) {
+    ui.risList.querySelectorAll(".ris-item").forEach((node) => {
+      const autoAim = node.querySelector('[data-field="autoAim"]');
+      const profile = node.querySelector('[data-field="profileKind"]');
+      if (!autoAim || !autoAim.checked) return;
+      if (profile) profile.value = "phase_gradient_reflector";
+      const setVal = (name, value) => {
+        const el = node.querySelector(`[data-field="${name}"]`);
+        if (el) el.value = value;
+      };
+      setVal("sourceX", state.markers.tx[0]);
+      setVal("sourceY", state.markers.tx[1]);
+      setVal("sourceZ", state.markers.tx[2]);
+      setVal("targetX", state.markers.rx[0]);
+      setVal("targetY", state.markers.rx[1]);
+      setVal("targetZ", state.markers.rx[2]);
+    });
+  }
 }
 
 function renderRunStats() {
@@ -976,6 +1340,7 @@ function renderRunStats() {
   const freqHz = sim.frequency_hz || null;
   const freqGHz = freqHz ? (freqHz / 1e9).toFixed(2) : "n/a";
   const numPaths = metrics.num_valid_paths ?? "n/a";
+  const risPaths = metrics.num_ris_paths ?? "n/a";
   const maxDepth = sim.max_depth ?? "n/a";
   const rxPower = metrics.rx_power_dbm_estimate !== undefined ? metrics.rx_power_dbm_estimate.toFixed(2) : "n/a";
   const pathGain = metrics.total_path_gain_db !== undefined ? metrics.total_path_gain_db.toFixed(2) : "n/a";
@@ -983,6 +1348,7 @@ function renderRunStats() {
     <div><strong>Frequency:</strong> ${freqGHz} GHz</div>
     <div><strong>Max depth:</strong> ${maxDepth}</div>
     <div><strong>Valid paths:</strong> ${numPaths}</div>
+    <div><strong>RIS paths:</strong> ${risPaths}</div>
     <div><strong>Total path gain:</strong> ${pathGain} dB</div>
     <div><strong>Rx power (est.):</strong> ${rxPower} dBm</div>
     <div><strong>Scene:</strong> ${sceneLabel}</div>
@@ -990,11 +1356,12 @@ function renderRunStats() {
 }
 
 function updateHeatmapControls() {
-  if (!state.heatmap || !state.heatmap.values) {
+  const active = getActiveHeatmap();
+  if (!active || !active.values) {
     updateHeatmapScaleVisibility(false);
     return;
   }
-  const values = state.heatmap.values.flat();
+  const values = active.values.flat();
   const min = Math.min(...values);
   const max = Math.max(...values);
   const minVal = Math.floor(min);
@@ -1023,8 +1390,95 @@ function updateHeatmapScaleVisibility(force) {
   if (!ui.heatmapScale) return;
   const visible = force !== undefined
     ? force
-    : Boolean(ui.toggleHeatmap.checked && state.heatmap && state.heatmap.values);
+    : Boolean(ui.toggleHeatmap.checked && getActiveHeatmap() && getActiveHeatmap().values);
   ui.heatmapScale.classList.toggle("is-hidden", !visible);
+}
+
+function updateRadioMapPreview() {
+  if (!ui.radioMapPreviewSelect || !ui.radioMapPreviewImage) return;
+  const plots = state.radioMapPlots || [];
+  ui.radioMapPreviewSelect.innerHTML = "";
+  if (!plots.length) {
+    ui.radioMapPreviewSelect.innerHTML = "<option value=\"\">(no plots)</option>";
+    ui.radioMapPreviewImage.src = "";
+    return;
+  }
+  plots.forEach((plot) => {
+    const opt = document.createElement("option");
+    opt.value = plot.file;
+    opt.textContent = plot.label || plot.file;
+    ui.radioMapPreviewSelect.appendChild(opt);
+  });
+  const selected = ui.radioMapPreviewSelect.value || plots[0].file;
+  ui.radioMapPreviewSelect.value = selected;
+  ui.radioMapPreviewImage.src = `/runs/${state.runId}/viewer/${selected}`;
+}
+
+function getActiveHeatmap() {
+  if (ui.radioMapDiffToggle && ui.radioMapDiffToggle.checked) {
+    return state.heatmapDiff;
+  }
+  return state.heatmap;
+}
+
+async function loadHeatmapForRun(runId) {
+  const res = await fetch(`/runs/${runId}/viewer/heatmap.json`);
+  if (!res.ok) return null;
+  return await res.json();
+}
+
+function computeHeatmapDiff(current, base) {
+  if (!current || !base) return null;
+  if (!current.values || !base.values) return null;
+  if (current.values.length !== base.values.length) return null;
+  const height = current.values.length;
+  const width = current.values[0].length || 0;
+  if (!width) return null;
+  if (base.values[0].length !== width) return null;
+  const diffValues = [];
+  for (let y = 0; y < height; y++) {
+    const row = [];
+    for (let x = 0; x < width; x++) {
+      row.push(current.values[y][x] - base.values[y][x]);
+    }
+    diffValues.push(row);
+  }
+  return {
+    metric: `diff_${current.metric || "map"}`,
+    grid_shape: current.grid_shape,
+    values: diffValues,
+    cell_centers: current.cell_centers,
+    center: current.center,
+    size: current.size,
+    cell_size: current.cell_size,
+    orientation: current.orientation,
+  };
+}
+
+async function refreshHeatmapDiff() {
+  if (!ui.radioMapDiffToggle || !ui.radioMapDiffToggle.checked) {
+    state.heatmapDiff = null;
+    updateHeatmapControls();
+    refreshHeatmap();
+    return;
+  }
+  const baseRun = ui.radioMapDiffRun ? ui.radioMapDiffRun.value : null;
+  if (!baseRun || !state.heatmap) {
+    state.heatmapDiff = null;
+    updateHeatmapControls();
+    refreshHeatmap();
+    return;
+  }
+  const base = await loadHeatmapForRun(baseRun);
+  const diff = computeHeatmapDiff(state.heatmap, base);
+  if (!diff) {
+    setMeta("Heatmap diff failed: grid mismatch");
+    state.heatmapDiff = null;
+  } else {
+    state.heatmapDiff = diff;
+  }
+  updateHeatmapControls();
+  refreshHeatmap();
 }
 
 function rebuildScene() {
@@ -1034,6 +1488,13 @@ function rebuildScene() {
   heatmapGroup.clear();
   alignmentGroup.clear();
   highlightLine = null;
+
+  if (ui.simRisEnabled && ui.simRisEnabled.checked) {
+    const risItems = readRisItems();
+    state.markers.ris = risItems.map((item) => item.position || [0, 0, 0]);
+  } else {
+    state.markers.ris = [];
+  }
 
   addProxyGeometry();
   if (ui.toggleGeometry.checked) {
@@ -1127,6 +1588,28 @@ function addMarkers() {
   tx.position.set(...state.markers.tx);
   rx.position.set(...state.markers.rx);
   markerGroup.add(tx, rx);
+  const risMat = new THREE.MeshStandardMaterial({ color: 0x111827, emissive: 0x111827, emissiveIntensity: 0.4 });
+  const risGeo = new THREE.BoxGeometry(0.3, 3.5, 3.5);
+  const risItems = ui.simRisEnabled && ui.simRisEnabled.checked ? readRisItems() : [];
+  const risMarkers = risItems.length ? risItems : (Array.isArray(state.markers.ris) ? state.markers.ris.map((p) => ({ position: p })) : []);
+  risMarkers.forEach((item, idx) => {
+    const pos = item.position || item;
+    if (!Array.isArray(pos) || pos.length < 3) return;
+    const ris = new THREE.Mesh(risGeo, risMat);
+    ris.name = `ris_${idx}`;
+    ris.position.set(pos[0], pos[1], pos[2]);
+    const orientation = Array.isArray(item.orientation) && item.orientation.length >= 3 ? item.orientation : null;
+    let yaw = orientation ? orientation[2] : getRisItemYaw(idx);
+    if (!orientation && Array.isArray(item.look_at) && item.look_at.length >= 3) {
+      const dx = item.look_at[0] - pos[0];
+      const dy = item.look_at[1] - pos[1];
+      yaw = Math.atan2(dy, dx);
+    }
+    const roll = orientation ? orientation[0] : 0;
+    const pitch = orientation ? orientation[1] : 0;
+    ris.rotation.set(Math.PI / 2 + roll, pitch, yaw);
+    markerGroup.add(ris);
+  });
 }
 
 function addAlignmentMarkers() {
@@ -1309,10 +1792,11 @@ function addRays() {
 }
 
 function addHeatmap() {
-  if (!state.heatmap) {
+  const active = getActiveHeatmap();
+  if (!active) {
     return;
   }
-  const values = state.heatmap.values || [];
+  const values = active.values || [];
   if (!values.length) {
     return;
   }
@@ -1332,7 +1816,9 @@ function addHeatmap() {
     for (let x = 0; x < width; x++) {
       const v = values[y][x];  // No vertical flip - flips heatmap like turning over paper
       const t = rangeMax > rangeMin ? (v - rangeMin) / (rangeMax - rangeMin) : 0.0;
-      const c = heatmapColor(t);
+      const c = (ui.radioMapDiffToggle && ui.radioMapDiffToggle.checked)
+        ? heatmapColorDiff(t)
+        : heatmapColor(t);
       const idx = (y * width + x) * 4;
       img.data[idx] = c[0];
       img.data[idx + 1] = c[1];
@@ -1350,7 +1836,7 @@ function addHeatmap() {
   let center = null;
   let z = 0;
 
-  const centers = state.heatmap.cell_centers || [];
+  const centers = active.cell_centers || [];
   if (centers.length) {
     const xs = centers.flatMap((row) => row.map((c) => c[0]));
     const ys = centers.flatMap((row) => row.map((c) => c[1]));
@@ -1359,7 +1845,7 @@ function addHeatmap() {
     const xMax = Math.max(...xs);
     const yMin = Math.min(...ys);
     const yMax = Math.max(...ys);
-    const cellSize = state.heatmap.cell_size || [0, 0];
+    const cellSize = active.cell_size || [0, 0];
     widthM = xMax - xMin + (cellSize[0] || 0);
     heightM = yMax - yMin + (cellSize[1] || 0);
     center = [
@@ -1368,16 +1854,16 @@ function addHeatmap() {
       zs.length ? zs.reduce((a, b) => a + b, 0) / zs.length : 0,
     ];
     z = center[2];
-  } else if (state.heatmap.size && state.heatmap.center) {
-    widthM = state.heatmap.size[0];
-    heightM = state.heatmap.size[1];
-    center = state.heatmap.center;
-    z = Array.isArray(state.heatmap.center) ? state.heatmap.center[2] || 0 : 0;
-  } else if (state.heatmap.grid_shape && state.heatmap.cell_size && state.heatmap.center) {
-    widthM = state.heatmap.grid_shape[1] * state.heatmap.cell_size[0];
-    heightM = state.heatmap.grid_shape[0] * state.heatmap.cell_size[1];
-    center = state.heatmap.center;
-    z = Array.isArray(state.heatmap.center) ? state.heatmap.center[2] || 0 : 0;
+  } else if (active.size && active.center) {
+    widthM = active.size[0];
+    heightM = active.size[1];
+    center = active.center;
+    z = Array.isArray(active.center) ? active.center[2] || 0 : 0;
+  } else if (active.grid_shape && active.cell_size && active.center) {
+    widthM = active.grid_shape[1] * active.cell_size[0];
+    heightM = active.grid_shape[0] * active.cell_size[1];
+    center = active.center;
+    z = Array.isArray(active.center) ? active.center[2] || 0 : 0;
   }
   if (!widthM || !heightM || !center) {
     const meshBox = new THREE.Box3().setFromObject(geometryGroup);
@@ -1403,11 +1889,11 @@ function addHeatmap() {
   const uiRotationDeg = parseFloat(ui.heatmapRotation?.value || 0);
   const uiRotationRad = (uiRotationDeg * Math.PI) / 180;
 
-  if (state.heatmap.orientation && state.heatmap.orientation.length >= 3) {
+  if (active.orientation && active.orientation.length >= 3) {
     mesh.rotation.set(
-      state.heatmap.orientation[0],
-      state.heatmap.orientation[1],
-      state.heatmap.orientation[2] + uiRotationRad
+      active.orientation[0],
+      active.orientation[1],
+      active.orientation[2] + uiRotationRad
     );
   } else {
     mesh.rotation.set(0, 0, uiRotationRad);
@@ -1424,6 +1910,26 @@ function heatmapColor(t) {
     Math.round(c1[0] + (c2[0] - c1[0]) * t),
     Math.round(c1[1] + (c2[1] - c1[1]) * t),
     Math.round(c1[2] + (c2[2] - c1[2]) * t),
+  ];
+}
+
+function heatmapColorDiff(t) {
+  const c1 = [59, 130, 246];
+  const c2 = [255, 255, 255];
+  const c3 = [239, 68, 68];
+  if (t <= 0.5) {
+    const k = t / 0.5;
+    return [
+      Math.round(c1[0] + (c2[0] - c1[0]) * k),
+      Math.round(c1[1] + (c2[1] - c1[1]) * k),
+      Math.round(c1[2] + (c2[2] - c1[2]) * k),
+    ];
+  }
+  const k = (t - 0.5) / 0.5;
+  return [
+    Math.round(c2[0] + (c3[0] - c2[0]) * k),
+    Math.round(c2[1] + (c3[1] - c2[1]) * k),
+    Math.round(c2[2] + (c3[2] - c2[2]) * k),
   ];
 }
 
@@ -1518,13 +2024,32 @@ function onMouseDown(event) {
   raycaster.setFromCamera(mouse, camera);
   const hits = raycaster.intersectObjects(markerGroup.children, true);
   if (hits.length) {
-    dragging = hits[0].object;
+    const target = hits[0].object;
+    if (target.name === "tx" || target.name === "rx") {
+      dragging = target;
+      dragMode = "move";
+    } else if (target.name.startsWith("ris_")) {
+      dragging = target;
+      dragMode = event.shiftKey ? "rotate" : "move";
+      dragRisIndex = parseInt(target.name.split("_")[1], 10);
+      dragStartYaw = getRisItemYaw(dragRisIndex);
+      dragStartMouse = { x: event.clientX, y: event.clientY };
+    } else {
+      return;
+    }
     controls.enabled = false;
   }
 }
 
 function onMouseMove(event) {
   if (!dragging) return;
+  if (dragMode === "rotate" && dragging.name.startsWith("ris_")) {
+    const dx = event.clientX - (dragStartMouse?.x || event.clientX);
+    const yaw = dragStartYaw + dx * 0.01;
+    dragging.rotation.z = yaw;
+    updateRisItemYaw(dragRisIndex, yaw);
+    return;
+  }
   const mouse = getMouse(event);
   const raycaster = new THREE.Raycaster();
   raycaster.setFromCamera(mouse, camera);
@@ -1534,8 +2059,10 @@ function onMouseMove(event) {
   dragging.position.copy(point);
   if (dragging.name === "tx") {
     state.markers.tx = [point.x, point.y, point.z];
-  } else {
+  } else if (dragging.name === "rx") {
     state.markers.rx = [point.x, point.y, point.z];
+  } else if (dragging.name.startsWith("ris_")) {
+    updateRisItemPosition(dragRisIndex, [point.x, point.y, point.z]);
   }
   updateInputs();
 }
@@ -1543,6 +2070,9 @@ function onMouseMove(event) {
 function endDrag() {
   if (dragging) {
     dragging = null;
+    dragMode = null;
+    dragRisIndex = null;
+    dragStartMouse = null;
   }
   controls.enabled = true;
 }
@@ -1635,6 +2165,21 @@ async function submitJob() {
     if (padding !== null) {
       radio.auto_padding = padding;
     }
+    if (ui.radioMapPlotStyle && ui.radioMapPlotStyle.value) {
+      radio.plot_style = ui.radioMapPlotStyle.value;
+    }
+    if (ui.radioMapPlotMetric && ui.radioMapPlotMetric.value) {
+      radio.plot_metrics = [ui.radioMapPlotMetric.value];
+    }
+    if (ui.radioMapPlotShowTx) {
+      radio.plot_show_tx = ui.radioMapPlotShowTx.checked;
+    }
+    if (ui.radioMapPlotShowRx) {
+      radio.plot_show_rx = ui.radioMapPlotShowRx.checked;
+    }
+    if (ui.radioMapPlotShowRis) {
+      radio.plot_show_ris = ui.radioMapPlotShowRis.checked;
+    }
     const cellX = readNumber(ui.radioMapCellX);
     const cellY = readNumber(ui.radioMapCellY);
     if (cellX !== null && cellY !== null) {
@@ -1658,6 +2203,26 @@ async function submitJob() {
     if (Object.keys(radio).length) {
       payload.radio_map = radio;
     }
+  }
+  const radioStyle = {};
+  if (ui.radioMapPlotStyle && ui.radioMapPlotStyle.value) {
+    radioStyle.plot_style = ui.radioMapPlotStyle.value;
+  }
+  if (ui.radioMapPlotMetric && ui.radioMapPlotMetric.value) {
+    radioStyle.plot_metrics = [ui.radioMapPlotMetric.value];
+  }
+  if (ui.radioMapPlotShowTx) radioStyle.plot_show_tx = ui.radioMapPlotShowTx.checked;
+  if (ui.radioMapPlotShowRx) radioStyle.plot_show_rx = ui.radioMapPlotShowRx.checked;
+  if (ui.radioMapPlotShowRis) radioStyle.plot_show_ris = ui.radioMapPlotShowRis.checked;
+  if (Object.keys(radioStyle).length) {
+    payload.radio_map = Object.assign(payload.radio_map || {}, radioStyle);
+  }
+
+  if (ui.simRisEnabled && ui.simRisEnabled.checked) {
+    const objects = readRisItems();
+    payload.ris = { enabled: true, objects };
+    payload.simulation = Object.assign(payload.simulation || {}, { ris: true });
+    payload.radio_map = Object.assign(payload.radio_map || {}, { ris: true });
   }
   const scenePayload = JSON.parse(JSON.stringify(state.sceneOverride || {}));
   scenePayload.tx = { position: state.markers.tx };
@@ -1701,6 +2266,8 @@ function bindUI() {
   ui.runProfile.addEventListener("change", () => {
     applyRadioMapDefaults(getProfileConfig());
     applyCustomDefaults(getProfileConfig());
+    applyRisSimDefaults(getProfileConfig());
+    applyRisSimDefaults(getProfileConfig());
     updateCustomVisibility();
   });
   
@@ -1719,6 +2286,16 @@ function bindUI() {
   
   if (!ui.runSim) console.error("ui.runSim is missing");
   ui.runSim.addEventListener("click", () => submitJob());
+
+  if (ui.addRis) {
+    ui.addRis.addEventListener("click", () => addRisItem());
+  }
+  if (ui.debugRis) {
+    ui.debugRis.addEventListener("click", () => applyRisDebugPreset());
+  }
+  if (ui.risList) {
+    ui.risList.addEventListener("change", () => rebuildScene());
+  }
   
   console.log("Binding RIS controls...");
   if (!ui.mainTabStrip) console.error("ui.mainTabStrip is missing");
@@ -1805,6 +2382,28 @@ function bindUI() {
     ui.risSweepStep,
     ui.risNormalization,
   ];
+
+  if (ui.radioMapPreviewSelect) {
+    ui.radioMapPreviewSelect.addEventListener("change", () => {
+      if (!ui.radioMapPreviewImage) return;
+      const file = ui.radioMapPreviewSelect.value;
+      if (!file) return;
+      ui.radioMapPreviewImage.src = `/runs/${state.runId}/viewer/${file}`;
+    });
+  }
+
+  if (ui.radioMapDiffRun) {
+    ui.radioMapDiffRun.addEventListener("change", () => {
+      if (ui.radioMapDiffToggle && ui.radioMapDiffToggle.checked) {
+        refreshHeatmapDiff();
+      }
+    });
+  }
+  if (ui.radioMapDiffToggle) {
+    ui.radioMapDiffToggle.addEventListener("change", () => {
+      refreshHeatmapDiff();
+    });
+  }
   risPreviewInputs.forEach((input) => {
     if (!input) return;
     input.addEventListener("input", updateRisConfigPreview);

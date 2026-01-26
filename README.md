@@ -59,8 +59,11 @@ python -m app sim
 Features:
 - Load saved outputs from `outputs/<run_id>/viewer/`
 - Interactive Tx/Rx placement
+- RIS objects (place panels, auto-aim, drag + rotate)
 - Profiles: CPU, GPU low/medium/high, custom
 - Job status, logs, and snapshots
+- Radio map plot style switch (heatmap vs Sionna standard)
+- Diff view for radio maps (current - baseline)
 
 ## RIS Lab (CPU-only)
 RIS Lab is a math-first validation tool for RIS patterns and link metrics. It uses a near-field reflectarray model (Machado/Tang-style sweep).
@@ -85,15 +88,15 @@ Artifacts (written under `outputs/<run_id>/`):
 - Validation: `plots/phase_map.png`, `plots/validation_overlay.png`
 
 ## RIS in Sionna RT (v0.19.2)
-Enable RIS with a workbench phase map by editing `configs/default.yaml`:
-- Set `ris.enabled: true`
-- Update `ris.workbench.config_path` to point at a RIS Lab YAML (example: `configs/ris_lab_example.yaml`)
+Enable RIS with the simulator UI:
+1) Run `python -m app sim`
+2) Simulation tab → **RIS Objects**
+3) Enable RIS, add a panel, and use “Boost toward Rx”
+4) Run a sim and compare against a baseline (RIS off)
 
-Minimal demo script:
-```bash
-python scripts/demo_ris_in_scene.py --ris-config configs/ris_lab_example.yaml
-```
-The demo prints total path-gain with RIS ON vs RIS OFF.
+Notes:
+- RIS effects are easiest to see if the radio map plane is near the Rx height.
+- The diff view highlights changes between a baseline and RIS run.
 
 ## GPU Diagnostics
 Run:

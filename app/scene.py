@@ -219,10 +219,11 @@ def build_scene(cfg: Dict[str, Any], mitsuba_variant: Optional[str] = None):
     from .utils.system import disable_pythreejs_import
 
     disable_pythreejs_import("build_scene")
-    import sionna.rt as rt
-    from .utils.system import apply_mitsuba_variant
+    from .utils.system import apply_mitsuba_variant, assert_mitsuba_variant
 
     apply_mitsuba_variant(mitsuba_variant)
+    assert_mitsuba_variant(mitsuba_variant, context="build_scene")
+    import sionna.rt as rt
 
     scene_cfg = cfg.get("scene", {})
     scene_type = scene_cfg.get("type", "builtin")
@@ -282,7 +283,9 @@ def build_scene(cfg: Dict[str, Any], mitsuba_variant: Optional[str] = None):
     try:
         from .ris.ris_sionna import add_ris_from_config
 
-        add_ris_from_config(scene, cfg)
+        ris_summary = add_ris_from_config(scene, cfg)
+        if ris_summary is not None:
+            setattr(scene, "_ris_runtime", ris_summary)
     except Exception:
         # RIS is optional; ignore failures unless explicitly enabled elsewhere.
         if cfg.get("ris", {}).get("enabled"):

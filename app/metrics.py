@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 import numpy as np
 
@@ -30,7 +30,59 @@ def _paths_mask(paths) -> Optional[np.ndarray]:
     return None
 
 
-def compute_path_metrics(paths, tx_power_dbm: float) -> Dict[str, Any]:
+def _count_ris_paths(paths, scene: Optional[Any] = None) -> Optional[int]:
+    try:
+        objects = _to_numpy(getattr(paths, "objects", None))
+    except Exception:
+        objects = None
+    if scene is not None and objects is not None and hasattr(scene, "ris") and objects is not None:
+        try:
+            ris_ids = [int(getattr(ris, "object_id")) for ris in scene.ris.values()]
+        except Exception:
+            ris_ids = []
+        ris_ids = [rid for rid in ris_ids if rid is not None]
+        if ris_ids and getattr(objects, "size", 0):
+            if objects.ndim >= 4:
+                inter = objects[:, 0, 0, :]
+            elif objects.ndim == 2:
+                inter = objects
+            else:
+                inter = None
+            if inter is not None:
+                ris_hit = np.isin(inter, ris_ids)
+                per_path = np.any(ris_hit, axis=0)
+                mask = _paths_mask(paths)
+                if mask is not None and mask.shape[-1] == per_path.shape[-1]:
+                    per_path = per_path & mask.reshape(-1, per_path.shape[-1]).any(axis=0)
+                return int(np.sum(per_path))
+    try:
+        interactions = _to_numpy(paths.interactions)
+    except Exception:
+        interactions = None
+    if interactions is None or interactions.size == 0:
+        return None
+    type_map = _interaction_type_map()
+    ris_ids = [k for k, v in type_map.items() if v == "ris"]
+    if not ris_ids:
+        return None
+    mask = _paths_mask(paths)
+    if mask is None:
+        return None
+    # interactions shape: [num_vertices, num_rx, num_tx, num_paths]
+    if interactions.ndim >= 4:
+        inter = interactions[:, 0, 0, :]
+    elif interactions.ndim == 2:
+        inter = interactions
+    else:
+        return None
+    ris_hit = np.isin(inter, ris_ids)
+    per_path = np.any(ris_hit, axis=0)
+    if mask.ndim >= 1 and mask.shape[-1] == per_path.shape[-1]:
+        per_path = per_path & mask.reshape(-1, per_path.shape[-1]).any(axis=0)
+    return int(np.sum(per_path))
+
+
+def compute_path_metrics(paths, tx_power_dbm: float, scene: Optional[Any] = None) -> Dict[str, Any]:
     """Compute simple, report-friendly metrics from Sionna RT Paths."""
     a = _paths_coefficients(paths)
 
@@ -49,6 +101,9 @@ def compute_path_metrics(paths, tx_power_dbm: float) -> Dict[str, Any]:
         "rx_power_dbm_estimate": tx_power_dbm + total_path_gain_db,
         "num_valid_paths": num_valid_paths,
     }
+    ris_count = _count_ris_paths(paths, scene=scene)
+    if ris_count is not None:
+        metrics["num_ris_paths"] = ris_count
 
     try:
         tau = _to_numpy(paths.tau)

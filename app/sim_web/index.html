@@ -129,6 +129,22 @@
               </div>
             </details>
 
+            <details class="panel-section" open>
+              <summary>RIS Objects</summary>
+              <div class="panel-section-body">
+                <label class="toggle">
+                  <input id="simRisEnabled" type="checkbox" />
+                  Enable RIS objects for this run
+                </label>
+                <div class="help-text">Drag RIS markers in 3D when “Drag markers” is enabled. Hold Shift while dragging to rotate about Z.</div>
+                <div id="risList" class="ris-list"></div>
+                <div class="job-buttons">
+                  <button id="addRis" type="button">Add RIS</button>
+                  <button id="debugRis" type="button">Debug Boost + Center Map</button>
+                </div>
+              </div>
+            </details>
+
             <div class="field">
               <label>Run stats</label>
               <div class="run-stats" id="runStats">No run loaded.</div>
@@ -176,8 +192,49 @@
         </details>
 
         <details class="panel-section">
-          <summary>Heatmap</summary>
+          <summary>Radio Map</summary>
           <div class="panel-section-body">
+            <div class="field-grid">
+              <div>
+                <label>Plot style</label>
+                <select id="radioMapPlotStyle">
+                  <option value="heatmap">Heatmap (custom)</option>
+                  <option value="sionna">Sionna (standard)</option>
+                </select>
+              </div>
+              <div>
+                <label>Sionna metric</label>
+                <select id="radioMapPlotMetric">
+                  <option value="path_gain">path_gain</option>
+                  <option value="rss">rss</option>
+                  <option value="sinr">sinr</option>
+                </select>
+              </div>
+            </div>
+            <div class="field-grid">
+              <label class="toggle">
+                <input id="radioMapPlotShowTx" type="checkbox" checked />
+                Show Tx (Sionna)
+              </label>
+              <label class="toggle">
+                <input id="radioMapPlotShowRx" type="checkbox" />
+                Show Rx (Sionna)
+              </label>
+              <label class="toggle">
+                <input id="radioMapPlotShowRis" type="checkbox" />
+                Show RIS (Sionna)
+              </label>
+            </div>
+            <div class="field-grid">
+              <div>
+                <label>Diff baseline run</label>
+                <select id="radioMapDiffRun"></select>
+              </div>
+              <label class="toggle">
+                <input id="radioMapDiffToggle" type="checkbox" />
+                Show diff (current - baseline)
+              </label>
+            </div>
             <div class="field">
               <label>Rotation (deg) <span id="heatmapRotationLabel">0</span></label>
               <input id="heatmapRotation" type="range" min="-180" max="180" value="0" step="1" />
@@ -196,6 +253,13 @@
                 <input id="heatmapMinInput" type="number" step="1" />
                 <input id="heatmapMaxInput" type="number" step="1" />
               </div>
+            </div>
+            <div class="field">
+              <label>Radio map preview</label>
+              <select id="radioMapPreviewSelect"></select>
+            </div>
+            <div class="field">
+              <img id="radioMapPreviewImage" alt="Radio map preview" />
             </div>
 
             <details class="glossary">
@@ -597,6 +661,100 @@
       </section>
     </div>
   </div>
+
+  <template id="risItemTemplate">
+    <div class="ris-item">
+      <div class="ris-item-header">
+        <strong>RIS</strong>
+        <button type="button" class="ris-remove">Remove</button>
+      </div>
+      <div class="field-grid">
+        <div>
+          <label>Name</label>
+          <input data-field="name" type="text" placeholder="ris1" />
+        </div>
+        <div>
+          <label>Position (x y z)</label>
+          <div class="triple">
+            <input data-field="posX" type="number" step="0.1" />
+            <input data-field="posY" type="number" step="0.1" />
+            <input data-field="posZ" type="number" step="0.1" />
+          </div>
+        </div>
+      </div>
+      <div class="field-grid">
+        <div>
+          <label>Orientation (roll pitch yaw)</label>
+          <div class="triple">
+            <input data-field="oriX" type="number" step="0.01" />
+            <input data-field="oriY" type="number" step="0.01" />
+            <input data-field="oriZ" type="number" step="0.01" />
+          </div>
+        </div>
+        <div>
+          <label>Look-at (x y z)</label>
+          <div class="triple">
+            <input data-field="lookX" type="number" step="0.1" />
+            <input data-field="lookY" type="number" step="0.1" />
+            <input data-field="lookZ" type="number" step="0.1" />
+          </div>
+        </div>
+      </div>
+      <div class="field-grid">
+        <div>
+          <label>Rows / Cols / Modes</label>
+          <div class="triple">
+            <input data-field="rows" type="number" step="1" min="1" />
+            <input data-field="cols" type="number" step="1" min="1" />
+            <input data-field="modes" type="number" step="1" min="1" />
+          </div>
+        </div>
+        <div>
+          <label>Profile kind</label>
+          <select data-field="profileKind">
+            <option value="flat">flat</option>
+            <option value="uniform">uniform</option>
+            <option value="phase_gradient_reflector">phase_gradient_reflector</option>
+            <option value="focusing_lens">focusing_lens</option>
+          </select>
+        </div>
+        <div>
+          <label class="toggle">
+            <input data-field="autoAim" type="checkbox" />
+            Boost toward Rx
+          </label>
+        </div>
+      </div>
+      <div class="field-grid">
+        <div>
+          <label>Sources (x y z)</label>
+          <div class="triple">
+            <input data-field="sourceX" type="number" step="0.1" />
+            <input data-field="sourceY" type="number" step="0.1" />
+            <input data-field="sourceZ" type="number" step="0.1" />
+          </div>
+        </div>
+        <div>
+          <label>Targets (x y z)</label>
+          <div class="triple">
+            <input data-field="targetX" type="number" step="0.1" />
+            <input data-field="targetY" type="number" step="0.1" />
+            <input data-field="targetZ" type="number" step="0.1" />
+          </div>
+        </div>
+      </div>
+      <div class="field-grid">
+        <div>
+          <label>Amplitude</label>
+          <input data-field="amplitude" type="number" step="0.01" />
+        </div>
+        <div>
+          <label>Phase bits</label>
+          <input data-field="phaseBits" type="number" step="1" min="0" />
+        </div>
+      </div>
+    </div>
+  </template>
   </main>
   </div>
   <script type="module" src="app.js?v=dev"></script>

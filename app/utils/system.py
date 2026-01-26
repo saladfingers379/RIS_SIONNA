@@ -156,6 +156,68 @@ def apply_mitsuba_variant(variant: str | None) -> None:
         return
 
 
+def assert_mitsuba_variant(expected: str | None, context: str = "runtime") -> None:
+    if not expected:
+        return
+    import sys
+
+    try:
+        import mitsuba as mi
+        current = mi.variant()
+    except Exception as exc:
+        raise RuntimeError(f"Unable to query Mitsuba variant ({context}): {exc}") from exc
+    if current != expected:
+        raise RuntimeError(
+            f"Mitsuba variant mismatch ({context}): expected {expected}, got {current}. "
+            "Ensure the variant is selected before any Mitsuba/Sionna RT objects are created."
+        )
+
+    if "sionna.rt" in sys.modules:
+        try:
+            from sionna.rt import Camera
+
+            module_name = Camera.mi_2_sionna.__class__.__module__
+        except Exception as exc:
+            raise RuntimeError(
+                "Sionna RT already imported but variant consistency could not be verified. "
+                "Restart the process after selecting the desired Mitsuba variant."
+            ) from exc
+        if expected not in module_name:
+            apply_mitsuba_variant(expected)
+            try:
+                module_name = Camera.mi_2_sionna.__class__.__module__
+            except Exception as exc:
+                raise RuntimeError(
+                    "Sionna RT already imported but variant consistency could not be repaired. "
+                    "Restart the process after selecting the desired Mitsuba variant."
+                ) from exc
+            if expected not in module_name:
+                raise RuntimeError(
+                    "Sionna RT appears to be initialized under a different Mitsuba variant "
+                    f"({module_name}). Restart the process and select '{expected}' before importing Sionna RT."
+                )
+
+
+def configure_tensorflow_for_mitsuba_variant(variant: str | None) -> Dict[str, Any]:
+    info: Dict[str, Any] = {}
+    if not variant:
+        return info
+    if "cuda" in variant:
+        info["tensorflow_device_policy"] = "gpu"
+        return info
+    try:
+        import tensorflow as tf  # pylint: disable=import-error
+
+        try:
+            tf.config.set_visible_devices([], "GPU")
+            info["tensorflow_device_policy"] = "cpu_only"
+        except Exception as exc:  # pragma: no cover - depends on TF init order
+            info["tensorflow_device_policy_error"] = str(exc)
+    except Exception as exc:  # pragma: no cover - optional dependency
+        info["tensorflow_import_error"] = str(exc)
+    return info
+
+
 def configure_tensorflow_memory_growth(
     timeout_s: float = 5.0,
     mode: str = "auto",

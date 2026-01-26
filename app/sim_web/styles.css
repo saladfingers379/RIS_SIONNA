@@ -85,6 +85,53 @@ input {
   max-width: 100%;
 }
 
+textarea {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 12px;
+  padding: 10px;
+  border-radius: 6px;
+  border: 1px solid #1f1f1f;
+  background: #fbfbf8;
+  width: 100%;
+  resize: vertical;
+}
+
+.code-input {
+  white-space: pre;
+}
+
+.ris-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.ris-item {
+  border: 1px solid #1f1f1f;
+  border-radius: 8px;
+  padding: 10px;
+  background: #fdfbf4;
+}
+
+.ris-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.ris-item .field-grid {
+  margin-top: 8px;
+}
+
+#radioMapPreviewImage {
+  width: 100%;
+  border-radius: 6px;
+  border: 1px solid #1f1f1f;
+  background: #fff;
+}
+
 button {
   background: var(--accent);
   color: #f4f4f4;

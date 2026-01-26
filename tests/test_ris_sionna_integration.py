@@ -17,6 +17,8 @@ def test_ris_on_off_paths_smoke():
     for candidate in ("llvm_ad_rgb", "llvm_ad_spectral", "llvm_ad_mono"):
         if candidate in variants:
             mi.set_variant(candidate)
+            from app.utils.system import configure_tensorflow_for_mitsuba_variant
+            configure_tensorflow_for_mitsuba_variant(candidate)
             break
 
     import sionna.rt as rt

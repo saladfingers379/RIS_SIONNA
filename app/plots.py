@@ -49,6 +49,7 @@ def plot_radio_map(
     filename_prefix: str,
     tx_pos: np.ndarray | None = None,
     rx_pos: np.ndarray | None = None,
+    ris_positions: list[np.ndarray] | None = None,
 ) -> Tuple[Path, Path]:
     # metric_map: [num_tx, y, x] or [y, x]
     # cell_centers: [y, x, 3]
@@ -65,7 +66,11 @@ def plot_radio_map(
         ax.scatter([tx_pos[0]], [tx_pos[1]], color="#dc322f", s=30, label="Tx")
     if rx_pos is not None:
         ax.scatter([rx_pos[0]], [rx_pos[1]], color="#268bd2", s=30, label="Rx")
-    if tx_pos is not None or rx_pos is not None:
+    if ris_positions:
+        for idx, pos in enumerate(ris_positions):
+            label = "RIS" if idx == 0 else None
+            ax.scatter([pos[0]], [pos[1]], color="#000000", s=40, marker="*", label=label)
+    if tx_pos is not None or rx_pos is not None or ris_positions:
         ax.legend(loc="upper right")
     fig.colorbar(im, ax=ax, label=metric_label)
     fig.tight_layout()
@@ -76,6 +81,35 @@ def plot_radio_map(
     fig.savefig(svg_path)
     plt.close(fig)
 
+    return png_path, svg_path
+
+
+def plot_radio_map_sionna(
+    coverage_map: Any,
+    output_dir: Path,
+    metric: str,
+    filename_prefix: str,
+    tx: int | str | None = None,
+    vmin: float | None = None,
+    vmax: float | None = None,
+    show_tx: bool = True,
+    show_rx: bool = False,
+    show_ris: bool = False,
+) -> Tuple[Path, Path]:
+    fig = coverage_map.show(
+        metric=metric,
+        tx=tx,
+        vmin=vmin,
+        vmax=vmax,
+        show_tx=show_tx,
+        show_rx=show_rx,
+        show_ris=show_ris,
+    )
+    png_path = output_dir / f"{filename_prefix}.png"
+    svg_path = output_dir / f"{filename_prefix}.svg"
+    fig.savefig(png_path, dpi=200)
+    fig.savefig(svg_path)
+    plt.close(fig)
     return png_path, svg_path
 
 

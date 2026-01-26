@@ -195,6 +195,11 @@ class JobManager:
             cfg.setdefault("radio_map", {})
             _deep_update(cfg["radio_map"], radio_overrides)
 
+        ris_overrides = payload.get("ris", {})
+        if ris_overrides:
+            cfg.setdefault("ris", {})
+            _deep_update(cfg["ris"], ris_overrides)
+
         cfg.setdefault("radio_map", {})["enabled"] = True
         cfg.setdefault("render", {})["enabled"] = True
 

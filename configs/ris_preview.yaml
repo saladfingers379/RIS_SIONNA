@@ -1,0 +1,84 @@
+project:
+  name: RIS_SIONNA
+  description: "Sionna RT v0.19.2 RIS preview (built-in RIS API)"
+
+runtime:
+  prefer_gpu: true
+  force_cpu: false
+  tensorflow_import: auto
+  disable_pythreejs: true
+  mitsuba_variant: auto
+
+simulation:
+  frequency_hz: 28.0e9
+  max_depth: 2
+  samples_per_src: 20000
+  los: true
+  specular_reflection: true
+  diffuse_reflection: false
+  refraction: false
+  diffraction: false
+  ris: true
+
+scene:
+  type: builtin
+  builtin: etoile
+  export_mesh: false
+  tx:
+    name: tx
+    position: [-5.0, -4.0, 3.0]
+  rx:
+    name: rx
+    position: [8.0, 4.0, 1.5]
+  arrays:
+    tx:
+      num_rows: 1
+      num_cols: 1
+      pattern: iso
+      polarization: V
+    rx:
+      num_rows: 1
+      num_cols: 1
+      pattern: iso
+      polarization: V
+
+radio_map:
+  enabled: true
+  ris: true
+  center: [0.0, 0.0, 1.5]
+  size: [40.0, 40.0]
+  cell_size: [2.0, 2.0]
+  samples_per_tx: 40000
+  max_depth: 2
+  plot_style: sionna
+  plot_metrics:
+    - path_gain
+  plot_show_tx: true
+  plot_show_rx: true
+  plot_show_ris: true
+
+render:
+  enabled: false
+
+visualization:
+  ray_paths:
+    enabled: false
+
+ris:
+  enabled: true
+  objects:
+    - name: ris1
+      position: [0.0, 0.0, 2.0]
+      orientation: [0.0, 0.0, 0.0]
+      num_rows: 12
+      num_cols: 12
+      num_modes: 1
+      profile:
+        kind: phase_gradient_reflector
+        sources: [-5.0, -4.0, 3.0]
+        targets: [8.0, 4.0, 1.5]
+        amplitude: 0.84
+        phase_bits: 3
+
+output:
+  base_dir: outputs

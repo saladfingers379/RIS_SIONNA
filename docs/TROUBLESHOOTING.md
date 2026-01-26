@@ -34,6 +34,16 @@ Fix:
   ```
 - Check `summary.json` for `runtime.gpu_monitor.max_utilization_pct`.
 
+## RIS Visible but No Radio Map Change
+If RIS paths are detected but the radio map looks unchanged:
+- Check `run.log` for `RIS paths detected: N` (N should be > 0).
+- Ensure the radio map plane is near the Rx height. The default map is at `z=1.5`.
+- Use the Simulator UI “Debug Boost + Center Map” button to:
+  - place a large RIS between Tx/Rx,
+  - auto-aim toward Rx,
+  - center the radio map at the Rx height.
+- Compare against a baseline run (RIS off) using the diff toggle in the UI.
+
 ## OptiX Initialization Failed (Driver Version)
 If `diagnose` reports `Could not initialize OptiX` or Dr.Jit warns about the driver,
 upgrade/downgrade the NVIDIA driver to a supported range. Example warning:

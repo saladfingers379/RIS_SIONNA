@@ -178,7 +178,12 @@ def generate_viewer(output_dir: Path, config: Dict[str, Any]) -> Optional[Path]:
             }
         )
 
-    markers = {"tx": tx, "rx": rx}
+    ris_positions = []
+    try:
+        ris_positions = [np.asarray(r.position).reshape(-1).tolist() for r in scene.ris.values()]
+    except Exception:
+        ris_positions = []
+    markers = {"tx": tx, "rx": rx, "ris": ris_positions}
     (viewer_dir / "markers.json").write_text(json.dumps(markers, indent=2), encoding="utf-8")
     (viewer_dir / "paths.json").write_text(json.dumps(path_rows, indent=2), encoding="utf-8")
 
@@ -226,6 +231,19 @@ def generate_viewer(output_dir: Path, config: Dict[str, Any]) -> Optional[Path]:
                     shutil.copyfile(heatmap_src, heatmap_dst)
         except Exception:
             pass
+
+    # Collect radio map plot images for UI preview (heatmap or Sionna plots)
+    radio_plots = []
+    plots_dir = output_dir / "plots"
+    if plots_dir.exists():
+        for img in sorted(plots_dir.glob("radio_map_*.png")):
+            dst = viewer_dir / img.name
+            if dst.resolve() != img.resolve():
+                shutil.copyfile(img, dst)
+            radio_plots.append({"file": img.name, "label": img.stem})
+    (viewer_dir / "radio_map_plots.json").write_text(
+        json.dumps({"plots": radio_plots}, indent=2), encoding="utf-8"
+    )
 
     html = build_viewer_html(data)
     html_path = viewer_dir / "index.html"

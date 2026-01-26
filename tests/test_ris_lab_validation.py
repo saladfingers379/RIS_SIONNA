@@ -72,7 +72,7 @@ class TestRisLabValidationFixture(unittest.TestCase):
             metrics = json.loads((output_dir / "metrics.json").read_text(encoding="utf-8"))
 
         self.assertFalse(metrics["passed"])
-        self.assertGreater(metrics["peak_angle_error_deg"], 1.0)
+        self.assertGreater(metrics["rmse_db"], thresholds["rmse_db_max"])
 
 
 if __name__ == "__main__":

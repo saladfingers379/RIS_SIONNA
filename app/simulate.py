@@ -14,14 +14,16 @@ import numpy as np
 from .config import load_config
 from .io import create_output_dir, save_json, save_yaml
 from .metrics import build_paths_table, compute_path_metrics, extract_path_data
-from .plots import plot_radio_map, plot_histogram, plot_rays_3d
+from .plots import plot_radio_map, plot_radio_map_sionna, plot_histogram, plot_rays_3d
 from .viewer import generate_viewer
 from .scene import build_scene, export_scene_meshes, scene_sanity_report
 from .utils.progress import progress_steps
 from .utils.system import (
     GpuMonitor,
     configure_tensorflow_memory_growth,
+    configure_tensorflow_for_mitsuba_variant,
     select_mitsuba_variant,
+    assert_mitsuba_variant,
     collect_environment_info,
     disable_pythreejs_import,
 )
@@ -75,14 +77,18 @@ def run_simulation(config_path: str) -> Path:
         forced_variant=str(runtime_cfg.get("mitsuba_variant", "auto")),
         require_cuda=bool(runtime_cfg.get("require_cuda", False)),
     )
+    assert_mitsuba_variant(variant, context="run_simulation")
     logger.info("Mitsuba variant selected: %s", variant)
     if prefer_gpu and "cuda" not in (variant or ""):
         logger.warning("GPU mode requested but CUDA variant not selected. Using %s", variant)
     if runtime_cfg.get("disable_pythreejs", True):
         disable_pythreejs_import("simulate")
+    tf_device_info = configure_tensorflow_for_mitsuba_variant(variant)
     tf_info = configure_tensorflow_memory_growth(
         mode=str(runtime_cfg.get("tensorflow_import", "auto"))
     )
+    if tf_device_info:
+        tf_info.setdefault("device_policy", tf_device_info)
     tf_gpus = tf_info.get("tf_gpus") or []
     if "cuda" in (variant or "") and not tf_gpus:
         raise RuntimeError(
@@ -185,11 +191,15 @@ def run_simulation(config_path: str) -> Path:
                     step_idx += 1
 
                     sim_cfg = cfg.simulation
+                    ris_runtime = getattr(scene, "_ris_runtime", None)
+                    use_ris_paths = bool(sim_cfg.get("ris", False) or ris_runtime)
                     t0 = time.time()
                     progress.update(task_id, description="Ray trace paths")
                     write_progress(step_idx, "running")
                     if sim_cfg.get("refraction"):
                         logger.warning("Sionna 0.19.2 RT does not support refraction; ignoring refraction=True.")
+                    if ris_runtime:
+                        logger.info("RIS enabled in scene (%d objects). compute_paths.ris=%s", len(ris_runtime), use_ris_paths)
                     paths = scene.compute_paths(
                         max_depth=int(sim_cfg.get("max_depth", 3)),
                         method=str(sim_cfg.get("method", "fibonacci")),
@@ -198,7 +208,7 @@ def run_simulation(config_path: str) -> Path:
                         reflection=bool(sim_cfg.get("specular_reflection", True)),
                         diffraction=bool(sim_cfg.get("diffraction", False)),
                         scattering=bool(sim_cfg.get("diffuse_reflection", False)),
-                        ris=bool(sim_cfg.get("ris", True)),
+                        ris=bool(use_ris_paths),
                     )
                     timings["path_tracing_s"] = time.time() - t0
                     progress.advance(task_id)
@@ -208,7 +218,14 @@ def run_simulation(config_path: str) -> Path:
                     rx_device = next(iter(scene.receivers.values()), None)
                     tx_pos = _to_numpy(tx_device.position).reshape(-1)
                     rx_pos = _to_numpy(rx_device.position).reshape(-1) if rx_device is not None else None
-                    metrics = compute_path_metrics(paths, tx_power_dbm=tx_device.power_dbm)
+                    metrics = compute_path_metrics(paths, tx_power_dbm=tx_device.power_dbm, scene=scene)
+                    if metrics.get("num_ris_paths") is not None:
+                        logger.info("RIS paths detected: %s", metrics["num_ris_paths"])
+                        if ris_runtime and metrics.get("num_ris_paths") == 0:
+                            logger.warning(
+                                "RIS active but no RIS paths detected. "
+                                "Increase RIS size or move it between Tx and Rx to intersect rays."
+                            )
                     path_data = extract_path_data(paths)
                     metrics.update(path_data.get("metrics", {}))
                     path_table = build_paths_table(paths, tx_power_dbm=tx_device.power_dbm)
@@ -281,6 +298,7 @@ def run_simulation(config_path: str) -> Path:
                         cfg_local = dict(target_cfg)
                         cfg_local.update(overrides)
                         cfg_local = _maybe_autosize(cfg_local)
+                        use_ris_map = bool(cfg_local.get("ris", False) or ris_runtime)
                         kwargs = dict(
                             cm_center=cfg_local.get("center"),
                             cm_orientation=cfg_local.get("orientation", [0.0, 0.0, 0.0]),
@@ -292,7 +310,7 @@ def run_simulation(config_path: str) -> Path:
                             reflection=bool(cfg_local.get("specular_reflection", True)),
                             diffraction=bool(cfg_local.get("diffraction", False)),
                             scattering=bool(cfg_local.get("diffuse_reflection", False)),
-                            ris=bool(cfg_local.get("ris", True)),
+                            ris=bool(use_ris_map),
                         )
                         if cfg_local.get("num_runs"):
                             kwargs["num_runs"] = int(cfg_local.get("num_runs"))
@@ -345,33 +363,66 @@ def run_simulation(config_path: str) -> Path:
                             )
 
                         prefix = "radio_map" if write_default else f"radio_map_{suffix}"
-                        plot_radio_map(
-                            path_gain_db,
-                            cell_centers,
-                            plots_dir,
-                            metric_label="Path gain [dB]",
-                            filename_prefix=f"{prefix}_path_gain_db",
-                            tx_pos=tx_pos,
-                            rx_pos=rx_pos,
-                        )
-                        plot_radio_map(
-                            rx_power_dbm,
-                            cell_centers,
-                            plots_dir,
-                            metric_label="Rx power [dBm]",
-                            filename_prefix=f"{prefix}_rx_power_dbm",
-                            tx_pos=tx_pos,
-                            rx_pos=rx_pos,
-                        )
-                        plot_radio_map(
-                            path_loss_db,
-                            cell_centers,
-                            plots_dir,
-                            metric_label="Path loss [dB]",
-                            filename_prefix=f"{prefix}_path_loss_db",
-                            tx_pos=tx_pos,
-                            rx_pos=rx_pos,
-                        )
+                        plot_style = str(radio_map_cfg.get("plot_style", "heatmap")).lower()
+                        if plot_style == "sionna":
+                            plot_metrics = radio_map_cfg.get("plot_metrics", "path_gain")
+                            if isinstance(plot_metrics, str):
+                                plot_metrics = [plot_metrics]
+                            show_tx = bool(radio_map_cfg.get("plot_show_tx", True))
+                            show_rx = bool(radio_map_cfg.get("plot_show_rx", False))
+                            show_ris = bool(radio_map_cfg.get("plot_show_ris", False))
+                            vmin = radio_map_cfg.get("plot_vmin")
+                            vmax = radio_map_cfg.get("plot_vmax")
+                            for metric in plot_metrics:
+                                metric_name = str(metric)
+                                plot_radio_map_sionna(
+                                    radio_map,
+                                    plots_dir,
+                                    metric=metric_name,
+                                    filename_prefix=f"{prefix}_{metric_name}",
+                                    tx=radio_map_cfg.get("plot_tx"),
+                                    vmin=vmin,
+                                    vmax=vmax,
+                                    show_tx=show_tx,
+                                    show_rx=show_rx,
+                                    show_ris=show_ris,
+                                )
+                        else:
+                            ris_positions = []
+                            try:
+                                ris_positions = [np.asarray(r.position).reshape(-1) for r in scene.ris.values()]
+                            except Exception:
+                                ris_positions = []
+                            plot_radio_map(
+                                path_gain_db,
+                                cell_centers,
+                                plots_dir,
+                                metric_label="Path gain [dB]",
+                                filename_prefix=f"{prefix}_path_gain_db",
+                                tx_pos=tx_pos,
+                                rx_pos=rx_pos,
+                                ris_positions=ris_positions,
+                            )
+                            plot_radio_map(
+                                rx_power_dbm,
+                                cell_centers,
+                                plots_dir,
+                                metric_label="Rx power [dBm]",
+                                filename_prefix=f"{prefix}_rx_power_dbm",
+                                tx_pos=tx_pos,
+                                rx_pos=rx_pos,
+                                ris_positions=ris_positions,
+                            )
+                            plot_radio_map(
+                                path_loss_db,
+                                cell_centers,
+                                plots_dir,
+                                metric_label="Path loss [dB]",
+                                filename_prefix=f"{prefix}_path_loss_db",
+                                tx_pos=tx_pos,
+                                rx_pos=rx_pos,
+                                ris_positions=ris_positions,
+                            )
 
                         stats = {
                             "path_gain_db_min": float(np.min(path_gain_db)),
@@ -524,6 +575,12 @@ def run_simulation(config_path: str) -> Path:
                         "path": str(output_dir / "config.yaml"),
                     },
                 }
+                ris_summary = getattr(scene, "_ris_runtime", None)
+                if ris_summary is not None:
+                    summary["runtime"]["ris_enabled"] = True
+                    summary["runtime"]["ris_objects"] = ris_summary
+                else:
+                    summary["runtime"]["ris_enabled"] = False
                 if gpu_monitor is not None:
                     summary["runtime"]["gpu_monitor"] = gpu_monitor.summary()
 

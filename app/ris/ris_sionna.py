@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, Iterable, Optional, Tuple
+from pathlib import Path
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 import logging
 import numpy as np
@@ -20,6 +21,14 @@ from app.ris.ris_core import (
 
 _SPEED_OF_LIGHT_M_S = 299_792_458.0
 logger = logging.getLogger(__name__)
+
+_PHASE_PROFILE_KINDS = {
+    "phase_gradient_reflector",
+    "focusing_lens",
+    "manual",
+    "flat",
+    "uniform",
+}
 
 
 def _direction_from_angles(azimuth_deg: float, elevation_deg: float) -> np.ndarray:
@@ -239,20 +248,241 @@ def apply_workbench_to_ris(
     phase_dtype = ris.phase_profile.values.dtype
     amp_dtype = ris.amplitude_profile.values.dtype
 
-    ris.phase_profile.values = tf.cast(values, phase_dtype)
     amplitude = workbench.amplitude if amplitude_override is None else float(amplitude_override)
-    ris.amplitude_profile.values = tf.cast(
-        np.full_like(values, amplitude, dtype=float),
-        amp_dtype,
+    device = _tf_device_for_variant()
+    if device:
+        with tf.device(device):
+            ris.phase_profile.values = tf.cast(values, phase_dtype)
+            ris.amplitude_profile.values = tf.cast(
+                np.full_like(values, amplitude, dtype=float),
+                amp_dtype,
+            )
+    else:
+        ris.phase_profile.values = tf.cast(values, phase_dtype)
+        ris.amplitude_profile.values = tf.cast(
+            np.full_like(values, amplitude, dtype=float),
+            amp_dtype,
+        )
+
+def _ensure_xyz_list(value: Any, name: str) -> List[np.ndarray]:
+    if value is None:
+        return []
+    if isinstance(value, (list, tuple)) and len(value) == 3 and not isinstance(value[0], (list, tuple)):
+        return [np.array(value, dtype=float)]
+    if isinstance(value, (list, tuple)):
+        coords = []
+        for idx, item in enumerate(value):
+            if not isinstance(item, (list, tuple)) or len(item) != 3:
+                raise ValueError(f"{name}[{idx}] must be a 3-element list")
+            coords.append(np.array(item, dtype=float))
+        return coords
+    raise ValueError(f"{name} must be a 3-element list or list of 3-element lists")
+
+
+def _load_manual_values(values: Any, name: str) -> np.ndarray:
+    if values is None:
+        raise ValueError(f"manual {name} values must be provided for manual profile")
+    if isinstance(values, (str, Path)):
+        path = Path(values)
+        if not path.exists():
+            raise FileNotFoundError(f"manual {name} values file not found: {path}")
+        data = np.load(path)
+        if isinstance(data, np.lib.npyio.NpzFile):
+            raise ValueError(f"manual {name} values must be a .npy array, not .npz")
+        return np.array(data)
+    return np.array(values, dtype=float)
+
+
+def _broadcast_profile(values: np.ndarray, num_modes: int, num_rows: int, num_cols: int, label: str) -> np.ndarray:
+    if values.ndim == 2:
+        if values.shape != (num_rows, num_cols):
+            raise ValueError(f"{label} must be shape ({num_rows}, {num_cols}) or ({num_modes}, {num_rows}, {num_cols})")
+        return np.tile(values[None, :, :], (num_modes, 1, 1))
+    if values.ndim == 3:
+        if values.shape != (num_modes, num_rows, num_cols):
+            raise ValueError(f"{label} must be shape ({num_modes}, {num_rows}, {num_cols})")
+        return values
+    raise ValueError(f"{label} must be 2D or 3D array")
+
+
+def _quantize_phase_values(values: Any, bits: Optional[int]) -> Any:
+    if bits is None:
+        return values
+    bits_int = int(bits)
+    if bits_int <= 0:
+        return values
+    import tensorflow as tf
+
+    two_pi = tf.constant(2.0 * np.pi, dtype=values.dtype)
+    levels = float(2 ** bits_int)
+    step = two_pi / tf.constant(levels, dtype=values.dtype)
+    wrapped = tf.math.floormod(values, two_pi)
+    return tf.round(wrapped / step) * step
+
+
+def _tf_device_for_variant() -> Optional[str]:
+    try:
+        import mitsuba as mi
+        variant = mi.variant()
+    except Exception:
+        return None
+    if variant and "cuda" in variant:
+        return None
+    return "/CPU:0"
+
+
+def _apply_phase_profile(ris: Any, profile: Dict[str, Any], scene: Any | None = None) -> None:
+    kind = profile.get("kind") or "flat"
+    if kind not in _PHASE_PROFILE_KINDS:
+        raise ValueError(f"Unsupported RIS profile kind '{kind}'")
+
+    sources = _ensure_xyz_list(profile.get("sources"), "profile.sources")
+    targets = _ensure_xyz_list(profile.get("targets"), "profile.targets")
+
+    if profile.get("auto_aim") and scene is not None:
+        try:
+            tx = next(iter(scene.transmitters.values()))
+            rx = next(iter(scene.receivers.values()))
+            sources = [np.array(tx.position, dtype=float)]
+            targets = [np.array(rx.position, dtype=float)]
+        except Exception:
+            pass
+
+    if kind in {"flat", "uniform"}:
+        import tensorflow as tf
+
+        device = _tf_device_for_variant()
+        zeros = np.zeros((ris.num_modes, ris.num_rows, ris.num_cols), dtype=float)
+        if device:
+            with tf.device(device):
+                ris.phase_profile.values = tf.cast(zeros, ris.phase_profile.values.dtype)
+        else:
+            ris.phase_profile.values = tf.cast(zeros, ris.phase_profile.values.dtype)
+    elif kind == "phase_gradient_reflector":
+        if not sources or not targets:
+            raise ValueError("phase_gradient_reflector requires profile.sources and profile.targets")
+        ris.phase_gradient_reflector(sources, targets)
+    elif kind == "focusing_lens":
+        if not sources or not targets:
+            raise ValueError("focusing_lens requires profile.sources and profile.targets")
+        ris.focusing_lens(sources, targets)
+    elif kind == "manual":
+        import tensorflow as tf
+
+        phase_values = _load_manual_values(profile.get("manual_phase_values"), "phase")
+        amp_values = _load_manual_values(profile.get("manual_amp_values"), "amplitude")
+        phase_values = _broadcast_profile(phase_values, ris.num_modes, ris.num_rows, ris.num_cols, "manual_phase_values")
+        amp_values = _broadcast_profile(amp_values, ris.num_modes, ris.num_rows, ris.num_cols, "manual_amp_values")
+        device = _tf_device_for_variant()
+        if device:
+            with tf.device(device):
+                ris.phase_profile.values = tf.cast(phase_values, ris.phase_profile.values.dtype)
+                ris.amplitude_profile.values = tf.cast(amp_values, ris.amplitude_profile.values.dtype)
+        else:
+            ris.phase_profile.values = tf.cast(phase_values, ris.phase_profile.values.dtype)
+            ris.amplitude_profile.values = tf.cast(amp_values, ris.amplitude_profile.values.dtype)
+
+    if profile.get("phase_bits") is not None:
+        import tensorflow as tf
+
+        device = _tf_device_for_variant()
+        if device:
+            with tf.device(device):
+                phase_values = _quantize_phase_values(ris.phase_profile.values, profile.get("phase_bits"))
+                ris.phase_profile.values = tf.cast(phase_values, ris.phase_profile.values.dtype)
+        else:
+            phase_values = _quantize_phase_values(ris.phase_profile.values, profile.get("phase_bits"))
+            ris.phase_profile.values = tf.cast(phase_values, ris.phase_profile.values.dtype)
+
+    amplitude = profile.get("amplitude")
+    if amplitude is not None:
+        import tensorflow as tf
+
+        if isinstance(amplitude, (list, tuple)):
+            if len(amplitude) != ris.num_modes:
+                raise ValueError("profile.amplitude list length must match num_modes")
+            base = np.array(amplitude, dtype=float)[:, None, None]
+            values = np.tile(base, (1, ris.num_rows, ris.num_cols))
+        else:
+            values = np.full((ris.num_modes, ris.num_rows, ris.num_cols), float(amplitude), dtype=float)
+        device = _tf_device_for_variant()
+        if device:
+            with tf.device(device):
+                ris.amplitude_profile.values = tf.cast(values, ris.amplitude_profile.values.dtype)
+        else:
+            ris.amplitude_profile.values = tf.cast(values, ris.amplitude_profile.values.dtype)
+
+    mode_powers = profile.get("mode_powers")
+    if mode_powers is not None:
+        ris.amplitude_profile.mode_powers = [float(v) for v in mode_powers]
+
+
+def _build_ris_object(obj_cfg: Dict[str, Any]) -> Any:
+    import sionna.rt as rt
+
+    name = obj_cfg.get("name", "ris")
+    position = np.array(obj_cfg.get("position", [0.0, 0.0, 0.0]), dtype=float)
+    orientation = obj_cfg.get("orientation")
+    look_at = obj_cfg.get("look_at")
+    if orientation is None and look_at is None:
+        orientation = [0.0, 0.0, 0.0]
+
+    num_rows = int(obj_cfg.get("num_rows", 8))
+    num_cols = int(obj_cfg.get("num_cols", 8))
+    num_modes = int(obj_cfg.get("num_modes", 1))
+
+    ris = rt.RIS(
+        name=name,
+        position=position,
+        num_rows=num_rows,
+        num_cols=num_cols,
+        num_modes=num_modes,
+        orientation=np.array(orientation, dtype=float) if orientation is not None else None,
+        look_at=np.array(look_at, dtype=float) if look_at is not None else None,
     )
+    return ris
 
 
-def add_ris_from_config(scene: Any, cfg: Dict[str, Any]) -> Optional[Any]:
+def _ris_runtime_summary(ris: Any, profile: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "name": getattr(ris, "name", "ris"),
+        "num_rows": int(getattr(ris, "num_rows", 0)),
+        "num_cols": int(getattr(ris, "num_cols", 0)),
+        "num_modes": int(getattr(ris, "num_modes", 0)),
+        "profile_kind": profile.get("kind", "phase_gradient_reflector"),
+        "mode_powers": profile.get("mode_powers"),
+    }
+
+
+def add_ris_from_config(scene: Any, cfg: Dict[str, Any]) -> Optional[List[Dict[str, Any]]]:
     ris_cfg = cfg.get("ris", {})
     if not isinstance(ris_cfg, dict) or not ris_cfg.get("enabled"):
         return None
 
-    import numpy as np
+    ris_objects_cfg = ris_cfg.get("objects")
+    summaries: List[Dict[str, Any]] = []
+    if isinstance(ris_objects_cfg, list) and ris_objects_cfg:
+        logger.info("RIS enabled: %d objects", len(ris_objects_cfg))
+        for obj_cfg in ris_objects_cfg:
+            if not isinstance(obj_cfg, dict):
+                raise ValueError("ris.objects entries must be mappings")
+            profile_cfg = obj_cfg.get("profile", {}) or {}
+            ris = _build_ris_object(obj_cfg)
+            scene.add(ris)
+            _apply_phase_profile(ris, profile_cfg, scene=scene)
+            summary = _ris_runtime_summary(ris, profile_cfg)
+            summaries.append(summary)
+            logger.info(
+                "RIS %s: %dx%d, modes=%d, profile=%s",
+                summary["name"],
+                summary["num_rows"],
+                summary["num_cols"],
+                summary["num_modes"],
+                summary["profile_kind"],
+            )
+        return summaries
+
+    # Backward-compatible workbench mode
     import sionna.rt as rt
 
     mode = ris_cfg.get("mode", "workbench")
@@ -324,4 +554,16 @@ def add_ris_from_config(scene: Any, cfg: Dict[str, Any]) -> Optional[Any]:
         ris.amplitude_profile.values = amp_values
 
     scene.add(ris)
-    return ris
+    summaries.append(
+        {
+            "name": name,
+            "num_rows": int(num_rows),
+            "num_cols": int(num_cols),
+            "num_modes": int(num_modes),
+            "profile_kind": mode,
+            "mode_powers": None,
+        }
+    )
+    logger.info("RIS enabled: 1 object")
+    logger.info("RIS %s: %dx%d, modes=%d, profile=%s", name, num_rows, num_cols, num_modes, mode)
+    return summaries

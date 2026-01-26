@@ -192,12 +192,12 @@ def quantize_phase(phase_rad: np.ndarray, bits: Optional[int]) -> np.ndarray:
 
     if bits in (None, 0):
         return phase_wrapped
-    if bits < 1:
-        raise ValueError("quantization_bits must be >= 1, 0, or None")
+    if not isinstance(bits, int) or bits not in (1, 2):
+        raise ValueError("quantization_bits must be 1, 2, 0, or None")
 
     levels = 2**int(bits)
     step = 2.0 * np.pi / levels
-    indices = np.floor(phase_wrapped / step).astype(int)
+    indices = np.round(phase_wrapped / step).astype(int) % levels
     return indices * step
 
 
