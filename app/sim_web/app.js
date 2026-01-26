@@ -1351,7 +1351,15 @@ async function loadRisResults(runId) {
 async function loadRun(runId) {
   state.runId = runId;
   setMeta(`Loading ${runId}...`);
-  const meshRunId = state.meshSourceRunId || runId;
+  let meshRunId = state.meshSourceRunId || runId;
+  if (state.meshSourceBuiltin) {
+    const resolved = await resolveMeshRunForBuiltin(state.meshSourceBuiltin);
+    if (resolved) {
+      meshRunId = resolved;
+      state.meshSourceRunId = resolved;
+      if (ui.meshRunSelect) ui.meshRunSelect.value = state.meshSourceBuiltin;
+    }
+  }
   try {
     const [markers, paths, manifest, heatmap, radioPlots, runInfo] = await Promise.all([
       fetch(`/runs/${runId}/viewer/markers.json`).then((r) => (r.ok ? r.json() : null)),
@@ -2471,10 +2479,20 @@ function bindUI() {
       const runId = await resolveMeshRunForBuiltin(state.meshSourceBuiltin);
       if (!runId) {
         setMeta(`No run with mesh for ${state.meshSourceBuiltin}`);
+        state.sceneOverride = {
+          type: "builtin",
+          builtin: state.meshSourceBuiltin,
+        };
+        state.sceneOverrideDirty = true;
         return;
       }
       state.meshSourceRunId = runId;
       await refreshMeshFromRun(state.meshSourceRunId);
+      state.sceneOverride = {
+        type: "builtin",
+        builtin: state.meshSourceBuiltin,
+      };
+      state.sceneOverrideDirty = true;
     });
   }
   
