@@ -23,6 +23,7 @@ const state = {
   sceneSourceRunId: null,
   sceneOverride: null,
   sceneOverrideDirty: false,
+  meshSourceRunId: null,
   runInfo: null,
   configs: [],
   radioMapPlots: [],
@@ -44,6 +45,7 @@ const ui = {
   mainTabStrip: document.getElementById("mainTabStrip"),
   runProfile: document.getElementById("runProfile"),
   sceneRunSelect: document.getElementById("sceneRunSelect"),
+  meshRunSelect: document.getElementById("meshRunSelect"),
   runStats: document.getElementById("runStats"),
   txX: document.getElementById("txX"),
   txY: document.getElementById("txY"),
@@ -1037,6 +1039,7 @@ async function fetchRuns() {
   const previousDiff = ui.radioMapDiffRun ? ui.radioMapDiffRun.value : null;
   ui.runSelect.innerHTML = "";
   ui.sceneRunSelect.innerHTML = "";
+  if (ui.meshRunSelect) ui.meshRunSelect.innerHTML = "";
   if (ui.radioMapDiffRun) ui.radioMapDiffRun.innerHTML = "";
   data.runs.forEach((run) => {
     const opt = document.createElement("option");
@@ -1048,6 +1051,13 @@ async function fetchRuns() {
     sceneOpt.value = run.run_id;
     sceneOpt.textContent = run.run_id;
     ui.sceneRunSelect.appendChild(sceneOpt);
+
+    if (ui.meshRunSelect) {
+      const meshOpt = document.createElement("option");
+      meshOpt.value = run.run_id;
+      meshOpt.textContent = run.run_id;
+      ui.meshRunSelect.appendChild(meshOpt);
+    }
 
     if (ui.radioMapDiffRun) {
       const diffOpt = document.createElement("option");
@@ -1061,6 +1071,10 @@ async function fetchRuns() {
     ui.runSelect.value = state.runId;
     state.sceneSourceRunId = state.sceneSourceRunId || state.runId;
     ui.sceneRunSelect.value = state.sceneSourceRunId;
+    if (ui.meshRunSelect) {
+      state.meshSourceRunId = state.meshSourceRunId || state.runId;
+      ui.meshRunSelect.value = state.meshSourceRunId;
+    }
     if (ui.radioMapDiffRun) {
       ui.radioMapDiffRun.value = previousDiff || state.runId;
     }
@@ -1078,6 +1092,17 @@ async function fetchRunDetails(runId) {
     return null;
   }
   return await res.json();
+}
+
+async function refreshMeshFromRun(runId) {
+  if (!runId) return;
+  const manifest = await fetch(`/runs/${runId}/viewer/scene_manifest.json`).then((r) => (r.ok ? r.json() : null));
+  if (!manifest) {
+    setMeta(`Mesh load failed for ${runId}`);
+    return;
+  }
+  state.manifest = manifest;
+  rebuildScene();
 }
 
 async function fetchProgress(runId) {
@@ -1274,11 +1299,12 @@ async function loadRisResults(runId) {
 async function loadRun(runId) {
   state.runId = runId;
   setMeta(`Loading ${runId}...`);
+  const meshRunId = state.meshSourceRunId || runId;
   try {
     const [markers, paths, manifest, heatmap, radioPlots, runInfo] = await Promise.all([
       fetch(`/runs/${runId}/viewer/markers.json`).then((r) => (r.ok ? r.json() : null)),
       fetch(`/runs/${runId}/viewer/paths.json`).then((r) => (r.ok ? r.json() : [])),
-      fetch(`/runs/${runId}/viewer/scene_manifest.json`).then((r) => (r.ok ? r.json() : null)),
+      fetch(`/runs/${meshRunId}/viewer/scene_manifest.json`).then((r) => (r.ok ? r.json() : null)),
       fetch(`/runs/${runId}/viewer/heatmap.json`).then((r) => (r.ok ? r.json() : null)),
       fetch(`/runs/${runId}/viewer/radio_map_plots.json`).then((r) => (r.ok ? r.json() : null)),
       fetchRunDetails(runId),
@@ -2386,6 +2412,13 @@ function bindUI() {
     const details = await fetchRunDetails(state.sceneSourceRunId);
     state.sceneOverride = details && details.config ? details.config.scene : null;
   });
+
+  if (ui.meshRunSelect) {
+    ui.meshRunSelect.addEventListener("change", async () => {
+      state.meshSourceRunId = ui.meshRunSelect.value;
+      await refreshMeshFromRun(state.meshSourceRunId);
+    });
+  }
   
   if (!ui.runProfile) console.error("ui.runProfile is missing");
   ui.runProfile.addEventListener("change", () => {
