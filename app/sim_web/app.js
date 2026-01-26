@@ -161,6 +161,7 @@ const ui = {
   toggleRays: document.getElementById("toggleRays"),
   toggleHeatmap: document.getElementById("toggleHeatmap"),
   toggleGuides: document.getElementById("toggleGuides"),
+  toggleRisFocus: document.getElementById("toggleRisFocus"),
   meshRotation: document.getElementById("meshRotation"),
   meshRotationLabel: document.getElementById("meshRotationLabel"),
   heatmapRotation: document.getElementById("heatmapRotation"),
@@ -1761,6 +1762,7 @@ function addMarkers() {
   tx.position.set(...state.markers.tx);
   rx.position.set(...state.markers.rx);
   markerGroup.add(tx, rx);
+  const focusTargets = [];
   if (ui.showTxDirection && ui.showTxDirection.checked) {
     const sceneCfg = state.sceneOverride || (state.runInfo && state.runInfo.config && state.runInfo.config.scene) || {};
     const txCfg = sceneCfg.tx || {};
@@ -1805,7 +1807,40 @@ function addMarkers() {
     const pitch = orientation ? orientation[1] : 0;
     ris.rotation.set(Math.PI / 2 + roll, pitch, yaw);
     markerGroup.add(ris);
+    if (ui.toggleRisFocus && ui.toggleRisFocus.checked && item.profile) {
+      let target = null;
+      if (item.profile.auto_aim && Array.isArray(state.markers.rx)) {
+        target = state.markers.rx;
+      } else if (Array.isArray(item.profile.targets)) {
+        const t = item.profile.targets;
+        if (t.length >= 3 && typeof t[0] === "number") {
+          target = t;
+        } else if (Array.isArray(t[0]) && t[0].length >= 3) {
+          target = t[0];
+        }
+      }
+      if (Array.isArray(target) && target.length >= 3) {
+        focusTargets.push({ target, source: pos });
+      }
+    }
   });
+
+  if (ui.toggleRisFocus && ui.toggleRisFocus.checked && focusTargets.length) {
+    const focusMat = new THREE.MeshStandardMaterial({ color: 0xf59e0b, emissive: 0xf59e0b, emissiveIntensity: 0.6 });
+    const focusGeo = new THREE.SphereGeometry(1.8, 14, 14);
+    const lineMat = new THREE.LineBasicMaterial({ color: 0xf59e0b });
+    focusTargets.forEach(({ target, source }) => {
+      const focus = new THREE.Mesh(focusGeo, focusMat);
+      focus.position.set(target[0], target[1], target[2]);
+      markerGroup.add(focus);
+      const pts = [
+        new THREE.Vector3(source[0], source[1], source[2]),
+        new THREE.Vector3(target[0], target[1], target[2]),
+      ];
+      const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), lineMat);
+      markerGroup.add(line);
+    });
+  }
 }
 
 function addAlignmentMarkers() {
@@ -2550,6 +2585,7 @@ function bindUI() {
   if (ui.txLookZ) ui.txLookZ.addEventListener("change", updateSceneOverrideTxFromUi);
   if (ui.txYawDeg) ui.txYawDeg.addEventListener("change", updateSceneOverrideTxFromUi);
   if (ui.showTxDirection) ui.showTxDirection.addEventListener("change", rebuildScene);
+  if (ui.toggleRisFocus) ui.toggleRisFocus.addEventListener("change", rebuildScene);
   
   console.log("Binding RIS controls...");
   if (!ui.mainTabStrip) console.error("ui.mainTabStrip is missing");
