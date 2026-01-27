@@ -101,9 +101,15 @@ def _count_ris_paths(paths, scene: Optional[Any] = None) -> Optional[int]:
     except Exception:
         types = None
     ris_type = getattr(paths, "RIS", None)
+    if types is not None:
+        types = np.asarray(types)
+        if types.size == 0:
+            types = None
     if types is not None and ris_type is not None:
         mask = _paths_mask(paths)
         if types.ndim >= 2:
+            if types.shape[-1] == 0:
+                return 0
             types_flat = types.reshape(-1, types.shape[-1])
             types_per_path = types_flat[0] if types_flat.size else types.reshape(-1)
         else:
@@ -309,6 +315,8 @@ def build_paths_table(paths, tx_power_dbm: float) -> Dict[str, Any]:
         return {"rows": rows, "tx_power_dbm": float(_to_numpy(tx_power_dbm).item())}
 
     num_paths = mask.shape[-1]
+    if num_paths == 0 or mask.size == 0:
+        return {"rows": rows, "tx_power_dbm": float(_to_numpy(tx_power_dbm).item())}
     per_path = np.any(mask.reshape(-1, num_paths), axis=0)
     num_vertices = verts.shape[0] if verts.size else 0
     for p in range(num_paths):

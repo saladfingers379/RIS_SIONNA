@@ -139,17 +139,103 @@
             </details>
 
             <details class="panel-section" open>
+              <summary>Anti-aliasing / Similarity Scaling</summary>
+              <div class="panel-section-body">
+                <label class="toggle">
+                  <input id="simScaleEnabled" type="checkbox" />
+                  Enable similarity scaling
+                </label>
+                <div class="field">
+                  <label>Scale factor (s)</label>
+                  <input id="simScaleFactor" type="number" step="1" min="1" placeholder="100" />
+                  <div class="help-text">Scales geometry by s and frequency by 1/s. Requires non-dispersive materials.</div>
+                </div>
+                <label class="toggle">
+                  <input id="simSamplingEnabled" type="checkbox" />
+                  Enable sampling boost
+                </label>
+                <div class="field-grid">
+                  <div>
+                    <label>Map resolution multiplier</label>
+                    <input id="simMapResMult" type="number" step="1" min="1" placeholder="2" />
+                  </div>
+                  <div>
+                    <label>Ray/sample multiplier</label>
+                    <input id="simRaySamplesMult" type="number" step="1" min="1" placeholder="4" />
+                  </div>
+                  <div>
+                    <label>Max depth add</label>
+                    <input id="simMaxDepthAdd" type="number" step="1" min="0" placeholder="1" />
+                  </div>
+                </div>
+                <div class="job-buttons">
+                  <button id="resetSimTuning" type="button">Reset Tuning to Profile</button>
+                </div>
+              </div>
+            </details>
+
+            <details class="panel-section" open>
               <summary>RIS Objects</summary>
               <div class="panel-section-body">
                 <label class="toggle">
                   <input id="simRisEnabled" type="checkbox" />
                   Enable RIS objects for this run
                 </label>
+                <div class="field-grid">
+                  <div>
+                    <label>Geometry mode</label>
+                    <select id="risGeomMode">
+                      <option value="legacy">legacy</option>
+                      <option value="size_driven">size_driven</option>
+                      <option value="spacing_driven">spacing_driven</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="field-grid ris-size-fields">
+                  <div>
+                    <label>Size: width (m)</label>
+                    <input id="risWidthM" type="number" step="0.001" min="0" />
+                  </div>
+                  <div>
+                    <label>Size: height (m)</label>
+                    <input id="risHeightM" type="number" step="0.001" min="0" />
+                  </div>
+                  <div>
+                    <label>Target dx (m)</label>
+                    <input id="risTargetDxM" type="number" step="0.0001" min="0" />
+                  </div>
+                </div>
+                <label class="toggle">
+                  <input id="risSquareGrid" type="checkbox" />
+                  Square grid (dx = dy)
+                </label>
+                <div class="field-grid ris-spacing-fields">
+                  <div>
+                    <label>Spacing dx (m)</label>
+                    <input id="risDxM" type="number" step="0.0001" min="0" />
+                  </div>
+                  <div>
+                    <label>Num cells x</label>
+                    <input id="risNx" type="number" step="1" min="1" />
+                  </div>
+                  <div>
+                    <label>Num cells y</label>
+                    <input id="risNy" type="number" step="1" min="1" />
+                  </div>
+                </div>
+                <div class="job-buttons">
+                  <button id="risGeomReset" type="button">Reset Geometry to Profile</button>
+                </div>
                 <div class="help-text">Drag RIS markers in 3D when “Drag markers” is enabled. Hold Shift while dragging to rotate about Z.</div>
                 <div id="risList" class="ris-list"></div>
                 <div class="job-buttons">
                   <button id="addRis" type="button">Add RIS</button>
                   <button id="debugRis" type="button">Debug Boost + Center Map</button>
+                </div>
+                <div class="job-buttons">
+                  <button id="risPresetFocus" type="button">Preset: Focus Rx</button>
+                  <button id="risPresetFlat" type="button">Preset: Flat</button>
+                  <button id="risPresetCenterMap" type="button">Preset: Center Map</button>
                 </div>
               </div>
             </details>
@@ -349,6 +435,10 @@
               <span id="heatmapScaleMin">--</span>
               <span id="heatmapScaleMax">--</span>
             </div>
+          </div>
+          <div class="scale-bar" id="scaleBar">
+            <div class="scale-bar-label" id="scaleBarLabel">--</div>
+            <div class="scale-bar-line"><span id="scaleBarLine"></span></div>
           </div>
           <div class="layer-toggle">
             <label><input id="toggleGeometry" type="checkbox" checked /> Geometry</label>

@@ -535,6 +535,34 @@ input {
   color: #fff;
 }
 
+.scale-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: rgba(246, 246, 243, 0.9);
+  border: 1px solid #1f1f1f;
+  min-width: 120px;
+  pointer-events: none;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+  color: #111827;
+}
+
+.scale-bar-line {
+  height: 6px;
+  border-bottom: 2px solid #111827;
+  position: relative;
+}
+
+.scale-bar-line span {
+  display: block;
+  height: 2px;
+  background: #111827;
+  width: 80px;
+}
+
 .heatmap-scale {
   display: flex;
   flex-direction: column;

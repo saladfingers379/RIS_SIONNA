@@ -4,6 +4,18 @@ import pytest
 
 def _has_sionna_rt():
     try:
+        import mitsuba as mi
+        variants = list(mi.variants())
+        for candidate in (
+            "llvm_ad_rgb",
+            "llvm_ad_spectral",
+            "llvm_ad_mono",
+            "scalar_spectral",
+            "scalar_rgb",
+        ):
+            if candidate in variants:
+                mi.set_variant(candidate)
+                break
         import sionna.rt  # noqa: F401
         return True
     except Exception:

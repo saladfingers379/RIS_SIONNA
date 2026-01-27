@@ -33,6 +33,8 @@ const state = {
   radioMapPlots: [],
   heatmapBase: null,
   heatmapDiff: null,
+  simTuningDirty: false,
+  risGeometry: null,
   ris: {
     jobs: [],
     runs: [],
@@ -133,6 +135,9 @@ const ui = {
   risPreviewTxRay: document.getElementById("risPreviewTxRay"),
   risPreviewRxRay: document.getElementById("risPreviewRxRay"),
   risPreviewMeta: document.getElementById("risPreviewMeta"),
+  scaleBar: document.getElementById("scaleBar"),
+  scaleBarLabel: document.getElementById("scaleBarLabel"),
+  scaleBarLine: document.getElementById("scaleBarLine"),
   radioMapAuto: document.getElementById("radioMapAuto"),
   radioMapPadding: document.getElementById("radioMapPadding"),
   radioMapCellX: document.getElementById("radioMapCellX"),
@@ -155,8 +160,24 @@ const ui = {
   customSamplesPerSrc: document.getElementById("customSamplesPerSrc"),
   customMaxPathsPerSrc: document.getElementById("customMaxPathsPerSrc"),
   customSamplesPerTx: document.getElementById("customSamplesPerTx"),
+  simScaleEnabled: document.getElementById("simScaleEnabled"),
+  simScaleFactor: document.getElementById("simScaleFactor"),
+  simSamplingEnabled: document.getElementById("simSamplingEnabled"),
+  simMapResMult: document.getElementById("simMapResMult"),
+  simRaySamplesMult: document.getElementById("simRaySamplesMult"),
+  simMaxDepthAdd: document.getElementById("simMaxDepthAdd"),
+  resetSimTuning: document.getElementById("resetSimTuning"),
   simRisEnabled: document.getElementById("simRisEnabled"),
   simRisObjects: document.getElementById("simRisObjects"),
+  risGeomMode: document.getElementById("risGeomMode"),
+  risWidthM: document.getElementById("risWidthM"),
+  risHeightM: document.getElementById("risHeightM"),
+  risTargetDxM: document.getElementById("risTargetDxM"),
+  risSquareGrid: document.getElementById("risSquareGrid"),
+  risDxM: document.getElementById("risDxM"),
+  risNx: document.getElementById("risNx"),
+  risNy: document.getElementById("risNy"),
+  risGeomReset: document.getElementById("risGeomReset"),
   viewerMeta: document.getElementById("viewerMeta"),
   toggleGeometry: document.getElementById("toggleGeometry"),
   toggleMarkers: document.getElementById("toggleMarkers"),
@@ -188,6 +209,9 @@ const ui = {
   randomizeMarkers: document.getElementById("randomizeMarkers"),
   addRis: document.getElementById("addRis"),
   debugRis: document.getElementById("debugRis"),
+  risPresetFocus: document.getElementById("risPresetFocus"),
+  risPresetFlat: document.getElementById("risPresetFlat"),
+  risPresetCenterMap: document.getElementById("risPresetCenterMap"),
   risList: document.getElementById("risList"),
 };
 
@@ -313,23 +337,26 @@ function addRisItem(initial) {
   const profileSelect = fields("profileKind");
   if (profileSelect) {
     profileSelect.addEventListener("change", () => {
-      if (profileSelect.value === "phase_gradient_reflector") {
+      if (["phase_gradient_reflector", "focusing_lens"].includes(profileSelect.value)) {
         const src = state.markers.tx || [0, 0, 0];
         const tgt = state.markers.rx || [0, 0, 0];
-        setVal("sourceX", src[0]);
-        setVal("sourceY", src[1]);
-        setVal("sourceZ", src[2]);
-        setVal("targetX", tgt[0]);
-        setVal("targetY", tgt[1]);
-        setVal("targetZ", tgt[2]);
+        if (!fields("sourceX")?.value && !fields("sourceY")?.value && !fields("sourceZ")?.value) {
+          setVal("sourceX", src[0]);
+          setVal("sourceY", src[1]);
+          setVal("sourceZ", src[2]);
+        }
+        if (!fields("targetX")?.value && !fields("targetY")?.value && !fields("targetZ")?.value) {
+          setVal("targetX", tgt[0]);
+          setVal("targetY", tgt[1]);
+          setVal("targetZ", tgt[2]);
+        }
       }
     });
   }
   const autoAim = fields("autoAim");
   if (autoAim) {
     autoAim.addEventListener("change", () => {
-      if (autoAim.checked && profileSelect) {
-        profileSelect.value = "phase_gradient_reflector";
+      if (autoAim.checked) {
         const src = state.markers.tx || [0, 0, 0];
         const tgt = state.markers.rx || [0, 0, 0];
         setVal("sourceX", src[0]);
@@ -401,8 +428,6 @@ function readRisItems() {
     const autoAim = field("autoAim");
     if (autoAim && autoAim.checked) {
       profile.auto_aim = true;
-      profileKind = "phase_gradient_reflector";
-      profile.kind = profileKind;
     }
     const src = [
       readNum(field("sourceX")),
@@ -424,6 +449,14 @@ function readRisItems() {
       if (tgt.every((v) => v !== null)) {
         profile.targets = tgt;
       }
+    }
+    if (
+      ["phase_gradient_reflector", "focusing_lens"].includes(profileKind)
+      && (!profile.sources || !profile.targets)
+      && state.markers
+    ) {
+      profile.sources = profile.sources || state.markers.tx || src;
+      profile.targets = profile.targets || state.markers.rx || tgt;
     }
     const amplitude = readNum(field("amplitude"));
     if (amplitude !== null) profile.amplitude = amplitude;
@@ -489,6 +522,68 @@ function applyRisDebugPreset() {
   rebuildScene();
   refreshHeatmap();
   setMeta("Applied RIS debug preset");
+}
+
+function applyCenterMapPreset() {
+  const tx = state.markers.tx || [0, 0, 0];
+  const rx = state.markers.rx || [0, 0, 0];
+  const mid = [(tx[0] + rx[0]) / 2, (tx[1] + rx[1]) / 2, (tx[2] + rx[2]) / 2];
+  if (ui.radioMapAuto) ui.radioMapAuto.checked = false;
+  if (ui.radioMapCenterX) setInputValue(ui.radioMapCenterX, mid[0].toFixed(2));
+  if (ui.radioMapCenterY) setInputValue(ui.radioMapCenterY, mid[1].toFixed(2));
+  if (ui.radioMapCenterZ) setInputValue(ui.radioMapCenterZ, mid[2].toFixed(2));
+  rebuildScene();
+  refreshHeatmap();
+  setMeta("Centered radio map on Tx/Rx midpoint");
+}
+
+function applyRisPresetToItems(handler) {
+  if (ui.simRisEnabled) ui.simRisEnabled.checked = true;
+  if (!ui.risList || !ui.risList.children.length) {
+    addRisItem();
+  }
+  ui.risList.querySelectorAll(".ris-item").forEach((node) => {
+    handler(node);
+  });
+  rebuildScene();
+}
+
+function applyRisFocusPreset() {
+  const tx = state.markers.tx || [0, 0, 0];
+  const rx = state.markers.rx || [0, 0, 0];
+  applyRisPresetToItems((node) => {
+    const setVal = (name, value) => {
+      const el = node.querySelector(`[data-field="${name}"]`);
+      if (el) el.value = value;
+    };
+    const autoAim = node.querySelector('[data-field="autoAim"]');
+    if (autoAim) autoAim.checked = false;
+    setVal("profileKind", "focusing_lens");
+    setVal("sourceX", tx[0].toFixed(2));
+    setVal("sourceY", tx[1].toFixed(2));
+    setVal("sourceZ", tx[2].toFixed(2));
+    setVal("targetX", rx[0].toFixed(2));
+    setVal("targetY", rx[1].toFixed(2));
+    setVal("targetZ", rx[2].toFixed(2));
+    setVal("amplitude", 1.0);
+    setVal("phaseBits", 0);
+  });
+  setMeta("Applied RIS focus preset");
+}
+
+function applyRisFlatPreset() {
+  applyRisPresetToItems((node) => {
+    const setVal = (name, value) => {
+      const el = node.querySelector(`[data-field="${name}"]`);
+      if (el) el.value = value;
+    };
+    const autoAim = node.querySelector('[data-field="autoAim"]');
+    if (autoAim) autoAim.checked = false;
+    setVal("profileKind", "flat");
+    setVal("amplitude", 1.0);
+    setVal("phaseBits", 0);
+  });
+  setMeta("Applied RIS flat preset");
 }
 
 function getRisItemNode(index) {
@@ -626,7 +721,49 @@ function initViewer() {
 function animate() {
   requestAnimationFrame(animate);
   controls.update();
+  updateScaleBar();
   renderer.render(scene, camera);
+}
+
+function updateScaleBar() {
+  if (!ui.scaleBar || !ui.scaleBarLabel || !ui.scaleBarLine) return;
+  if (!camera || !renderer || !controls) return;
+  const width = renderer.domElement.clientWidth;
+  const height = renderer.domElement.clientHeight;
+  if (!width || !height) return;
+  const center = controls.target || new THREE.Vector3(0, 0, 0);
+  const z = Number.isFinite(center.z) ? center.z : 0;
+  const candidates = [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000];
+  const minPx = 70;
+  const maxPx = 180;
+  let best = null;
+  let bestScore = Infinity;
+  candidates.forEach((length) => {
+    const p1 = new THREE.Vector3(center.x - length / 2, center.y, z);
+    const p2 = new THREE.Vector3(center.x + length / 2, center.y, z);
+    const s1 = p1.clone().project(camera);
+    const s2 = p2.clone().project(camera);
+    const dx = (s2.x - s1.x) * (width / 2);
+    const dy = (s2.y - s1.y) * (height / 2);
+    const px = Math.hypot(dx, dy);
+    if (!Number.isFinite(px) || px <= 0) return;
+    const target = (minPx + maxPx) / 2;
+    const score = Math.abs(px - target);
+    if ((px >= minPx && px <= maxPx && score < bestScore) || (!best && score < bestScore)) {
+      bestScore = score;
+      best = { length, px };
+    }
+  });
+  if (!best) return;
+  const px = Math.max(24, Math.min(best.px, 260));
+  ui.scaleBarLine.style.width = `${px}px`;
+  let label = `${best.length} m`;
+  if (best.length >= 1000) {
+    label = `${(best.length / 1000).toFixed(best.length % 1000 === 0 ? 0 : 1)} km`;
+  } else if (best.length < 1) {
+    label = `${Math.round(best.length * 100)} cm`;
+  }
+  ui.scaleBarLabel.textContent = label;
 }
 
 function setMeta(text) {
@@ -1019,9 +1156,55 @@ function applyCustomDefaults(config) {
   }
 }
 
+function applySimTuningDefaults(config) {
+  const sim = (config && config.data && config.data.simulation) || {};
+  const scale = sim.scale_similarity || {};
+  if (ui.simScaleEnabled) ui.simScaleEnabled.checked = Boolean(scale.enabled);
+  setInputValue(ui.simScaleFactor, scale.factor);
+
+  const sampling = sim.sampling_boost || {};
+  if (ui.simSamplingEnabled) ui.simSamplingEnabled.checked = Boolean(sampling.enabled);
+  setInputValue(ui.simMapResMult, sampling.map_resolution_multiplier);
+  setInputValue(ui.simRaySamplesMult, sampling.ray_samples_multiplier);
+  setInputValue(ui.simMaxDepthAdd, sampling.max_depth_add);
+  state.simTuningDirty = false;
+}
+
+function resetMarkersFromConfig(config) {
+  const scene = (config && config.data && config.data.scene) || {};
+  const tx = scene.tx || {};
+  const rx = scene.rx || {};
+  if (Array.isArray(tx.position) && tx.position.length >= 3) {
+    state.markers.tx = [tx.position[0], tx.position[1], tx.position[2]];
+  }
+  if (Array.isArray(rx.position) && rx.position.length >= 3) {
+    state.markers.rx = [rx.position[0], rx.position[1], rx.position[2]];
+  }
+  const ris = (config && config.data && config.data.ris) || {};
+  if (Array.isArray(ris.objects) && ris.objects.length) {
+    state.markers.ris = ris.objects.map((obj) => obj.position || [0, 0, 0]);
+  } else {
+    state.markers.ris = [];
+  }
+  state.sceneOverride = JSON.parse(JSON.stringify(scene));
+  state.sceneOverrideDirty = true;
+  updateInputs();
+  rebuildScene();
+}
+
 function applyRisSimDefaults(config) {
   const ris = (config && config.data && config.data.ris) || {};
   if (ui.simRisEnabled) ui.simRisEnabled.checked = Boolean(ris.enabled);
+  if (ui.risGeomMode) ui.risGeomMode.value = ris.geometry_mode || "legacy";
+  const size = ris.size || {};
+  setInputValue(ui.risWidthM, size.width_m);
+  setInputValue(ui.risHeightM, size.height_m);
+  setInputValue(ui.risTargetDxM, size.target_dx_m);
+  if (ui.risSquareGrid) ui.risSquareGrid.checked = true;
+  const spacing = ris.spacing || {};
+  setInputValue(ui.risDxM, spacing.dx_m);
+  setInputValue(ui.risNx, spacing.num_cells_x);
+  setInputValue(ui.risNy, spacing.num_cells_y);
   if (ui.risList) {
     clearRisList();
     if (Array.isArray(ris.objects) && ris.objects.length) {
@@ -1029,6 +1212,22 @@ function applyRisSimDefaults(config) {
     } else {
       addRisItem();
     }
+  }
+}
+
+function updateRisGeometryVisibility() {
+  const mode = ui.risGeomMode ? ui.risGeomMode.value : "legacy";
+  const showSize = mode === "size_driven";
+  const showSpacing = mode === "spacing_driven";
+  document.querySelectorAll(".ris-size-fields").forEach((el) => {
+    el.style.display = showSize ? "" : "none";
+  });
+  document.querySelectorAll(".ris-spacing-fields").forEach((el) => {
+    el.style.display = showSpacing ? "" : "none";
+  });
+  if (ui.risSquareGrid) {
+    ui.risSquareGrid.style.display = mode === "legacy" ? "none" : "";
+    if (mode !== "legacy") ui.risSquareGrid.checked = true;
   }
 }
 
@@ -1055,7 +1254,9 @@ async function fetchConfigs() {
   }
   applyRadioMapDefaults(getProfileConfig());
   applyCustomDefaults(getProfileConfig());
+  applySimTuningDefaults(getProfileConfig());
   applyRisSimDefaults(getProfileConfig());
+  updateRisGeometryVisibility();
   updateCustomVisibility();
 }
 
@@ -1120,7 +1321,10 @@ async function fetchBuiltinScenes() {
     ui.meshRunSelect.appendChild(opt);
   });
   if (!state.meshSourceBuiltin && scenes.length) {
-    state.meshSourceBuiltin = scenes[0];
+    state.meshSourceBuiltin = scenes.includes("etoile") ? "etoile" : scenes[0];
+    ui.meshRunSelect.value = state.meshSourceBuiltin;
+  } else if (scenes.includes("etoile")) {
+    state.meshSourceBuiltin = "etoile";
     ui.meshRunSelect.value = state.meshSourceBuiltin;
   }
 }
@@ -1216,11 +1420,6 @@ async function refreshRisRunSelect() {
       runIds.add(run.run_id);
     }
   });
-  state.ris.jobs.forEach((job) => {
-    if (job.run_id) {
-      runIds.add(job.run_id);
-    }
-  });
   const runList = Array.from(runIds).sort((a, b) => b.localeCompare(a));
   const previous = ui.risRunSelect.value;
   ui.risRunSelect.innerHTML = "";
@@ -1276,15 +1475,18 @@ async function refreshRisJobs() {
   const active = state.ris.activeJobId
     ? sorted.find((job) => job.job_id === state.ris.activeJobId)
     : null;
-  const current = active || running || latest;
+  await refreshRisRunSelect();
+  const runExists = (job) => job && job.run_id && state.ris.runs.includes(job.run_id);
+  const current = [active, running, latest].find((job) => job && (job.status === "running" || runExists(job)));
   if (current) {
     state.ris.activeJobId = current.job_id;
     state.ris.activeRunId = current.run_id;
     setRisStatus(`${current.run_id} · ${current.status || "running"}`);
   } else {
     setRisStatus("Idle.");
+    state.ris.activeJobId = null;
+    state.ris.activeRunId = null;
   }
-  await refreshRisRunSelect();
   await refreshRisProgressAndLog();
   if (state.ris.activeRunId) {
     ui.risRunSelect.value = state.ris.activeRunId;
@@ -1419,6 +1621,9 @@ async function loadRun(runId) {
     updateHeatmapControls();
     updateRadioMapPreview();
     applyRadioMapDefaults(configWrapper);
+    if (!state.simTuningDirty) {
+      applySimTuningDefaults(configWrapper);
+    }
     applyRisSimDefaults(configWrapper);
     rebuildScene();
     renderPathTable();
@@ -1428,6 +1633,7 @@ async function loadRun(runId) {
       await refreshHeatmapDiff();
     }
   } catch (err) {
+    console.error("Load run failed:", err);
     setMeta(`Failed to load ${runId}`);
   }
 }
@@ -1458,9 +1664,7 @@ function updateInputs() {
   if (ui.risList) {
     ui.risList.querySelectorAll(".ris-item").forEach((node) => {
       const autoAim = node.querySelector('[data-field="autoAim"]');
-      const profile = node.querySelector('[data-field="profileKind"]');
       if (!autoAim || !autoAim.checked) return;
-      if (profile) profile.value = "phase_gradient_reflector";
       const setVal = (name, value) => {
         const el = node.querySelector(`[data-field="${name}"]`);
         if (el) el.value = value;
@@ -1529,6 +1733,21 @@ function renderRunStats() {
   const maxDepth = sim.max_depth ?? "n/a";
   const rxPower = metrics.rx_power_dbm_estimate !== undefined ? metrics.rx_power_dbm_estimate.toFixed(2) : "n/a";
   const pathGain = metrics.total_path_gain_db !== undefined ? metrics.total_path_gain_db.toFixed(2) : "n/a";
+  let risGeometryLine = "";
+  const risObjects = info && info.summary && info.summary.runtime ? info.summary.runtime.ris_objects : null;
+  if (Array.isArray(risObjects) && risObjects.length && risObjects[0].geometry) {
+    const geom = risObjects[0].geometry;
+    const dx = typeof geom.dx_m === "number" ? geom.dx_m.toFixed(6) : "n/a";
+    const dy = typeof geom.dy_m === "number" ? geom.dy_m.toFixed(6) : "n/a";
+    const nx = geom.nx ?? "n/a";
+    const ny = geom.ny ?? "n/a";
+    let total = geom.num_elements;
+    if (total === undefined && typeof nx === "number" && typeof ny === "number") {
+      total = nx * ny;
+    }
+    const totalText = total !== undefined ? ` N=${total}` : "";
+    risGeometryLine = `<div><strong>RIS geometry:</strong> Nx=${nx} Ny=${ny}${totalText} · dx=${dx} dy=${dy}</div>`;
+  }
   ui.runStats.innerHTML = `
     <div><strong>Frequency:</strong> ${freqGHz} GHz</div>
     <div><strong>Max depth:</strong> ${maxDepth}</div>
@@ -1536,6 +1755,7 @@ function renderRunStats() {
     <div><strong>RIS paths:</strong> ${risPaths}</div>
     <div><strong>Total path gain:</strong> ${pathGain} dB</div>
     <div><strong>Rx power (est.):</strong> ${rxPower} dBm</div>
+    ${risGeometryLine}
     <div><strong>Scene:</strong> ${sceneLabel}</div>
   `;
 }
@@ -1547,8 +1767,12 @@ function updateHeatmapControls() {
     return;
   }
   const values = active.values.flat();
-  const min = Math.min(...values);
-  const max = Math.max(...values);
+  let min = Infinity;
+  let max = -Infinity;
+  values.forEach((v) => {
+    if (v < min) min = v;
+    if (v > max) max = v;
+  });
   const minVal = Math.floor(min);
   const maxVal = Math.ceil(max);
   ui.heatmapMin.min = String(minVal);
@@ -1577,6 +1801,38 @@ function updateHeatmapScaleVisibility(force) {
     ? force
     : Boolean(ui.toggleHeatmap.checked && getActiveHeatmap() && getActiveHeatmap().values);
   ui.heatmapScale.classList.toggle("is-hidden", !visible);
+}
+
+function getRisGeometryForIndex(idx) {
+  const runtime = state.runInfo && state.runInfo.summary && state.runInfo.summary.runtime
+    ? state.runInfo.summary.runtime.ris_objects
+    : null;
+  if (Array.isArray(runtime) && runtime[idx] && runtime[idx].geometry) {
+    return runtime[idx].geometry;
+  }
+  const mode = ui.risGeomMode ? ui.risGeomMode.value : "legacy";
+  if (!mode || mode === "legacy") return null;
+  if (mode === "size_driven") {
+    const width = readNumber(ui.risWidthM);
+    const height = readNumber(ui.risHeightM);
+    const targetDx = readNumber(ui.risTargetDxM);
+    if (width === null || height === null || targetDx === null) return null;
+    const nx = Math.max(1, Math.round(width / targetDx) + 1);
+    const ny = Math.max(1, Math.round(height / targetDx) + 1);
+    const dx = nx > 1 ? width / (nx - 1) : width;
+    const dy = ny > 1 ? height / (ny - 1) : height;
+    return { width_m: width, height_m: height, nx, ny, dx_m: dx, dy_m: dy };
+  }
+  if (mode === "spacing_driven") {
+    const dx = readNumber(ui.risDxM);
+    const nx = readNumber(ui.risNx);
+    const ny = readNumber(ui.risNy);
+    if (dx === null || nx === null || ny === null) return null;
+    const width = (nx - 1) * dx;
+    const height = (ny - 1) * dx;
+    return { width_m: width, height_m: height, nx, ny, dx_m: dx, dy_m: dx };
+  }
+  return null;
 }
 
 function updateRadioMapPreview() {
@@ -1798,12 +2054,16 @@ function addMarkers() {
     markerGroup.add(arrow);
   }
   const risMat = new THREE.MeshStandardMaterial({ color: 0x111827, emissive: 0x111827, emissiveIntensity: 0.4 });
-  const risGeo = new THREE.BoxGeometry(0.3, 3.5, 3.5);
   const risItems = ui.simRisEnabled && ui.simRisEnabled.checked ? readRisItems() : [];
   const risMarkers = risItems.length ? risItems : (Array.isArray(state.markers.ris) ? state.markers.ris.map((p) => ({ position: p })) : []);
   risMarkers.forEach((item, idx) => {
     const pos = item.position || item;
     if (!Array.isArray(pos) || pos.length < 3) return;
+    const geom = getRisGeometryForIndex(idx);
+    const width = geom && typeof geom.width_m === "number" ? geom.width_m : 3.5;
+    const height = geom && typeof geom.height_m === "number" ? geom.height_m : 3.5;
+    const thickness = Math.max(Math.min(width, height) * 0.02, 0.02);
+    const risGeo = new THREE.BoxGeometry(thickness, width, height);
     const ris = new THREE.Mesh(risGeo, risMat);
     ris.name = `ris_${idx}`;
     ris.position.set(pos[0], pos[1], pos[2]);
@@ -1909,12 +2169,24 @@ function addAlignmentMarkers() {
   if (state.heatmap && state.heatmap.cell_centers) {
     const centers = state.heatmap.cell_centers;
     const cellSize = state.heatmap.cell_size || [0, 0];
-    const xs = centers.flatMap((row) => row.map((c) => c[0]));
-    const ys = centers.flatMap((row) => row.map((c) => c[1]));
-    const xMin = Math.min(...xs) - cellSize[0] * 0.5;
-    const xMax = Math.max(...xs) + cellSize[0] * 0.5;
-    const yMin = Math.min(...ys) - cellSize[1] * 0.5;
-    const yMax = Math.max(...ys) + cellSize[1] * 0.5;
+    let xMin = Infinity;
+    let xMax = -Infinity;
+    let yMin = Infinity;
+    let yMax = -Infinity;
+    centers.forEach((row) => {
+      row.forEach((c) => {
+        const x = c[0];
+        const y = c[1];
+        if (x < xMin) xMin = x;
+        if (x > xMax) xMax = x;
+        if (y < yMin) yMin = y;
+        if (y > yMax) yMax = y;
+      });
+    });
+    xMin -= cellSize[0] * 0.5;
+    xMax += cellSize[0] * 0.5;
+    yMin -= cellSize[1] * 0.5;
+    yMax += cellSize[1] * 0.5;
     const hmZ = markerZ + 1;
 
     // Corner markers (orange = heatmap corners in WORLD SPACE - not rotated)
@@ -1958,15 +2230,22 @@ function pointInsideBox(point, box) {
 function getSceneBounds2D() {
   if (state.heatmap && state.heatmap.cell_centers) {
     const centers = state.heatmap.cell_centers;
-    const xs = centers.flatMap((row) => row.map((c) => c[0]));
-    const ys = centers.flatMap((row) => row.map((c) => c[1]));
-    if (xs.length && ys.length) {
-      return {
-        xMin: Math.min(...xs),
-        xMax: Math.max(...xs),
-        yMin: Math.min(...ys),
-        yMax: Math.max(...ys),
-      };
+    let xMin = Infinity;
+    let xMax = -Infinity;
+    let yMin = Infinity;
+    let yMax = -Infinity;
+    centers.forEach((row) => {
+      row.forEach((c) => {
+        const x = c[0];
+        const y = c[1];
+        if (x < xMin) xMin = x;
+        if (x > xMax) xMax = x;
+        if (y < yMin) yMin = y;
+        if (y > yMax) yMax = y;
+      });
+    });
+    if (Number.isFinite(xMin) && Number.isFinite(yMin)) {
+      return { xMin, xMax, yMin, yMax };
     }
   }
   const meshBox = new THREE.Box3().setFromObject(geometryGroup);
@@ -2080,20 +2359,34 @@ function addHeatmap() {
 
   const centers = active.cell_centers || [];
   if (centers.length) {
-    const xs = centers.flatMap((row) => row.map((c) => c[0]));
-    const ys = centers.flatMap((row) => row.map((c) => c[1]));
-    const zs = centers.flatMap((row) => row.map((c) => c[2]));
-    const xMin = Math.min(...xs);
-    const xMax = Math.max(...xs);
-    const yMin = Math.min(...ys);
-    const yMax = Math.max(...ys);
+    let xMin = Infinity;
+    let xMax = -Infinity;
+    let yMin = Infinity;
+    let yMax = -Infinity;
+    let zSum = 0;
+    let zCount = 0;
+    centers.forEach((row) => {
+      row.forEach((c) => {
+        const x = c[0];
+        const y = c[1];
+        const zc = c[2];
+        if (x < xMin) xMin = x;
+        if (x > xMax) xMax = x;
+        if (y < yMin) yMin = y;
+        if (y > yMax) yMax = y;
+        if (Number.isFinite(zc)) {
+          zSum += zc;
+          zCount += 1;
+        }
+      });
+    });
     const cellSize = active.cell_size || [0, 0];
     widthM = xMax - xMin + (cellSize[0] || 0);
     heightM = yMax - yMin + (cellSize[1] || 0);
     center = [
       (xMax + xMin) / 2,
       (yMax + yMin) / 2,
-      zs.length ? zs.reduce((a, b) => a + b, 0) / zs.length : 0,
+      zCount ? zSum / zCount : 0,
     ];
     z = center[2];
   } else if (active.size && active.center) {
@@ -2465,6 +2758,35 @@ async function submitJob() {
       payload.radio_map = radio;
     }
   }
+
+  const scaleEnabled = ui.simScaleEnabled ? ui.simScaleEnabled.checked : false;
+  const scaleFactor = readNumber(ui.simScaleFactor);
+  const samplingEnabled = ui.simSamplingEnabled ? ui.simSamplingEnabled.checked : false;
+  const mapResMult = readNumber(ui.simMapResMult);
+  const raySamplesMult = readNumber(ui.simRaySamplesMult);
+  const maxDepthAddRaw = readNumber(ui.simMaxDepthAdd);
+  const maxDepthAdd = maxDepthAddRaw !== null ? Math.round(maxDepthAddRaw) : null;
+
+  if (scaleEnabled || scaleFactor !== null) {
+    const scalePayload = {
+      enabled: scaleEnabled || scaleFactor !== null,
+    };
+    if (scaleFactor !== null) scalePayload.factor = scaleFactor;
+    payload.simulation = Object.assign(payload.simulation || {}, {
+      scale_similarity: scalePayload,
+    });
+  }
+  if (samplingEnabled || mapResMult !== null || raySamplesMult !== null || maxDepthAdd !== null) {
+    const samplingPayload = {
+      enabled: samplingEnabled || mapResMult !== null || raySamplesMult !== null || maxDepthAdd !== null,
+    };
+    if (mapResMult !== null) samplingPayload.map_resolution_multiplier = mapResMult;
+    if (raySamplesMult !== null) samplingPayload.ray_samples_multiplier = raySamplesMult;
+    if (maxDepthAdd !== null) samplingPayload.max_depth_add = maxDepthAdd;
+    payload.simulation = Object.assign(payload.simulation || {}, {
+      sampling_boost: samplingPayload,
+    });
+  }
   const radioStyle = {};
   if (ui.radioMapPlotStyle && ui.radioMapPlotStyle.value) {
     radioStyle.plot_style = ui.radioMapPlotStyle.value;
@@ -2482,7 +2804,54 @@ async function submitJob() {
 
   if (ui.simRisEnabled && ui.simRisEnabled.checked) {
     const objects = readRisItems();
-    payload.ris = { enabled: true, objects };
+    const geometryMode = ui.risGeomMode ? ui.risGeomMode.value : null;
+    const risSize = {};
+    const risSpacing = {};
+    const widthM = readNumber(ui.risWidthM);
+    const heightM = readNumber(ui.risHeightM);
+    const targetDx = readNumber(ui.risTargetDxM);
+    const dxM = readNumber(ui.risDxM);
+    const squareGrid = ui.risSquareGrid ? ui.risSquareGrid.checked : false;
+    const nx = readNumber(ui.risNx);
+    const ny = readNumber(ui.risNy);
+    if (widthM !== null) risSize.width_m = widthM;
+    if (heightM !== null) risSize.height_m = heightM;
+    if (targetDx !== null) risSize.target_dx_m = targetDx;
+    if (dxM !== null) risSpacing.dx_m = dxM;
+    if (nx !== null) risSpacing.num_cells_x = Math.max(1, Math.round(nx));
+    if (ny !== null) risSpacing.num_cells_y = Math.max(1, Math.round(ny));
+    if (geometryMode && geometryMode !== "legacy") {
+      if (geometryMode === "size_driven") {
+        if (widthM === null || heightM === null || targetDx === null) {
+          setMeta("RIS geometry error: size_driven requires width/height + target dx/dy");
+          return;
+        }
+        if (!squareGrid) {
+          setMeta("RIS geometry error: only square grid supported (enable dx = dy)");
+          return;
+        }
+        risSize.target_dy_m = risSize.target_dx_m;
+      } else if (geometryMode === "spacing_driven") {
+        if (dxM === null) {
+          setMeta("RIS geometry error: spacing_driven requires dx/dy");
+          return;
+        }
+        if (nx === null || ny === null) {
+          setMeta("RIS geometry error: spacing_driven requires num cells x/y");
+          return;
+        }
+        if (!squareGrid) {
+          setMeta("RIS geometry error: only square grid supported (enable dx = dy)");
+          return;
+        }
+        risSpacing.dy_m = risSpacing.dx_m;
+      }
+    }
+    const risPayload = { enabled: true, objects };
+    if (geometryMode && geometryMode !== "legacy") risPayload.geometry_mode = geometryMode;
+    if (Object.keys(risSize).length) risPayload.size = risSize;
+    if (Object.keys(risSpacing).length) risPayload.spacing = risSpacing;
+    payload.ris = risPayload;
     payload.simulation = Object.assign(payload.simulation || {}, { ris: true });
     payload.radio_map = Object.assign(payload.radio_map || {}, { ris: true });
   }
@@ -2571,12 +2940,34 @@ function bindUI() {
   
   if (!ui.runProfile) console.error("ui.runProfile is missing");
   ui.runProfile.addEventListener("change", () => {
-    applyRadioMapDefaults(getProfileConfig());
-    applyCustomDefaults(getProfileConfig());
-    applyRisSimDefaults(getProfileConfig());
-    applyRisSimDefaults(getProfileConfig());
+    if (ui.runProfile.value === "cpu_only") {
+      const config = getProfileConfig();
+      applyRadioMapDefaults(config);
+      applyCustomDefaults(config);
+      applySimTuningDefaults(config);
+      applyRisSimDefaults(config);
+      updateRisGeometryVisibility();
+      resetMarkersFromConfig(config);
+    }
     updateCustomVisibility();
   });
+
+  const markTuningDirty = () => {
+    state.simTuningDirty = true;
+  };
+  [ui.simScaleEnabled, ui.simScaleFactor, ui.simSamplingEnabled, ui.simMapResMult, ui.simRaySamplesMult, ui.simMaxDepthAdd]
+    .filter(Boolean)
+    .forEach((el) => {
+      el.addEventListener("change", markTuningDirty);
+      el.addEventListener("input", markTuningDirty);
+    });
+  if (ui.resetSimTuning) {
+    ui.resetSimTuning.addEventListener("click", () => {
+      const config = getProfileConfig();
+      applySimTuningDefaults(config);
+      setMeta("Reset tuning to profile defaults");
+    });
+  }
   
   if (!ui.applyMarkers) console.error("ui.applyMarkers is missing");
   ui.applyMarkers.addEventListener("click", () => {
@@ -2600,6 +2991,39 @@ function bindUI() {
   }
   if (ui.debugRis) {
     ui.debugRis.addEventListener("click", () => applyRisDebugPreset());
+  }
+  if (ui.risPresetFocus) {
+    ui.risPresetFocus.addEventListener("click", () => applyRisFocusPreset());
+  }
+  if (ui.risPresetFlat) {
+    ui.risPresetFlat.addEventListener("click", () => applyRisFlatPreset());
+  }
+  if (ui.risPresetCenterMap) {
+    ui.risPresetCenterMap.addEventListener("click", () => applyCenterMapPreset());
+  }
+  if (ui.risGeomReset) {
+    ui.risGeomReset.addEventListener("click", () => {
+      const config = getProfileConfig();
+      applyRisSimDefaults(config);
+      updateRisGeometryVisibility();
+      setMeta("Reset RIS geometry to profile defaults");
+    });
+  }
+  if (ui.risGeomMode) {
+    ui.risGeomMode.addEventListener("change", () => {
+      updateRisGeometryVisibility();
+    });
+  }
+  if (ui.risSquareGrid) {
+    ui.risSquareGrid.addEventListener("change", () => {
+      if (!ui.risSquareGrid.checked) return;
+      if (ui.risTargetDxM && ui.risTargetDxM.value) {
+        // dy mirrors dx implicitly in submit logic
+      }
+      if (ui.risDxM && ui.risDxM.value) {
+        // dy mirrors dx implicitly in submit logic
+      }
+    });
   }
   if (ui.risList) {
     ui.risList.addEventListener("change", () => rebuildScene());

@@ -5,6 +5,7 @@ import socket
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any, Dict
 
 from .io import find_latest_output_dir
 from .plots import plot_radio_map_from_npz
@@ -30,6 +31,49 @@ def _parse_args() -> argparse.Namespace:
 
     run_p = subparsers.add_parser("run", help="Run a Sionna RT simulation")
     run_p.add_argument("--config", required=True, help="Path to YAML config")
+    run_p.add_argument(
+        "--scale-similarity",
+        action="store_true",
+        help="Enable similarity scaling for mmWave aliasing control",
+    )
+    run_p.add_argument(
+        "--scale-factor",
+        type=float,
+        help="Similarity scaling factor (>= 1.0)",
+    )
+    run_p.add_argument(
+        "--sampling-boost",
+        action="store_true",
+        help="Enable sampling boost for radio maps and ray counts",
+    )
+    run_p.add_argument(
+        "--map-res-mult",
+        type=float,
+        help="Radio map resolution multiplier (>= 1.0)",
+    )
+    run_p.add_argument(
+        "--ray-samples-mult",
+        type=float,
+        help="Ray/sample multiplier (>= 1.0)",
+    )
+    run_p.add_argument(
+        "--max-depth-add",
+        type=int,
+        help="Additive path depth boost (>= 0)",
+    )
+    run_p.add_argument(
+        "--ris-geometry-mode",
+        choices=["legacy", "size", "spacing"],
+        help="RIS geometry mode override",
+    )
+    run_p.add_argument("--ris-width-m", type=float, help="RIS physical width (meters)")
+    run_p.add_argument("--ris-height-m", type=float, help="RIS physical height (meters)")
+    run_p.add_argument("--ris-target-dx-m", type=float, help="Target RIS dx (meters)")
+    run_p.add_argument("--ris-target-dy-m", type=float, help="Target RIS dy (meters)")
+    run_p.add_argument("--ris-dx-m", type=float, help="RIS spacing dx (meters)")
+    run_p.add_argument("--ris-dy-m", type=float, help="RIS spacing dy (meters)")
+    run_p.add_argument("--ris-nx", type=int, help="RIS element count in x")
+    run_p.add_argument("--ris-ny", type=int, help="RIS element count in y")
 
     plot_p = subparsers.add_parser("plot", help="Plot from saved outputs")
     plot_group = plot_p.add_mutually_exclusive_group(required=True)
@@ -71,12 +115,76 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def _build_run_overrides(args: argparse.Namespace) -> Dict[str, Any]:
+    overrides: Dict[str, Any] = {}
+
+    scale_cfg: Dict[str, Any] = {}
+    if args.scale_similarity:
+        scale_cfg["enabled"] = True
+    if args.scale_factor is not None:
+        scale_cfg["factor"] = float(args.scale_factor)
+        scale_cfg.setdefault("enabled", True)
+    if scale_cfg:
+        overrides["scale_similarity"] = scale_cfg
+
+    sampling_cfg: Dict[str, Any] = {}
+    if args.sampling_boost:
+        sampling_cfg["enabled"] = True
+    if args.map_res_mult is not None:
+        sampling_cfg["map_resolution_multiplier"] = float(args.map_res_mult)
+        sampling_cfg.setdefault("enabled", True)
+    if args.ray_samples_mult is not None:
+        sampling_cfg["ray_samples_multiplier"] = float(args.ray_samples_mult)
+        sampling_cfg.setdefault("enabled", True)
+    if args.max_depth_add is not None:
+        sampling_cfg["max_depth_add"] = int(args.max_depth_add)
+        sampling_cfg.setdefault("enabled", True)
+    if sampling_cfg:
+        overrides["sampling_boost"] = sampling_cfg
+
+    ris_cfg: Dict[str, Any] = {}
+    size_cfg: Dict[str, Any] = {}
+    spacing_cfg: Dict[str, Any] = {}
+    if args.ris_geometry_mode:
+        ris_cfg["geometry_mode"] = args.ris_geometry_mode
+    if args.ris_width_m is not None:
+        size_cfg["width_m"] = float(args.ris_width_m)
+    if args.ris_height_m is not None:
+        size_cfg["height_m"] = float(args.ris_height_m)
+    if args.ris_target_dx_m is not None:
+        size_cfg["target_dx_m"] = float(args.ris_target_dx_m)
+    if args.ris_target_dy_m is not None:
+        size_cfg["target_dy_m"] = float(args.ris_target_dy_m)
+    if args.ris_dx_m is not None:
+        spacing_cfg["dx_m"] = float(args.ris_dx_m)
+    if args.ris_dy_m is not None:
+        spacing_cfg["dy_m"] = float(args.ris_dy_m)
+    if args.ris_nx is not None:
+        spacing_cfg["num_cells_x"] = int(args.ris_nx)
+    if args.ris_ny is not None:
+        spacing_cfg["num_cells_y"] = int(args.ris_ny)
+
+    if size_cfg and spacing_cfg and not ris_cfg.get("geometry_mode"):
+        raise ValueError("Specify --ris-geometry-mode when mixing size and spacing flags")
+    if size_cfg:
+        ris_cfg["size"] = size_cfg
+        ris_cfg.setdefault("geometry_mode", "size")
+    if spacing_cfg:
+        ris_cfg["spacing"] = spacing_cfg
+        ris_cfg.setdefault("geometry_mode", "spacing")
+    if ris_cfg:
+        overrides["ris"] = ris_cfg
+
+    return overrides
+
+
 def main() -> None:
     setup_logging()
     args = _parse_args()
 
     if args.command == "run":
-        output_dir = run_simulation(args.config)
+        overrides = _build_run_overrides(args)
+        output_dir = run_simulation(args.config, overrides=overrides)
         logger.info("Outputs saved to %s", output_dir)
         return
 

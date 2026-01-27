@@ -6,10 +6,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
+import copy
 import logging
 import numpy as np
 
 from app.ris.ris_config import resolve_ris_lab_config
+from app.ris.ris_geometry import build_ris_geometry
 from app.ris.ris_core import (
     compute_element_centers,
     quantize_phase,
@@ -173,9 +175,43 @@ class RisWorkbenchResult:
     geometry: Any
 
 
+def _scale_ris_lab_config_for_similarity(config: Dict[str, Any], scale_factor: float) -> Dict[str, Any]:
+    if scale_factor <= 1.0:
+        return config
+    cfg = copy.deepcopy(config)
+    geometry = cfg.get("geometry", {})
+    if "dx" in geometry:
+        geometry["dx"] = float(geometry["dx"]) * scale_factor
+    if "dy" in geometry:
+        geometry["dy"] = float(geometry["dy"]) * scale_factor
+    if "origin" in geometry:
+        origin = geometry.get("origin")
+        if isinstance(origin, (list, tuple)) and len(origin) == 3:
+            geometry["origin"] = [float(v) * scale_factor for v in origin]
+    cfg["geometry"] = geometry
+
+    experiment = cfg.get("experiment", {})
+    if "tx_distance_m" in experiment:
+        experiment["tx_distance_m"] = float(experiment["tx_distance_m"]) * scale_factor
+    if "frequency_hz" in experiment:
+        experiment["frequency_hz"] = float(experiment["frequency_hz"]) / scale_factor
+    cfg["experiment"] = experiment
+
+    control = cfg.get("control", {})
+    params = control.get("params", {})
+    focal_point = params.get("focal_point")
+    if isinstance(focal_point, (list, tuple)) and len(focal_point) == 3:
+        params["focal_point"] = [float(v) * scale_factor for v in focal_point]
+        control["params"] = params
+        cfg["control"] = control
+
+    return cfg
+
+
 def build_workbench_phase_map(
     raw_config: Dict[str, Any],
     geometry_override: Optional[Dict[str, Any]] = None,
+    scale_factor: Optional[float] = None,
 ) -> RisWorkbenchResult:
     config = resolve_ris_lab_config(raw_config)
     if geometry_override:
@@ -183,6 +219,8 @@ def build_workbench_phase_map(
         geometry = dict(config.get("geometry", {}))
         geometry.update(geometry_override)
         config["geometry"] = geometry
+    if scale_factor and scale_factor > 1.0:
+        config = _scale_ris_lab_config_for_similarity(config, float(scale_factor))
 
     geometry_cfg = config["geometry"]
     experiment_cfg = config.get("experiment", {})
@@ -454,8 +492,8 @@ def _build_ris_object(obj_cfg: Dict[str, Any]) -> Any:
     return ris
 
 
-def _ris_runtime_summary(ris: Any, profile: Dict[str, Any]) -> Dict[str, Any]:
-    return {
+def _ris_runtime_summary(ris: Any, profile: Dict[str, Any], geometry: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    summary = {
         "name": getattr(ris, "name", "ris"),
         "num_rows": int(getattr(ris, "num_rows", 0)),
         "num_cols": int(getattr(ris, "num_cols", 0)),
@@ -463,6 +501,39 @@ def _ris_runtime_summary(ris: Any, profile: Dict[str, Any]) -> Dict[str, Any]:
         "profile_kind": profile.get("kind", "phase_gradient_reflector"),
         "mode_powers": profile.get("mode_powers"),
     }
+    if geometry:
+        nx = geometry.get("nx")
+        ny = geometry.get("ny")
+        try:
+            if nx is not None and ny is not None:
+                geometry = dict(geometry)
+                geometry["num_elements"] = int(nx) * int(ny)
+        except (TypeError, ValueError):
+            pass
+        summary["geometry"] = geometry
+    return summary
+
+
+def _format_ris_geometry_line(geometry: Dict[str, Any]) -> str:
+    mode = geometry.get("mode", "legacy")
+    width = geometry.get("width_m")
+    height = geometry.get("height_m")
+    nx = geometry.get("nx")
+    ny = geometry.get("ny")
+    dx = geometry.get("dx_m")
+    dy = geometry.get("dy_m")
+    total = None
+    try:
+        if nx is not None and ny is not None:
+            total = int(nx) * int(ny)
+    except (TypeError, ValueError):
+        total = None
+    width_s = f"{width:.4f}m" if isinstance(width, (int, float)) else "n/a"
+    height_s = f"{height:.4f}m" if isinstance(height, (int, float)) else "n/a"
+    dx_s = f"{dx:.6f}m" if isinstance(dx, (int, float)) else "n/a"
+    dy_s = f"{dy:.6f}m" if isinstance(dy, (int, float)) else "n/a"
+    total_s = f" N={total}" if total is not None else ""
+    return f"mode={mode} | width={width_s} height={height_s} | Nx={nx} Ny={ny}{total_s} | dx={dx_s} dy={dy_s}"
 
 def _warn_if_backside(ris: Any, scene: Any) -> None:
     try:
@@ -497,6 +568,12 @@ def add_ris_from_config(scene: Any, cfg: Dict[str, Any]) -> Optional[List[Dict[s
     if not isinstance(ris_cfg, dict) or not ris_cfg.get("enabled"):
         return None
 
+    sim_cfg = cfg.get("simulation", {})
+    scale_cfg = sim_cfg.get("scale_similarity", {}) if isinstance(sim_cfg, dict) else {}
+    scale_factor = None
+    if isinstance(scale_cfg, dict) and scale_cfg.get("effective_enabled"):
+        scale_factor = float(scale_cfg.get("factor", 1.0))
+
     ris_objects_cfg = ris_cfg.get("objects")
     summaries: List[Dict[str, Any]] = []
     if isinstance(ris_objects_cfg, list) and ris_objects_cfg:
@@ -504,12 +581,17 @@ def add_ris_from_config(scene: Any, cfg: Dict[str, Any]) -> Optional[List[Dict[s
         for obj_cfg in ris_objects_cfg:
             if not isinstance(obj_cfg, dict):
                 raise ValueError("ris.objects entries must be mappings")
+            geometry = build_ris_geometry(ris_cfg, obj_cfg=obj_cfg)
+            if geometry.get("mode") != "legacy":
+                obj_cfg = dict(obj_cfg)
+                obj_cfg["num_rows"] = geometry["nx"]
+                obj_cfg["num_cols"] = geometry["ny"]
             profile_cfg = obj_cfg.get("profile", {}) or {}
             ris = _build_ris_object(obj_cfg)
             scene.add(ris)
             _apply_phase_profile(ris, profile_cfg, scene=scene)
             _warn_if_backside(ris, scene)
-            summary = _ris_runtime_summary(ris, profile_cfg)
+            summary = _ris_runtime_summary(ris, profile_cfg, geometry=geometry)
             summaries.append(summary)
             logger.info(
                 "RIS %s: %dx%d, modes=%d, profile=%s",
@@ -519,6 +601,10 @@ def add_ris_from_config(scene: Any, cfg: Dict[str, Any]) -> Optional[List[Dict[s
                 summary["num_modes"],
                 summary["profile_kind"],
             )
+            logger.info("RIS geometry: %s", _format_ris_geometry_line(geometry))
+            rounding = geometry.get("rounding") or {}
+            if any(abs(val) > 1e-6 for val in rounding.values() if isinstance(val, (int, float))):
+                logger.info("RIS geometry rounding: %s", rounding)
         return summaries
 
     # Backward-compatible workbench mode
@@ -536,6 +622,7 @@ def add_ris_from_config(scene: Any, cfg: Dict[str, Any]) -> Optional[List[Dict[s
     num_modes = int(base_cfg.get("num_modes", 1))
 
     workbench_cfg = ris_cfg.get("workbench", {})
+    geometry = build_ris_geometry(ris_cfg, obj_cfg=base_cfg)
     if mode == "workbench":
         config_path = workbench_cfg.get("config_path")
         if not config_path:
@@ -544,9 +631,21 @@ def add_ris_from_config(scene: Any, cfg: Dict[str, Any]) -> Optional[List[Dict[s
 
         ris_lab_cfg = load_ris_lab_config(config_path)
         geometry_override = workbench_cfg.get("geometry_override")
-        workbench = build_workbench_phase_map(ris_lab_cfg, geometry_override=geometry_override)
+        if geometry.get("mode") != "legacy":
+            geometry_override = dict(geometry_override or {})
+            geometry_override["nx"] = geometry["nx"]
+            geometry_override["ny"] = geometry["ny"]
+            geometry_override["dx"] = geometry["dx_m"]
+            geometry_override["dy"] = geometry["dy_m"]
+        workbench = build_workbench_phase_map(
+            ris_lab_cfg,
+            geometry_override=geometry_override,
+            scale_factor=scale_factor,
+        )
         try:
             exp_freq = float(ris_lab_cfg.get("experiment", {}).get("frequency_hz", 0.0))
+            if scale_factor and scale_factor > 1.0:
+                exp_freq = exp_freq / scale_factor
             scene_freq = float(getattr(scene, "frequency", 0.0))
             if exp_freq and scene_freq and abs(exp_freq - scene_freq) / exp_freq > 0.01:
                 logger.warning(
@@ -556,8 +655,12 @@ def add_ris_from_config(scene: Any, cfg: Dict[str, Any]) -> Optional[List[Dict[s
                 )
         except Exception:
             pass
-        num_rows = int(base_cfg.get("num_rows", workbench.num_rows))
-        num_cols = int(base_cfg.get("num_cols", workbench.num_cols))
+        if geometry.get("mode") != "legacy":
+            num_rows = int(geometry["nx"])
+            num_cols = int(geometry["ny"])
+        else:
+            num_rows = int(base_cfg.get("num_rows", workbench.num_rows))
+            num_cols = int(base_cfg.get("num_cols", workbench.num_cols))
     else:
         num_rows = int(base_cfg.get("num_rows", 8))
         num_cols = int(base_cfg.get("num_cols", 8))
@@ -602,8 +705,13 @@ def add_ris_from_config(scene: Any, cfg: Dict[str, Any]) -> Optional[List[Dict[s
             "num_modes": int(num_modes),
             "profile_kind": mode,
             "mode_powers": None,
+            "geometry": geometry,
         }
     )
     logger.info("RIS enabled: 1 object")
     logger.info("RIS %s: %dx%d, modes=%d, profile=%s", name, num_rows, num_cols, num_modes, mode)
+    logger.info("RIS geometry: %s", _format_ris_geometry_line(geometry))
+    rounding = geometry.get("rounding") or {}
+    if any(abs(val) > 1e-6 for val in rounding.values() if isinstance(val, (int, float))):
+        logger.info("RIS geometry rounding: %s", rounding)
     return summaries

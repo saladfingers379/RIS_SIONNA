@@ -12,6 +12,8 @@ from typing import Any, Dict, Optional
 import numpy as np
 
 from .config import load_config
+from .sim_tuning import apply_similarity_and_sampling
+from .ris.ris_geometry import apply_ris_geometry_overrides
 from .io import create_output_dir, save_json, save_yaml
 from .metrics import build_paths_table, compute_path_metrics, extract_path_data
 from .plots import plot_radio_map, plot_radio_map_sionna, plot_histogram, plot_rays_3d
@@ -76,8 +78,48 @@ def _rt_backend_from_variant(variant: str | None) -> str:
     return "unknown"
 
 
-def run_simulation(config_path: str) -> Path:
+def _format_tuning_summary(tuning: Dict[str, Any]) -> str:
+    scale = tuning.get("scale_similarity", {})
+    sampling = tuning.get("sampling_boost", {})
+
+    scale_enabled = bool(scale.get("effective_enabled", False))
+    factor = scale.get("factor", 1.0)
+    original_f = scale.get("original_frequency_hz")
+    scaled_f = scale.get("scaled_frequency_hz")
+    scale_part = "Similarity scaling: OFF"
+    if scale_enabled:
+        try:
+            original_ghz = float(original_f) / 1e9 if original_f is not None else None
+            scaled_ghz = float(scaled_f) / 1e9 if scaled_f is not None else None
+        except (TypeError, ValueError):
+            original_ghz = None
+            scaled_ghz = None
+        if original_ghz is not None and scaled_ghz is not None:
+            scale_part = (
+                f"Similarity scaling: ON (s={factor:g}), f: {original_ghz:.3g} GHz -> {scaled_ghz:.3g} GHz"
+            )
+        else:
+            scale_part = f"Similarity scaling: ON (s={factor:g})"
+
+    sampling_enabled = bool(sampling.get("effective_enabled", False))
+    sampling_part = "Sampling boost: OFF"
+    if sampling_enabled:
+        map_mult = sampling.get("map_resolution_multiplier", 1.0)
+        ray_mult = sampling.get("ray_samples_multiplier", 1.0)
+        depth_add = sampling.get("max_depth_add", 0)
+        sampling_part = (
+            f"Sampling boost: ON (map x{map_mult:g}, rays x{ray_mult:g}, depth +{depth_add})"
+        )
+
+    return f"{scale_part}; {sampling_part}"
+
+
+def run_simulation(config_path: str, overrides: Optional[Dict[str, Any]] = None) -> Path:
     cfg = load_config(config_path)
+    tuned_cfg, tuning_summary = apply_similarity_and_sampling(cfg.data, overrides=overrides)
+    cfg.data = tuned_cfg
+    if overrides and overrides.get("ris"):
+        cfg.data = apply_ris_geometry_overrides(cfg.data, overrides.get("ris", {}))
     output_dir = create_output_dir(
         cfg.output.get("base_dir", "outputs"),
         run_id=cfg.output.get("run_id"),
@@ -91,6 +133,15 @@ def run_simulation(config_path: str) -> Path:
     root_logger = logging.getLogger()
     root_logger.addHandler(file_handler)
     progress_path = output_dir / "progress.json"
+
+    logger.info(_format_tuning_summary(tuning_summary))
+    if tuning_summary.get("scale_similarity", {}).get("effective_enabled"):
+        logger.info("Similarity scaling metadata: %s", tuning_summary.get("scale_similarity"))
+        warning = tuning_summary.get("scale_similarity", {}).get("interpretation_warning")
+        if warning:
+            logger.info("Similarity scaling note: %s", warning)
+    if tuning_summary.get("sampling_boost", {}).get("effective_enabled"):
+        logger.info("Sampling boost applied: %s", tuning_summary.get("sampling_boost", {}).get("applied"))
 
     runtime_cfg = cfg.runtime
     if runtime_cfg.get("force_cpu"):
@@ -650,6 +701,7 @@ def run_simulation(config_path: str) -> Path:
                 summary = {
                     "metrics": metrics,
                     "scene_sanity": scene_sanity_report(scene, cfg.data),
+                    "simulation_tuning": tuning_summary,
                     "runtime": {
                         "mitsuba_variant": variant,
                         "rt_backend": _rt_backend_from_variant(variant),

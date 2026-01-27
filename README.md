@@ -98,6 +98,82 @@ Notes:
 - RIS effects are easiest to see if the radio map plane is near the Rx height.
 - The diff view highlights changes between a baseline and RIS run.
 
+### RIS Geometry Modes (Size vs Spacing)
+You can now control RIS physical size and element density with explicit dx/dy spacing.
+Set `ris.geometry_mode` to one of:
+- `legacy` (default): keep existing behavior
+- `size_driven`: fixed size, derive element counts and effective dx/dy
+- `spacing_driven`: fixed dx/dy, derive size or element counts
+
+Size-driven example (fixed size, auto density):
+```yaml
+ris:
+  geometry_mode: size_driven
+  size:
+    width_m: 0.20
+    height_m: 0.20
+    target_dx_m: 0.011
+    target_dy_m: 0.011
+```
+
+Spacing-driven example (fixed spacing, auto size):
+```yaml
+ris:
+  geometry_mode: spacing_driven
+  spacing:
+    dx_m: 0.01
+    dy_m: 0.01
+    num_cells_x: 32
+    num_cells_y: 32
+```
+
+CLI override example:
+```bash
+python -m app run --config configs/ris_rt_demo.yaml --ris-geometry-mode size --ris-width-m 0.2 --ris-height-m 0.2 --ris-target-dx-m 0.01 --ris-target-dy-m 0.01
+```
+
+Example log line:
+```
+RIS geometry: mode=size_driven | width=0.2000m height=0.2000m | Nx=19 Ny=19 | dx=0.0111m dy=0.0111m
+```
+
+Notes:
+- dx/dy are center-to-center spacings.
+- In size-driven mode, element counts are rounded to the nearest integer and dx/dy are adjusted accordingly.
+
+## Similarity Scaling (Anti-Aliasing for mmWave)
+At 28 GHz, the wavelength is ~10.7 mm, so channel variations can occur over ~5 mm. If your
+radio-map grid is coarser than this, you will see aliasing/smearing. For small RIS panels,
+you can enable similarity scaling (aka scale-similarity mode) to improve numeric stability:
+
+- All geometry in meters is scaled by factor `s`
+- Frequency is scaled down by the same factor: `f_scaled = f_original / s`
+- Electrical size (dimensions in wavelengths) remains comparable
+
+Caveat: this assumes materials are not strongly frequency-dispersive for your experiment.
+Limitation: imported scene meshes are not rescaled; similarity scaling currently adjusts device/RIS placements and radio-map grids.
+
+YAML example:
+```yaml
+simulation:
+  frequency_hz: 28.0e9
+  scale_similarity:
+    enabled: true
+    factor: 100.0
+  sampling_boost:
+    enabled: false
+```
+
+CLI example:
+```bash
+python -m app run --config configs/ris_rt_similarity_100.yaml --scale-similarity --scale-factor 100
+```
+
+Sampling boost (when scaling is disabled) can increase grid resolution and ray counts:
+```bash
+python -m app run --config configs/default.yaml --sampling-boost --map-res-mult 2 --ray-samples-mult 4 --max-depth-add 1
+```
+
 ## GPU Diagnostics
 Run:
 ```bash
