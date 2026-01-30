@@ -185,11 +185,14 @@ def run_simulation(config_path: str, overrides: Optional[Dict[str, Any]] = None)
         gpu_monitor.start()
 
     need_export = bool(cfg.scene.get("export_mesh", True))
+    sim_cfg = cfg.simulation
+    compute_paths_enabled = bool(sim_cfg.get("compute_paths", True))
     steps = ["Build scene"]
     if need_export:
         steps.append("Export meshes")
     steps.append("Render scene")
-    steps.append("Ray trace paths")
+    if compute_paths_enabled:
+        steps.append("Ray trace paths")
     steps.append("Radio map")
     steps.append("Plots")
 
@@ -275,69 +278,87 @@ def run_simulation(config_path: str, overrides: Optional[Dict[str, Any]] = None)
 
                     sim_cfg = cfg.simulation
                     ris_runtime = getattr(scene, "_ris_runtime", None)
+                    ris_objects = {}
+                    try:
+                        ris_objects = getattr(scene, "ris", {}) or {}
+                    except Exception:
+                        ris_objects = {}
+                    has_ris = bool(ris_runtime) or bool(ris_objects)
                     use_ris_paths = bool(sim_cfg.get("ris", False) or ris_runtime)
-                    t0 = time.time()
-                    progress.update(task_id, description="Ray trace paths")
-                    write_progress(step_idx, "running")
-                    if sim_cfg.get("refraction"):
-                        logger.warning("Sionna 0.19.2 RT does not support refraction; ignoring refraction=True.")
-                    if ris_runtime:
-                        logger.info("RIS enabled in scene (%d objects). compute_paths.ris=%s", len(ris_runtime), use_ris_paths)
-                    paths = scene.compute_paths(
-                        max_depth=int(sim_cfg.get("max_depth", 3)),
-                        method=str(sim_cfg.get("method", "fibonacci")),
-                        num_samples=int(sim_cfg.get("samples_per_src", 200000)),
-                        los=bool(sim_cfg.get("los", True)),
-                        reflection=bool(sim_cfg.get("specular_reflection", True)),
-                        diffraction=bool(sim_cfg.get("diffraction", False)),
-                        scattering=bool(sim_cfg.get("diffuse_reflection", False)),
-                        ris=bool(use_ris_paths),
-                    )
-                    timings["path_tracing_s"] = time.time() - t0
-                    progress.advance(task_id)
-                    step_idx += 1
-
+                    if use_ris_paths and not has_ris:
+                        logger.warning("RIS enabled in config but no RIS objects are present; disabling RIS paths.")
+                        use_ris_paths = False
+                    paths = None
+                    metrics = {}
+                    path_data = {
+                        "delays_s": np.array([]),
+                        "weights": np.array([]),
+                        "aoa_azimuth_rad": np.array([]),
+                        "aoa_elevation_rad": np.array([]),
+                    }
                     tx_device = next(iter(scene.transmitters.values()))
                     rx_device = next(iter(scene.receivers.values()), None)
                     tx_pos = _to_numpy(tx_device.position).reshape(-1)
                     rx_pos = _to_numpy(rx_device.position).reshape(-1) if rx_device is not None else None
-                    metrics = compute_path_metrics(paths, tx_power_dbm=tx_device.power_dbm, scene=scene)
-                    if metrics.get("num_ris_paths") is not None:
-                        logger.info("RIS paths detected: %s", metrics["num_ris_paths"])
-                        if ris_runtime and metrics.get("num_ris_paths") == 0:
-                            logger.warning(
-                                "RIS active but no RIS paths detected. "
-                                "Increase RIS size or move it between Tx and Rx to intersect rays."
-                            )
-                    path_data = extract_path_data(paths)
-                    metrics.update(path_data.get("metrics", {}))
-                    path_table = build_paths_table(paths, tx_power_dbm=tx_device.power_dbm)
-                    if path_table["rows"]:
-                        import csv
+                    if compute_paths_enabled:
+                        t0 = time.time()
+                        progress.update(task_id, description="Ray trace paths")
+                        write_progress(step_idx, "running")
+                        if sim_cfg.get("refraction"):
+                            logger.warning("Sionna 0.19.2 RT does not support refraction; ignoring refraction=True.")
+                        if ris_runtime:
+                            logger.info("RIS enabled in scene (%d objects). compute_paths.ris=%s", len(ris_runtime), use_ris_paths)
+                        paths = scene.compute_paths(
+                            max_depth=int(sim_cfg.get("max_depth", 3)),
+                            method=str(sim_cfg.get("method", "fibonacci")),
+                            num_samples=int(sim_cfg.get("samples_per_src", 200000)),
+                            los=bool(sim_cfg.get("los", True)),
+                            reflection=bool(sim_cfg.get("specular_reflection", True)),
+                            diffraction=bool(sim_cfg.get("diffraction", False)),
+                            scattering=bool(sim_cfg.get("diffuse_reflection", False)),
+                            ris=bool(use_ris_paths),
+                        )
+                        timings["path_tracing_s"] = time.time() - t0
+                        progress.advance(task_id)
+                        step_idx += 1
 
-                        with (output_dir / "data" / "paths.csv").open("w", encoding="utf-8", newline="") as f:
-                            writer = csv.writer(f)
-                            writer.writerow(
-                                [
-                                    "path_id",
-                                    "order",
-                                    "type",
-                                    "path_length_m",
-                                    "delay_s",
-                                    "power_linear",
-                                    "power_db",
-                                    "interactions",
-                                ]
-                            )
-                            for row in path_table["rows"]:
+                        metrics = compute_path_metrics(paths, tx_power_dbm=tx_device.power_dbm, scene=scene)
+                        if metrics.get("num_ris_paths") is not None:
+                            logger.info("RIS paths detected: %s", metrics["num_ris_paths"])
+                            if ris_runtime and metrics.get("num_ris_paths") == 0:
+                                logger.warning(
+                                    "RIS active but no RIS paths detected. "
+                                    "Increase RIS size or move it between Tx and Rx to intersect rays."
+                                )
+                        path_data = extract_path_data(paths)
+                        metrics.update(path_data.get("metrics", {}))
+                        path_table = build_paths_table(paths, tx_power_dbm=tx_device.power_dbm)
+                        if path_table["rows"]:
+                            import csv
+
+                            with (output_dir / "data" / "paths.csv").open("w", encoding="utf-8", newline="") as f:
+                                writer = csv.writer(f)
                                 writer.writerow(
                                     [
-                                        row["path_id"],
-                                        row["order"],
-                                        row["type"],
-                                        f"{row['path_length_m']:.6f}",
-                                        f"{row['delay_s']:.9e}",
-                                        f"{row['power_linear']:.6e}",
+                                        "path_id",
+                                        "order",
+                                        "type",
+                                        "path_length_m",
+                                        "delay_s",
+                                        "power_linear",
+                                        "power_db",
+                                        "interactions",
+                                    ]
+                                )
+                                for row in path_table["rows"]:
+                                    writer.writerow(
+                                        [
+                                            row["path_id"],
+                                            row["order"],
+                                            row["type"],
+                                            f"{row['path_length_m']:.6f}",
+                                            f"{row['delay_s']:.9e}",
+                                            f"{row['power_linear']:.6e}",
                                         f"{row['power_db']:.3f}",
                                         ";".join(row["interactions"]),
                                     ]
@@ -386,6 +407,9 @@ def run_simulation(config_path: str, overrides: Optional[Dict[str, Any]] = None)
                             use_ris_map = bool(overrides.get("ris"))
                         else:
                             use_ris_map = bool(cfg_local.get("ris", False) or ris_runtime)
+                        if use_ris_map and not has_ris:
+                            logger.warning("RIS enabled for radio map but no RIS objects are present; disabling RIS.")
+                            use_ris_map = False
                         kwargs = dict(
                             cm_center=cfg_local.get("center"),
                             cm_orientation=cfg_local.get("orientation", [0.0, 0.0, 0.0]),
@@ -634,7 +658,7 @@ def run_simulation(config_path: str, overrides: Optional[Dict[str, Any]] = None)
 
                 # Export ray-path segments for 3D visualization
                 vis_cfg = cfg.data.get("visualization", {}).get("ray_paths", {})
-                if vis_cfg.get("enabled", True):
+                if vis_cfg.get("enabled", True) and paths is not None:
                     try:
                         verts = _to_numpy(paths.vertices)
                         interactions = _to_numpy(getattr(paths, "interactions", np.array([])))

@@ -190,6 +190,7 @@ def generate_viewer(output_dir: Path, config: Dict[str, Any]) -> Optional[Path]:
     scene_manifest = {
         "mesh": mesh_dst.name if mesh_dst else None,
         "mesh_files": mesh_files,
+        "mesh_rotation_deg": scene_cfg.get("mesh_rotation_deg"),
         "proxy": proxy,
     }
     (viewer_dir / "scene_manifest.json").write_text(

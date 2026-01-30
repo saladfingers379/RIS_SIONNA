@@ -112,6 +112,11 @@ def _parse_args() -> argparse.Namespace:
         "--ref", required=True, help="Path to reference CSV, NPZ, or MAT file"
     )
 
+    cc_p = subparsers.add_parser("cc", help="Channel charting tools")
+    cc_subparsers = cc_p.add_subparsers(dest="cc_command", required=True)
+    cc_run = cc_subparsers.add_parser("run", help="Run channel charting pipeline")
+    cc_run.add_argument("--config", required=True, help="Path to channel charting YAML config")
+
     return parser.parse_args()
 
 
@@ -264,6 +269,13 @@ def main() -> None:
             return
         if args.ris_command == "validate":
             validate_ris_lab(args.config, args.ref)
+            return
+
+    if args.command == "cc":
+        from .cc.runner import run_channel_charting
+
+        if args.cc_command == "run":
+            run_channel_charting(args.config)
             return
 
 

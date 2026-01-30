@@ -207,6 +207,13 @@ button:hover {
   padding: 16px;
 }
 
+.cc-layout {
+  display: grid;
+  grid-template-columns: minmax(320px, 420px) 1fr;
+  gap: 16px;
+  padding: 16px;
+}
+
 .code-block {
   background: #141414;
   color: #f4f4f4;
@@ -634,6 +641,9 @@ tbody tr:hover {
     min-height: 420px;
   }
   .ris-layout {
+    grid-template-columns: 1fr;
+  }
+  .cc-layout {
     grid-template-columns: 1fr;
   }
 }

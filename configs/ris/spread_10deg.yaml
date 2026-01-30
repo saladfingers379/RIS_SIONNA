@@ -1,0 +1,42 @@
+schema_version: 1
+
+# Approximate ~10° beamwidth by limiting aperture size.
+# For 28 GHz (lambda ~ 10.7 mm), a ~5 cm aperture gives ~10° main lobe.
+
+geometry:
+  nx: 11
+  ny: 11
+  dx: 0.005
+  dy: 0.005
+  origin: [0.0, 0.0, 0.0]
+  normal: [1.0, 0.0, 0.0]
+  x_axis_hint: [0.0, 1.0, 0.0]
+
+control:
+  mode: steer
+  params:
+    azimuth_deg: 0.0
+    elevation_deg: 0.0
+
+quantization:
+  bits: 1
+
+pattern_mode:
+  normalization: peak_0db
+  rx_sweep_deg:
+    start: -45.0
+    stop: 45.0
+    step: 1.0
+
+experiment:
+  frequency_hz: 28000000000
+  tx_incident_angle_deg: -30.0
+  tx_distance_m: 0.4
+  rx_distance_m: 2.0
+  tx_gain_dbi: 15.0
+  rx_gain_dbi: 22.0
+  tx_power_dbm: 28.0
+  reflection_coeff: 0.84
+
+output:
+  base_dir: outputs

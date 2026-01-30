@@ -1,0 +1,30 @@
+project:
+  name: RIS_SIONNA
+  description: "RIS RT profile: beam_spread ~10 deg"
+
+simulation:
+  frequency_hz: 28.0e9
+
+scene:
+  type: builtin
+  builtin: etoile
+
+ris:
+  enabled: true
+  objects:
+    - name: ris
+      position: [0.0, 0.0, 2.0]
+      orientation: [0.0, 0.0, 0.0]
+      num_rows: 41
+      num_cols: 41
+      num_modes: 1
+      profile:
+        kind: beam_spread
+        beamwidth_deg: 10
+        sources: [-5.0, -4.0, 3.0]
+        targets: [8.0, 4.0, 1.5]
+        amplitude: 0.84
+        phase_bits: 3
+
+output:
+  base_dir: outputs

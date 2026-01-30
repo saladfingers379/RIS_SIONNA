@@ -42,6 +42,10 @@ pip install -e .
 - `python -m app sim`
 - `python -m app ris run --config configs/ris/steer_1bit.yaml --mode pattern`
 - `python -m app ris validate --config configs/ris/validate_vs_csv.yaml --ref refs/pattern.csv`
+- `python -m app cc run --config configs/cc_indoor_quick.yaml`
+
+## Channel Charting / UE Tracking
+Full documentation lives in `docs/CHANNEL_CHARTING.md`.
 
 ## Dashboard (Streamlit)
 ```bash

@@ -3,10 +3,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 import hashlib
 import json
+import logging
 import re
 import shutil
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -31,6 +34,10 @@ MATERIAL_LIBRARY = {
 def _hash_scene_config(cfg: Dict[str, Any]) -> str:
     payload = json.dumps(cfg, sort_keys=True).encode("utf-8")
     return hashlib.sha256(payload).hexdigest()[:12]
+
+
+def _hash_text(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
 
 
 def _procedural_defaults() -> Dict[str, Any]:
@@ -85,7 +92,7 @@ def _material_props(name: str) -> Dict[str, Any]:
 def _itu_bsdf_xml(mat_name: str, bsdf_id: str) -> str:
     props = _material_props(mat_name)
     return (
-        f"  <bsdf type=\"itu-radio-material\" id=\"{bsdf_id}\">\n"
+        f"  <bsdf type=\"itu_radio_material\" id=\"{bsdf_id}\">\n"
         f"    <string name=\"type\" value=\"{props['itu_type']}\"/>\n"
         f"    <float name=\"thickness\" value=\"{props['thickness']}\"/>\n"
         "  </bsdf>\n"
@@ -166,7 +173,7 @@ def _apply_materials(scene, spec: Dict[str, Any]) -> None:
             continue
 
 
-def _build_builtin_scene(rt, scene_cfg: Dict[str, Any]):
+def _build_builtin_scene(rt, scene_cfg: Dict[str, Any], cfg: Optional[Dict[str, Any]] = None):
     builtin = scene_cfg.get("builtin", "etoile")
     try:
         scene_ref = getattr(rt.scene, builtin)
@@ -175,11 +182,40 @@ def _build_builtin_scene(rt, scene_cfg: Dict[str, Any]):
     return rt.load_scene(scene_ref)
 
 
-def _build_file_scene(rt, scene_cfg: Dict[str, Any]):
+def _build_file_scene(rt, scene_cfg: Dict[str, Any], cfg: Optional[Dict[str, Any]] = None):
     filename = scene_cfg.get("file")
     if not filename:
         raise ValueError("scene.file must be set when scene.type is 'file'")
-    return rt.load_scene(filename)
+    try:
+        return rt.load_scene(filename)
+    except RuntimeError as exc:
+        msg = str(exc)
+        if "itu_radio_material" not in msg and "itu-radio-material" not in msg:
+            raise
+        xml_path = Path(filename)
+        if not xml_path.exists():
+            raise
+        xml_text = xml_path.read_text(encoding="utf-8")
+        if "itu_radio_material" not in xml_text and "itu-radio-material" not in xml_text:
+            raise
+        logger.warning(
+            "itu_radio_material plugin not found; falling back to diffuse bsdf for '%s'. "
+            "Results will not match radio-material propagation.",
+            filename,
+        )
+        # Replace any ITU radio material blocks with a diffuse placeholder.
+        diffuse_block = '<bsdf type="diffuse"><rgb name="reflectance" value="0.5"/></bsdf>'
+        xml_text = re.sub(
+            r"<bsdf\\s+type=\\\"itu[_-]radio_material\\\"[\\s\\S]*?</bsdf>",
+            diffuse_block,
+            xml_text,
+            flags=re.IGNORECASE,
+        )
+        cache_root = Path((cfg or {}).get("output", {}).get("base_dir", "outputs")) / "_cache" / "file_scenes"
+        cache_root.mkdir(parents=True, exist_ok=True)
+        cache_path = cache_root / f"scene_{_hash_text(xml_text)}.xml"
+        cache_path.write_text(xml_text, encoding="utf-8")
+        return rt.load_scene(str(cache_path))
 
 
 def _build_procedural_scene(rt, scene_cfg: Dict[str, Any], cfg: Dict[str, Any]):
@@ -193,7 +229,7 @@ def _build_procedural_scene(rt, scene_cfg: Dict[str, Any], cfg: Dict[str, Any]):
         try:
             xml_text = xml_path.read_text(encoding="utf-8")
             if (
-                "itu-radio-material" not in xml_text
+                "itu_radio_material" not in xml_text
                 or "rm-" not in xml_text
                 or "rotate x=\"1\" angle=\"-90\"" in xml_text
             ):
@@ -233,7 +269,7 @@ def build_scene(cfg: Dict[str, Any], mitsuba_variant: Optional[str] = None):
     if scene_type == "procedural":
         scene = builder(rt, scene_cfg, cfg)
     else:
-        scene = builder(rt, scene_cfg)
+        scene = builder(rt, scene_cfg, cfg)
 
     # Frequency setup
     sim_cfg = cfg.get("simulation", {})

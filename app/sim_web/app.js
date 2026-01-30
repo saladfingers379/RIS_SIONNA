@@ -34,8 +34,20 @@ const state = {
   heatmapBase: null,
   heatmapDiff: null,
   simTuningDirty: false,
+  activeTab: "sim",
+  indoorInitialized: false,
+  viewerScale: { enabled: false, targetSize: 160 },
+  simScaleSnapshot: null,
+  tabSnapshots: { sim: null, indoor: null },
   risGeometry: null,
   ris: {
+    jobs: [],
+    runs: [],
+    activeRunId: null,
+    activeJobId: null,
+    selectedPlot: null,
+  },
+  cc: {
     jobs: [],
     runs: [],
     activeRunId: null,
@@ -135,6 +147,58 @@ const ui = {
   risPreviewTxRay: document.getElementById("risPreviewTxRay"),
   risPreviewRxRay: document.getElementById("risPreviewRxRay"),
   risPreviewMeta: document.getElementById("risPreviewMeta"),
+  ccConfigSource: document.getElementById("ccConfigSource"),
+  ccPreset: document.getElementById("ccPreset"),
+  ccConfigPath: document.getElementById("ccConfigPath"),
+  ccUseScene: document.getElementById("ccUseScene"),
+  ccUseMarkers: document.getElementById("ccUseMarkers"),
+  ccRole: document.getElementById("ccRole"),
+  ccStart: document.getElementById("ccStart"),
+  ccRefresh: document.getElementById("ccRefresh"),
+  ccTrajectoryType: document.getElementById("ccTrajectoryType"),
+  ccTrajectorySteps: document.getElementById("ccTrajectorySteps"),
+  ccTrajectoryDt: document.getElementById("ccTrajectoryDt"),
+  ccStartX: document.getElementById("ccStartX"),
+  ccStartY: document.getElementById("ccStartY"),
+  ccStartZ: document.getElementById("ccStartZ"),
+  ccEndX: document.getElementById("ccEndX"),
+  ccEndY: document.getElementById("ccEndY"),
+  ccEndZ: document.getElementById("ccEndZ"),
+  ccWaypoints: document.getElementById("ccWaypoints"),
+  ccRwStepStd: document.getElementById("ccRwStepStd"),
+  ccRwSmooth: document.getElementById("ccRwSmooth"),
+  ccSpiralR0: document.getElementById("ccSpiralR0"),
+  ccSpiralR1: document.getElementById("ccSpiralR1"),
+  ccSpiralTurns: document.getElementById("ccSpiralTurns"),
+  ccCsiType: document.getElementById("ccCsiType"),
+  ccSubcarriers: document.getElementById("ccSubcarriers"),
+  ccSubcarrierSpacing: document.getElementById("ccSubcarrierSpacing"),
+  ccCirSampling: document.getElementById("ccCirSampling"),
+  ccCirSteps: document.getElementById("ccCirSteps"),
+  ccTapsBw: document.getElementById("ccTapsBw"),
+  ccTapsLmin: document.getElementById("ccTapsLmin"),
+  ccTapsLmax: document.getElementById("ccTapsLmax"),
+  ccFeatureType: document.getElementById("ccFeatureType"),
+  ccFeatureWindow: document.getElementById("ccFeatureWindow"),
+  ccFeatureBeamspace: document.getElementById("ccFeatureBeamspace"),
+  ccEmbedDim: document.getElementById("ccEmbedDim"),
+  ccEpochs: document.getElementById("ccEpochs"),
+  ccLr: document.getElementById("ccLr"),
+  ccAdjWeight: document.getElementById("ccAdjWeight"),
+  ccTrackingEnabled: document.getElementById("ccTrackingEnabled"),
+  ccTrackingAlpha: document.getElementById("ccTrackingAlpha"),
+  ccEvalDims: document.getElementById("ccEvalDims"),
+  ccJobStatus: document.getElementById("ccJobStatus"),
+  ccProgress: document.getElementById("ccProgress"),
+  ccLog: document.getElementById("ccLog"),
+  ccJobList: document.getElementById("ccJobList"),
+  ccRunSelect: document.getElementById("ccRunSelect"),
+  ccLoadResults: document.getElementById("ccLoadResults"),
+  ccResultStatus: document.getElementById("ccResultStatus"),
+  ccMetrics: document.getElementById("ccMetrics"),
+  ccPlotTabs: document.getElementById("ccPlotTabs"),
+  ccPlotImage: document.getElementById("ccPlotImage"),
+  ccPlotCaption: document.getElementById("ccPlotCaption"),
   scaleBar: document.getElementById("scaleBar"),
   scaleBarLabel: document.getElementById("scaleBarLabel"),
   scaleBarLine: document.getElementById("scaleBarLine"),
@@ -167,8 +231,12 @@ const ui = {
   simRaySamplesMult: document.getElementById("simRaySamplesMult"),
   simMaxDepthAdd: document.getElementById("simMaxDepthAdd"),
   resetSimTuning: document.getElementById("resetSimTuning"),
+  simComputePaths: document.getElementById("simComputePaths"),
   simRisEnabled: document.getElementById("simRisEnabled"),
   simRisObjects: document.getElementById("simRisObjects"),
+  indoorViewerNormalize: document.getElementById("indoorViewerNormalize"),
+  indoorViewerTargetSize: document.getElementById("indoorViewerTargetSize"),
+  indoorSkipPaths: document.getElementById("indoorSkipPaths"),
   risGeomMode: document.getElementById("risGeomMode"),
   risWidthM: document.getElementById("risWidthM"),
   risHeightM: document.getElementById("risHeightM"),
@@ -207,6 +275,7 @@ const ui = {
   pathTableBody: document.getElementById("pathTableBody"),
   pathStats: document.getElementById("pathStats"),
   randomizeMarkers: document.getElementById("randomizeMarkers"),
+  presetIndoorHighRes: document.getElementById("presetIndoorHighRes"),
   addRis: document.getElementById("addRis"),
   debugRis: document.getElementById("debugRis"),
   risPresetFocus: document.getElementById("risPresetFocus"),
@@ -240,6 +309,12 @@ const RUN_PROFILES = {
     runtime: { force_cpu: false, prefer_gpu: true },
     qualityPreset: "high",
   },
+  indoor_box_high: {
+    label: "Indoor Box High",
+    configName: "indoor_box_high.yaml",
+    runtime: { force_cpu: false, prefer_gpu: true },
+    qualityPreset: "high",
+  },
   custom: {
     label: "Custom",
     configName: "default.yaml",
@@ -253,6 +328,16 @@ const RIS_PLOT_FILES = [
   { file: "validation_overlay.png", label: "Validation overlay" },
 ];
 const RIS_PLOT_LABELS = Object.fromEntries(RIS_PLOT_FILES.map((p) => [p.file, p.label]));
+
+const CC_PLOT_FILES = [
+  { file: "chart_raw.png", label: "Chart (raw)" },
+  { file: "chart_smoothed.png", label: "Chart (smoothed)" },
+  { file: "chart_aligned.png", label: "Chart (aligned)" },
+  { file: "trajectory_compare.png", label: "Trajectory vs estimate" },
+  { file: "features.png", label: "Features" },
+  { file: "training_losses.png", label: "Training losses" },
+];
+const CC_PLOT_LABELS = Object.fromEntries(CC_PLOT_FILES.map((p) => [p.file, p.label]));
 
 let renderer;
 let scene;
@@ -270,6 +355,257 @@ let dragRisIndex = null;
 let dragStartYaw = 0;
 let dragStartMouse = null;
 let debugHeatmapMesh = null;
+
+function getSceneScale() {
+  if (geometryGroup) {
+    const box = new THREE.Box3().setFromObject(geometryGroup);
+    if (!box.isEmpty()) {
+      const size = box.getSize(new THREE.Vector3());
+      const maxDim = Math.max(size.x, size.y, size.z);
+      if (Number.isFinite(maxDim) && maxDim > 0) return maxDim;
+    }
+  }
+  if (state.heatmap && Array.isArray(state.heatmap.size)) {
+    const maxDim = Math.max(...state.heatmap.size);
+    if (Number.isFinite(maxDim) && maxDim > 0) return maxDim;
+  }
+  return 100;
+}
+
+function getMarkerRadius() {
+  const scale = getSceneScale();
+  const raw = scale * 0.02;
+  return Math.min(Math.max(raw, 0.12), 3.5);
+}
+
+function getConfigByName(name) {
+  if (!state.configs.length) return null;
+  return state.configs.find((cfg) => cfg.name === name) || null;
+}
+
+function applyIndoorDefaults() {
+  const indoorCfg = getConfigByName("indoor_box_high.yaml");
+  if (!indoorCfg) return;
+  if (ui.runProfile) ui.runProfile.value = "indoor_box_high";
+  applyRadioMapDefaults(indoorCfg);
+  applyCustomDefaults(indoorCfg);
+  applySimTuningDefaults(indoorCfg);
+  applyRisSimDefaults(indoorCfg);
+  updateCustomVisibility();
+  resetMarkersFromConfig(indoorCfg);
+}
+
+function setSimilarityScalingLocked(locked) {
+  if (ui.simScaleEnabled) {
+    if (locked && !state.simScaleSnapshot) {
+      state.simScaleSnapshot = {
+        enabled: ui.simScaleEnabled.checked,
+        factor: ui.simScaleFactor ? ui.simScaleFactor.value : "",
+      };
+    }
+    if (locked) ui.simScaleEnabled.checked = false;
+    ui.simScaleEnabled.disabled = locked;
+  }
+  if (ui.simScaleFactor) {
+    if (locked) ui.simScaleFactor.value = "";
+    ui.simScaleFactor.disabled = locked;
+  }
+  if (!locked && state.simScaleSnapshot) {
+    if (ui.simScaleEnabled) ui.simScaleEnabled.checked = state.simScaleSnapshot.enabled;
+    if (ui.simScaleFactor) ui.simScaleFactor.value = state.simScaleSnapshot.factor;
+    state.simScaleSnapshot = null;
+  }
+}
+
+function syncViewerScaleFromUi() {
+  if (!ui.indoorViewerNormalize) return;
+  state.viewerScale.enabled = Boolean(ui.indoorViewerNormalize.checked);
+  const target = readNumber(ui.indoorViewerTargetSize);
+  if (target !== null) state.viewerScale.targetSize = target;
+  fitCamera();
+}
+
+function moveSharedPanels(targetLayout) {
+  if (!targetLayout) return;
+  const left = document.getElementById("simLeftPanel");
+  const viewer = document.getElementById("viewerPanel");
+  const right = document.getElementById("pathPanel");
+  if (!left || !viewer || !right) return;
+  targetLayout.appendChild(left);
+  targetLayout.appendChild(viewer);
+  targetLayout.appendChild(right);
+}
+
+function snapshotUiState() {
+  const readText = (el) => (el ? el.value : "");
+  const readCheck = (el) => (el ? Boolean(el.checked) : false);
+  const readNum = (el) => {
+    if (!el || el.value === "") return null;
+    const num = parseFloat(el.value);
+    return Number.isFinite(num) ? num : null;
+  };
+  return {
+    runProfile: ui.runProfile ? ui.runProfile.value : "",
+    markers: JSON.parse(JSON.stringify(state.markers || { tx: [0, 0, 0], rx: [0, 0, 0], ris: [] })),
+    sceneOverride: state.sceneOverride ? JSON.parse(JSON.stringify(state.sceneOverride)) : null,
+    sceneOverrideDirty: Boolean(state.sceneOverrideDirty),
+    custom: {
+      backend: readText(ui.customBackend),
+      frequencyHz: readText(ui.customFrequencyHz),
+      maxDepth: readText(ui.customMaxDepth),
+      samplesPerSrc: readText(ui.customSamplesPerSrc),
+      maxPathsPerSrc: readText(ui.customMaxPathsPerSrc),
+      samplesPerTx: readText(ui.customSamplesPerTx),
+    },
+    radio: {
+      auto: readCheck(ui.radioMapAuto),
+      padding: readText(ui.radioMapPadding),
+      cellX: readText(ui.radioMapCellX),
+      cellY: readText(ui.radioMapCellY),
+      sizeX: readText(ui.radioMapSizeX),
+      sizeY: readText(ui.radioMapSizeY),
+      centerX: readText(ui.radioMapCenterX),
+      centerY: readText(ui.radioMapCenterY),
+      centerZ: readText(ui.radioMapCenterZ),
+      plotStyle: readText(ui.radioMapPlotStyle),
+      plotMetric: readText(ui.radioMapPlotMetric),
+      showTx: readCheck(ui.radioMapPlotShowTx),
+      showRx: readCheck(ui.radioMapPlotShowRx),
+      showRis: readCheck(ui.radioMapPlotShowRis),
+      diffRis: readCheck(ui.radioMapDiffRis),
+    },
+    simTuning: {
+      scaleEnabled: readCheck(ui.simScaleEnabled),
+      scaleFactor: readText(ui.simScaleFactor),
+      samplingEnabled: readCheck(ui.simSamplingEnabled),
+      mapResMult: readText(ui.simMapResMult),
+      raySamplesMult: readText(ui.simRaySamplesMult),
+      maxDepthAdd: readText(ui.simMaxDepthAdd),
+    },
+    computePaths: readCheck(ui.simComputePaths),
+    tx: {
+      lookX: readText(ui.txLookX),
+      lookY: readText(ui.txLookY),
+      lookZ: readText(ui.txLookZ),
+      yawDeg: readText(ui.txYawDeg),
+      powerDbm: readText(ui.txPowerDbm),
+      pattern: readText(ui.txPattern),
+      polarization: readText(ui.txPolarization),
+      showDirection: readCheck(ui.showTxDirection),
+    },
+    ris: {
+      enabled: readCheck(ui.simRisEnabled),
+      geometryMode: readText(ui.risGeomMode),
+      widthM: readText(ui.risWidthM),
+      heightM: readText(ui.risHeightM),
+      targetDxM: readText(ui.risTargetDxM),
+      squareGrid: readCheck(ui.risSquareGrid),
+      dxM: readText(ui.risDxM),
+      nx: readText(ui.risNx),
+      ny: readText(ui.risNy),
+      objects: readRisItems(),
+    },
+    indoorViewer: {
+      normalize: readCheck(ui.indoorViewerNormalize),
+      targetSize: readText(ui.indoorViewerTargetSize),
+      skipPaths: readCheck(ui.indoorSkipPaths),
+    },
+  };
+}
+
+function applyUiState(snapshot) {
+  if (!snapshot) return;
+  const setText = (el, value) => {
+    if (!el) return;
+    el.value = value === null || value === undefined ? "" : value;
+  };
+  const setCheck = (el, value) => {
+    if (!el) return;
+    el.checked = Boolean(value);
+  };
+  if (ui.runProfile && snapshot.runProfile) {
+    ui.runProfile.value = snapshot.runProfile;
+  }
+  if (snapshot.custom) {
+    setText(ui.customBackend, snapshot.custom.backend);
+    setText(ui.customFrequencyHz, snapshot.custom.frequencyHz);
+    setText(ui.customMaxDepth, snapshot.custom.maxDepth);
+    setText(ui.customSamplesPerSrc, snapshot.custom.samplesPerSrc);
+    setText(ui.customMaxPathsPerSrc, snapshot.custom.maxPathsPerSrc);
+    setText(ui.customSamplesPerTx, snapshot.custom.samplesPerTx);
+  }
+  if (snapshot.radio) {
+    setCheck(ui.radioMapAuto, snapshot.radio.auto);
+    setText(ui.radioMapPadding, snapshot.radio.padding);
+    setText(ui.radioMapCellX, snapshot.radio.cellX);
+    setText(ui.radioMapCellY, snapshot.radio.cellY);
+    setText(ui.radioMapSizeX, snapshot.radio.sizeX);
+    setText(ui.radioMapSizeY, snapshot.radio.sizeY);
+    setText(ui.radioMapCenterX, snapshot.radio.centerX);
+    setText(ui.radioMapCenterY, snapshot.radio.centerY);
+    setText(ui.radioMapCenterZ, snapshot.radio.centerZ);
+    setText(ui.radioMapPlotStyle, snapshot.radio.plotStyle);
+    setText(ui.radioMapPlotMetric, snapshot.radio.plotMetric);
+    setCheck(ui.radioMapPlotShowTx, snapshot.radio.showTx);
+    setCheck(ui.radioMapPlotShowRx, snapshot.radio.showRx);
+    setCheck(ui.radioMapPlotShowRis, snapshot.radio.showRis);
+    setCheck(ui.radioMapDiffRis, snapshot.radio.diffRis);
+  }
+  if (snapshot.simTuning) {
+    setCheck(ui.simScaleEnabled, snapshot.simTuning.scaleEnabled);
+    setText(ui.simScaleFactor, snapshot.simTuning.scaleFactor);
+    setCheck(ui.simSamplingEnabled, snapshot.simTuning.samplingEnabled);
+    setText(ui.simMapResMult, snapshot.simTuning.mapResMult);
+    setText(ui.simRaySamplesMult, snapshot.simTuning.raySamplesMult);
+    setText(ui.simMaxDepthAdd, snapshot.simTuning.maxDepthAdd);
+  }
+  if (snapshot.tx) {
+    setText(ui.txLookX, snapshot.tx.lookX);
+    setText(ui.txLookY, snapshot.tx.lookY);
+    setText(ui.txLookZ, snapshot.tx.lookZ);
+    setText(ui.txYawDeg, snapshot.tx.yawDeg);
+    setText(ui.txPowerDbm, snapshot.tx.powerDbm);
+    setText(ui.txPattern, snapshot.tx.pattern);
+    setText(ui.txPolarization, snapshot.tx.polarization);
+    setCheck(ui.showTxDirection, snapshot.tx.showDirection);
+  }
+  if (snapshot.ris) {
+    setCheck(ui.simRisEnabled, snapshot.ris.enabled);
+    setText(ui.risGeomMode, snapshot.ris.geometryMode);
+    setText(ui.risWidthM, snapshot.ris.widthM);
+    setText(ui.risHeightM, snapshot.ris.heightM);
+    setText(ui.risTargetDxM, snapshot.ris.targetDxM);
+    setCheck(ui.risSquareGrid, snapshot.ris.squareGrid);
+    setText(ui.risDxM, snapshot.ris.dxM);
+    setText(ui.risNx, snapshot.ris.nx);
+    setText(ui.risNy, snapshot.ris.ny);
+    if (ui.risList) {
+      clearRisList();
+      const objs = Array.isArray(snapshot.ris.objects) ? snapshot.ris.objects : [];
+      if (objs.length) {
+        objs.forEach((obj) => addRisItem(obj));
+      } else {
+        addRisItem();
+      }
+    }
+  }
+  if (snapshot.indoorViewer) {
+    setCheck(ui.indoorViewerNormalize, snapshot.indoorViewer.normalize);
+    setText(ui.indoorViewerTargetSize, snapshot.indoorViewer.targetSize);
+    setCheck(ui.indoorSkipPaths, snapshot.indoorViewer.skipPaths);
+  }
+  if (snapshot.computePaths !== undefined) {
+    setCheck(ui.simComputePaths, snapshot.computePaths);
+  }
+  state.markers = snapshot.markers || state.markers;
+  state.sceneOverride = snapshot.sceneOverride;
+  state.sceneOverrideDirty = Boolean(snapshot.sceneOverrideDirty);
+  updateInputs();
+  updateRisGeometryVisibility();
+  updateCustomVisibility();
+  rebuildScene();
+  refreshHeatmap();
+}
 
 function clearRisList() {
   if (!ui.risList) return;
@@ -460,6 +796,8 @@ function readRisItems() {
     }
     const amplitude = readNum(field("amplitude"));
     if (amplitude !== null) profile.amplitude = amplitude;
+    const beamwidth = readNum(field("beamwidthDeg"));
+    if (beamwidth !== null) profile.beamwidth_deg = beamwidth;
     const phaseBits = readNum(field("phaseBits"));
     if (phaseBits !== null) profile.phase_bits = Math.max(0, Math.round(phaseBits));
     obj.profile = profile;
@@ -522,6 +860,77 @@ function applyRisDebugPreset() {
   rebuildScene();
   refreshHeatmap();
   setMeta("Applied RIS debug preset");
+}
+
+function applyIndoorHighResPreset() {
+  ui.runProfile.value = "custom";
+  updateCustomVisibility();
+  if (ui.customBackend) ui.customBackend.value = "gpu";
+  if (ui.customFrequencyHz) ui.customFrequencyHz.value = "2.8e10";
+  if (ui.customMaxDepth) ui.customMaxDepth.value = "3";
+  if (ui.customSamplesPerSrc) ui.customSamplesPerSrc.value = "300000";
+  if (ui.customMaxPathsPerSrc) ui.customMaxPathsPerSrc.value = "300000";
+  if (ui.customSamplesPerTx) ui.customSamplesPerTx.value = "250000";
+
+  if (ui.radioMapAuto) ui.radioMapAuto.checked = false;
+  if (ui.radioMapCellX) ui.radioMapCellX.value = "0.05";
+  if (ui.radioMapCellY) ui.radioMapCellY.value = "0.05";
+  if (ui.radioMapSizeX) ui.radioMapSizeX.value = "6.0";
+  if (ui.radioMapSizeY) ui.radioMapSizeY.value = "6.0";
+  if (ui.radioMapCenterX) ui.radioMapCenterX.value = "0.0";
+  if (ui.radioMapCenterY) ui.radioMapCenterY.value = "0.0";
+  if (ui.radioMapCenterZ) ui.radioMapCenterZ.value = "1.5";
+
+  const tx = [-3.0, -3.0, 1.5];
+  const rx = [3.0, 3.0, 1.5];
+  state.markers.tx = [...tx];
+  state.markers.rx = [...rx];
+  if (ui.txX) ui.txX.value = tx[0];
+  if (ui.txY) ui.txY.value = tx[1];
+  if (ui.txZ) ui.txZ.value = tx[2];
+  if (ui.rxX) ui.rxX.value = rx[0];
+  if (ui.rxY) ui.rxY.value = rx[1];
+  if (ui.rxZ) ui.rxZ.value = rx[2];
+
+  state.sceneOverride = {
+    type: "builtin",
+    builtin: "etoile",
+    tx: { position: tx },
+    rx: { position: rx },
+  };
+  state.sceneOverrideDirty = true;
+
+  if (ui.simRisEnabled) ui.simRisEnabled.checked = true;
+  if (ui.risGeomMode) ui.risGeomMode.value = "size_driven";
+  if (ui.risSquareGrid) ui.risSquareGrid.checked = true;
+  if (ui.risWidthM) ui.risWidthM.value = "0.2";
+  if (ui.risHeightM) ui.risHeightM.value = "0.2";
+  if (ui.risTargetDxM) ui.risTargetDxM.value = "0.005";
+
+  if (ui.risList) {
+    if (!ui.risList.children.length) {
+      addRisItem();
+    }
+    const node = ui.risList.querySelector(".ris-item");
+    if (node) {
+      const setVal = (name, value) => {
+        const el = node.querySelector(`[data-field="${name}"]`);
+        if (el) el.value = value;
+      };
+      setVal("posX", "0.0");
+      setVal("posY", "0.0");
+      setVal("posZ", "1.8");
+      setVal("profileKind", "phase_gradient_reflector");
+      const autoAim = node.querySelector('[data-field="autoAim"]');
+      if (autoAim) autoAim.checked = true;
+    }
+  }
+
+  updateInputs();
+  updateRisGeometryVisibility();
+  rebuildScene();
+  refreshHeatmap();
+  setMeta("Applied Indoor High-Res preset");
 }
 
 function applyCenterMapPreset() {
@@ -791,6 +1200,9 @@ function setInputValue(input, value) {
 
 function setMainTab(tabName) {
   if (!ui.mainTabStrip) return;
+  if (state.activeTab) {
+    state.tabSnapshots[state.activeTab] = snapshotUiState();
+  }
   const buttons = ui.mainTabStrip.querySelectorAll(".main-tab-button");
   const panels = document.querySelectorAll(".main-tab-panel");
   buttons.forEach((button) => {
@@ -799,6 +1211,48 @@ function setMainTab(tabName) {
   panels.forEach((panel) => {
     panel.classList.toggle("is-active", panel.dataset.mainTab === tabName);
   });
+  state.activeTab = tabName;
+  const indoorLayout = document.getElementById("indoorLayout");
+  const simLayout = document.getElementById("simLayout");
+  const indoorSection = document.getElementById("indoorViewerSection");
+  if (tabName === "indoor") {
+    const firstIndoor = !state.indoorInitialized;
+    moveSharedPanels(indoorLayout);
+    if (indoorSection) indoorSection.style.display = "";
+    setSimilarityScalingLocked(true);
+    if (state.tabSnapshots.indoor) {
+      applyUiState(state.tabSnapshots.indoor);
+    } else if (firstIndoor) {
+      applyIndoorDefaults();
+      state.indoorInitialized = true;
+      if (ui.indoorViewerNormalize) {
+        ui.indoorViewerNormalize.checked = true;
+      }
+    }
+    if (ui.indoorViewerNormalize && ui.indoorViewerTargetSize && ui.indoorViewerTargetSize.value === "") {
+      ui.indoorViewerTargetSize.value = String(state.viewerScale.targetSize || 160);
+    }
+    syncViewerScaleFromUi();
+    requestAnimationFrame(() => {
+      refreshViewerSize();
+      fitCamera();
+    });
+  } else {
+    if (tabName === "sim") {
+      moveSharedPanels(simLayout);
+    }
+    if (indoorSection) indoorSection.style.display = "none";
+    setSimilarityScalingLocked(false);
+    state.viewerScale.enabled = false;
+    if (state.tabSnapshots.sim) {
+      applyUiState(state.tabSnapshots.sim);
+    }
+    fitCamera();
+    requestAnimationFrame(() => {
+      refreshViewerSize();
+      fitCamera();
+    });
+  }
 }
 
 function updateRisActionVisibility() {
@@ -830,6 +1284,32 @@ function updateRisControlVisibility() {
   focusFields.forEach((el) => {
     el.style.display = mode === "focus" ? "" : "none";
   });
+}
+
+function updateCcConfigSourceVisibility() {
+  const source = ui.ccConfigSource ? ui.ccConfigSource.value : "preset";
+  const fileFields = document.querySelectorAll(".cc-config-file");
+  const presetFields = document.querySelectorAll(".cc-config-preset");
+  fileFields.forEach((el) => {
+    el.style.display = source === "file" ? "" : "none";
+  });
+  presetFields.forEach((el) => {
+    el.style.display = source === "preset" ? "" : "none";
+  });
+}
+
+function updateCcCsiVisibility() {
+  const csiType = ui.ccCsiType ? ui.ccCsiType.value : "cfr";
+  const isCfr = csiType === "cfr";
+  const isCir = csiType === "cir";
+  if (ui.ccSubcarriers) ui.ccSubcarriers.disabled = !isCfr;
+  if (ui.ccSubcarrierSpacing) ui.ccSubcarrierSpacing.disabled = !isCfr;
+  if (ui.ccCirSampling) ui.ccCirSampling.disabled = !isCir;
+  if (ui.ccCirSteps) ui.ccCirSteps.disabled = !isCir;
+  const tapsEnabled = csiType === "taps";
+  if (ui.ccTapsBw) ui.ccTapsBw.disabled = !tapsEnabled;
+  if (ui.ccTapsLmin) ui.ccTapsLmin.disabled = !tapsEnabled;
+  if (ui.ccTapsLmax) ui.ccTapsLmax.disabled = !tapsEnabled;
 }
 
 function readOptionalNumber(input, fallback) {
@@ -1006,6 +1486,39 @@ function renderRisPlotSingle(runId, file) {
   ui.risPlotCaption.textContent = label;
   ui.risPlotImage.src = `/runs/${runId}/plots/${file}`;
   ui.risPlotImage.alt = label;
+}
+
+function renderCcMetrics(metrics) {
+  ui.ccMetrics.innerHTML = "";
+  if (!metrics) {
+    ui.ccMetrics.textContent = "No metrics found for this run.";
+    return;
+  }
+  Object.entries(metrics).forEach(([key, value]) => {
+    const row = document.createElement("div");
+    const label = document.createElement("strong");
+    label.textContent = `${key}: `;
+    const val = document.createElement("span");
+    val.textContent = formatMetricValue(value);
+    row.append(label, val);
+    ui.ccMetrics.appendChild(row);
+  });
+}
+
+function renderCcPlotSingle(runId, file) {
+  if (!ui.ccPlotImage || !ui.ccPlotCaption) return;
+  const label = CC_PLOT_LABELS[file] || file;
+  ui.ccPlotCaption.textContent = label;
+  ui.ccPlotImage.src = `/runs/${runId}/${file.startsWith("plots/") ? file : `plots/${file}`}`;
+  ui.ccPlotImage.alt = label;
+}
+
+function setCcStatus(text) {
+  ui.ccJobStatus.textContent = text;
+}
+
+function setCcResultStatus(text) {
+  ui.ccResultStatus.textContent = text;
 }
 
 function setRisStatus(text) {
@@ -1232,7 +1745,7 @@ function updateRisGeometryVisibility() {
 }
 
 function updateCustomVisibility() {
-  const isCustom = ui.runProfile.value === "custom";
+  const isCustom = ui.runProfile.value === "custom" || ui.runProfile.value === "indoor_box_high";
   ui.customOverridesSection.open = isCustom;
   ui.customOverridesSection.style.display = isCustom ? "" : "none";
 }
@@ -1258,6 +1771,10 @@ async function fetchConfigs() {
   applyRisSimDefaults(getProfileConfig());
   updateRisGeometryVisibility();
   updateCustomVisibility();
+  if (state.activeTab === "indoor" && !state.indoorInitialized) {
+    applyIndoorDefaults();
+    state.indoorInitialized = true;
+  }
 }
 
 async function fetchRuns() {
@@ -1314,17 +1831,20 @@ async function fetchBuiltinScenes() {
   const scenes = data.scenes || [];
   state.builtinScenes = scenes;
   ui.meshRunSelect.innerHTML = "";
+  const currentOpt = document.createElement("option");
+  currentOpt.value = "__run__";
+  currentOpt.textContent = "Use current run";
+  ui.meshRunSelect.appendChild(currentOpt);
   scenes.forEach((name) => {
     const opt = document.createElement("option");
     opt.value = name;
     opt.textContent = name;
     ui.meshRunSelect.appendChild(opt);
   });
-  if (!state.meshSourceBuiltin && scenes.length) {
-    state.meshSourceBuiltin = scenes.includes("etoile") ? "etoile" : scenes[0];
+  if (!state.meshSourceBuiltin) {
+    state.meshSourceBuiltin = "__run__";
     ui.meshRunSelect.value = state.meshSourceBuiltin;
-  } else if (scenes.includes("etoile")) {
-    state.meshSourceBuiltin = "etoile";
+  } else {
     ui.meshRunSelect.value = state.meshSourceBuiltin;
   }
 }
@@ -1366,6 +1886,7 @@ function _sceneKey(scene) {
 
 async function resolveMeshRunForBuiltin(builtinName) {
   if (!builtinName) return null;
+  if (builtinName === "__run__") return state.runId;
   const targetKey = `builtin:${builtinName}`;
   for (const run of state.runs) {
     if (!run.has_viewer) continue;
@@ -1573,16 +2094,294 @@ async function loadRisResults(runId) {
   }
 }
 
+async function fetchCcJobs() {
+  const data = await fetchJsonMaybe("/api/cc/jobs");
+  return data || { jobs: [] };
+}
+
+function renderCcJobList(jobs) {
+  ui.ccJobList.innerHTML = "";
+  const sorted = [...jobs].sort((a, b) => (a.created_at || "").localeCompare(b.created_at || ""));
+  const recent = sorted.slice(-5).reverse();
+  recent.forEach((job) => {
+    const item = document.createElement("div");
+    const status = job.status || "unknown";
+    const error = job.error ? ` · ERROR: ${job.error}` : "";
+    item.textContent = `${job.run_id} · ${status}${error}`;
+    ui.ccJobList.appendChild(item);
+  });
+}
+
+async function refreshCcRunSelect() {
+  const data = await fetchJsonMaybe("/api/runs");
+  const runIds = [];
+  for (const run of (data && data.runs ? data.runs : [])) {
+    runIds.push(run.run_id);
+  }
+  const sorted = runIds.sort((a, b) => b.localeCompare(a));
+  const previous = ui.ccRunSelect.value;
+  ui.ccRunSelect.innerHTML = "";
+  sorted.forEach((runId) => {
+    const opt = document.createElement("option");
+    opt.value = runId;
+    opt.textContent = runId;
+    ui.ccRunSelect.appendChild(opt);
+  });
+  if (sorted.length > 0) {
+    ui.ccRunSelect.value = sorted.includes(previous) ? previous : sorted[0];
+  }
+  state.cc.runs = sorted;
+}
+
+async function refreshCcProgressAndLog() {
+  const runId = state.cc.activeRunId;
+  if (!runId) {
+    ui.ccProgress.textContent = "";
+    ui.ccLog.textContent = "";
+    return;
+  }
+  const progress = await fetchProgress(runId);
+  if (progress) {
+    const step = progress.step_name || "Running";
+    const total = progress.total_steps || 0;
+    const idx = progress.step_index != null ? progress.step_index + 1 : null;
+    const pct = progress.progress != null ? Math.round(progress.progress * 100) : null;
+    const pctLabel = pct !== null ? `${pct}%` : "";
+    const stepLabel = total && idx ? `${step} (${idx}/${total})` : step;
+    const error = progress.error ? ` · ERROR: ${progress.error}` : "";
+    ui.ccProgress.textContent = `${progress.status || "running"} · ${stepLabel} ${pctLabel}${error}`.trim();
+  } else {
+    ui.ccProgress.textContent = "Progress unavailable.";
+  }
+  const logText = await fetchTextMaybe(`/runs/${runId}/job.log`);
+  ui.ccLog.textContent = logText ? tailLines(logText, 120) : "No log available.";
+}
+
+async function refreshCcJobs() {
+  const data = await fetchCcJobs();
+  state.cc.jobs = data.jobs || [];
+  renderCcJobList(state.cc.jobs);
+  const sorted = [...state.cc.jobs].sort((a, b) => (a.created_at || "").localeCompare(b.created_at || ""));
+  const running = sorted.find((job) => job.status === "running");
+  const latest = sorted[sorted.length - 1];
+  const active = state.cc.activeJobId
+    ? sorted.find((job) => job.job_id === state.cc.activeJobId)
+    : null;
+  await refreshCcRunSelect();
+  const runExists = (job) => job && job.run_id && state.cc.runs.includes(job.run_id);
+  const current = [active, running, latest].find((job) => job && (job.status === "running" || runExists(job)));
+  if (current) {
+    state.cc.activeJobId = current.job_id;
+    state.cc.activeRunId = current.run_id;
+    setCcStatus(`${current.run_id} · ${current.status || "running"}`);
+  } else {
+    setCcStatus("Idle.");
+    state.cc.activeJobId = null;
+    state.cc.activeRunId = null;
+  }
+  await refreshCcProgressAndLog();
+  if (state.cc.activeRunId) {
+    ui.ccRunSelect.value = state.cc.activeRunId;
+  }
+}
+
+function parseWaypoints(text) {
+  if (!text) return [];
+  return text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .map((line) => line.split(",").map((v) => parseFloat(v.trim())))
+    .filter((vals) => vals.length === 3 && vals.every((v) => Number.isFinite(v)));
+}
+
+async function submitCcJob() {
+  const source = ui.ccConfigSource ? ui.ccConfigSource.value : "preset";
+  const payload = { kind: "channel_charting" };
+  if (source === "file") {
+    let configPath = ui.ccConfigPath.value.trim();
+    if (!configPath && ui.ccConfigPath.placeholder) {
+      configPath = ui.ccConfigPath.placeholder;
+    }
+    if (!configPath) {
+      setCcStatus("Config path required.");
+      return;
+    }
+    payload.base_config = configPath;
+  } else {
+    payload.base_config = ui.ccPreset.value;
+  }
+
+  if (ui.ccUseScene && ui.ccUseScene.checked) {
+    if (state.sceneOverride) {
+      payload.scene = JSON.parse(JSON.stringify(state.sceneOverride));
+    }
+  }
+  if (ui.ccUseMarkers && ui.ccUseMarkers.checked) {
+    payload.scene = payload.scene || {};
+    payload.scene.tx = Object.assign(payload.scene.tx || {}, { position: state.markers.tx });
+    payload.scene.rx = Object.assign(payload.scene.rx || {}, { position: state.markers.rx });
+  }
+
+  const cc = {};
+  if (ui.ccRole && ui.ccRole.value) {
+    cc.role = ui.ccRole.value;
+  }
+  const traj = {};
+  const trajType = ui.ccTrajectoryType ? ui.ccTrajectoryType.value : "straight";
+  traj.type = trajType;
+  const steps = readNumber(ui.ccTrajectorySteps);
+  const dt = readNumber(ui.ccTrajectoryDt);
+  if (steps !== null) traj.num_steps = Math.max(1, Math.round(steps));
+  if (dt !== null) traj.dt_s = dt;
+  const start = [readNumber(ui.ccStartX), readNumber(ui.ccStartY), readNumber(ui.ccStartZ)];
+  if (start.every((v) => v !== null)) traj.start = start;
+  const end = [readNumber(ui.ccEndX), readNumber(ui.ccEndY), readNumber(ui.ccEndZ)];
+  if (end.every((v) => v !== null)) traj.end = end;
+  if (trajType === "waypoints") {
+    const wp = parseWaypoints(ui.ccWaypoints ? ui.ccWaypoints.value : "");
+    if (wp.length) traj.waypoints = wp;
+  } else if (trajType === "random_walk") {
+    const stepStd = readNumber(ui.ccRwStepStd);
+    const smoothAlpha = readNumber(ui.ccRwSmooth);
+    traj.random_walk = {};
+    if (stepStd !== null) traj.random_walk.step_std = stepStd;
+    if (smoothAlpha !== null) traj.random_walk.smooth_alpha = smoothAlpha;
+  } else if (trajType === "spiral") {
+    const r0 = readNumber(ui.ccSpiralR0);
+    const r1 = readNumber(ui.ccSpiralR1);
+    const turns = readNumber(ui.ccSpiralTurns);
+    traj.spiral = {};
+    if (r0 !== null) traj.spiral.radius_start = r0;
+    if (r1 !== null) traj.spiral.radius_end = r1;
+    if (turns !== null) traj.spiral.turns = turns;
+  }
+  cc.trajectory = traj;
+
+  const csi = { type: ui.ccCsiType ? ui.ccCsiType.value : "cfr" };
+  if (csi.type === "cfr") {
+    const sc = readNumber(ui.ccSubcarriers);
+    const spacing = readNumber(ui.ccSubcarrierSpacing);
+    csi.ofdm = {};
+    if (sc !== null) csi.ofdm.num_subcarriers = Math.round(sc);
+    if (spacing !== null) csi.ofdm.subcarrier_spacing_hz = spacing;
+  }
+  if (csi.type === "cir") {
+    const sampling = readNumber(ui.ccCirSampling);
+    const stepsCir = readNumber(ui.ccCirSteps);
+    csi.cir = {};
+    if (sampling !== null) csi.cir.sampling_frequency_hz = sampling;
+    if (stepsCir !== null) csi.cir.num_time_steps = Math.round(stepsCir);
+  }
+  if (csi.type === "taps") {
+    const bw = readNumber(ui.ccTapsBw);
+    const lmin = readNumber(ui.ccTapsLmin);
+    const lmax = readNumber(ui.ccTapsLmax);
+    csi.taps = {};
+    if (bw !== null) csi.taps.bandwidth_hz = bw;
+    if (lmin !== null) csi.taps.l_min = Math.round(lmin);
+    if (lmax !== null) csi.taps.l_max = Math.round(lmax);
+  }
+  cc.csi = csi;
+
+  const features = { type: ui.ccFeatureType ? ui.ccFeatureType.value : "r2m" };
+  const window = readNumber(ui.ccFeatureWindow);
+  if (window !== null) features.window = Math.max(1, Math.round(window));
+  const beamspace = ui.ccFeatureBeamspace ? ui.ccFeatureBeamspace.checked : true;
+  if (features.type === "beamspace_mag") {
+    features.beamspace_mag = { beamspace };
+  } else {
+    features.r2m = { beamspace };
+  }
+  cc.features = features;
+
+  const model = {};
+  const embedDim = readNumber(ui.ccEmbedDim);
+  const epochs = readNumber(ui.ccEpochs);
+  const lr = readNumber(ui.ccLr);
+  const adj = readNumber(ui.ccAdjWeight);
+  if (embedDim !== null) model.embedding_dim = Math.round(embedDim);
+  if (epochs !== null) model.epochs = Math.round(epochs);
+  if (lr !== null) model.learning_rate = lr;
+  if (adj !== null) model.adjacency_weight = adj;
+  cc.model = model;
+
+  const tracking = {};
+  if (ui.ccTrackingEnabled) tracking.enabled = ui.ccTrackingEnabled.checked;
+  const alpha = readNumber(ui.ccTrackingAlpha);
+  if (alpha !== null) tracking.alpha = alpha;
+  cc.tracking = tracking;
+
+  const evaluation = {};
+  const dims = readNumber(ui.ccEvalDims);
+  if (dims !== null) evaluation.dims = Math.round(dims);
+  cc.evaluation = evaluation;
+
+  payload.channel_charting = cc;
+
+  setCcStatus("Submitting channel charting job...");
+  try {
+    const res = await fetch("/api/cc/jobs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) {
+      setCcStatus(`CC job error: ${data.error || res.status}`);
+    } else {
+      state.cc.activeRunId = data.run_id;
+      state.cc.activeJobId = data.job_id;
+      setCcStatus(`CC job submitted: ${data.run_id}`);
+    }
+    await refreshCcJobs();
+    await refreshCcProgressAndLog();
+  } catch (err) {
+    setCcStatus("CC job error: network failure");
+  }
+}
+
+async function loadCcResults(runId) {
+  if (!runId) {
+    setCcResultStatus("Select a run to load results.");
+    renderCcMetrics(null);
+    if (ui.ccPlotImage) ui.ccPlotImage.src = "";
+    return;
+  }
+  state.cc.activeRunId = runId;
+  setCcResultStatus(`Loading ${runId}...`);
+  const manifest = await fetchJsonMaybe(`/runs/${runId}/manifest.json`);
+  renderCcMetrics(manifest ? manifest.metrics : null);
+  const defaultPlot = state.cc.selectedPlot || "chart_raw.png";
+  renderCcPlotSingle(runId, defaultPlot);
+  if (ui.ccPlotTabs) {
+    ui.ccPlotTabs.querySelectorAll(".plot-tab-button").forEach((btn) => {
+      btn.classList.toggle("is-active", btn.dataset.plot === defaultPlot);
+    });
+  }
+  if (!manifest) {
+    setCcResultStatus("manifest.json not found for this run.");
+    return;
+  }
+  setCcResultStatus("Results loaded.");
+}
+
 async function loadRun(runId) {
   state.runId = runId;
   setMeta(`Loading ${runId}...`);
   let meshRunId = state.meshSourceRunId || runId;
   if (state.meshSourceBuiltin) {
-    const resolved = await resolveMeshRunForBuiltin(state.meshSourceBuiltin);
-    if (resolved) {
-      meshRunId = resolved;
-      state.meshSourceRunId = resolved;
+    if (state.meshSourceBuiltin === "__run__") {
+      meshRunId = runId;
+      state.meshSourceRunId = runId;
       if (ui.meshRunSelect) ui.meshRunSelect.value = state.meshSourceBuiltin;
+    } else {
+      const resolved = await resolveMeshRunForBuiltin(state.meshSourceBuiltin);
+      if (resolved) {
+        meshRunId = resolved;
+        state.meshSourceRunId = resolved;
+        if (ui.meshRunSelect) ui.meshRunSelect.value = state.meshSourceBuiltin;
+      }
     }
   }
   try {
@@ -1603,6 +2402,15 @@ async function loadRun(runId) {
     state.heatmap = heatmap;
     state.radioMapPlots = (radioPlots && radioPlots.plots) ? radioPlots.plots : [];
     state.runInfo = runInfo;
+    const runScene = (runInfo && runInfo.config && runInfo.config.scene) || {};
+    if (runScene.type && runScene.type !== "builtin") {
+      if (!state.meshSourceBuiltin || state.meshSourceBuiltin === "etoile") {
+        state.meshSourceBuiltin = "__run__";
+        if (ui.meshRunSelect) ui.meshRunSelect.value = "__run__";
+        state.meshSourceRunId = runId;
+        await refreshMeshFromRun(runId);
+      }
+    }
     if (state.markers.ris.length === 0) {
       const risObjects = (runInfo && runInfo.config && runInfo.config.ris && runInfo.config.ris.objects) || [];
       if (Array.isArray(risObjects) && risObjects.length) {
@@ -1980,21 +2788,35 @@ function addProxyGeometry() {
   });
 }
 
+function getMeshRotationRad() {
+  const base = state.manifest && Array.isArray(state.manifest.mesh_rotation_deg)
+    ? state.manifest.mesh_rotation_deg
+    : [0, 0, 0];
+  const bx = (parseFloat(base[0]) || 0) * Math.PI / 180;
+  const by = (parseFloat(base[1]) || 0) * Math.PI / 180;
+  const bz = (parseFloat(base[2]) || 0) * Math.PI / 180;
+  const uiZ = parseFloat(ui.meshRotation?.value || 0) * Math.PI / 180;
+  return [bx, by, bz + uiZ];
+}
+
 async function loadMeshes() {
   if (!state.manifest) {
     return;
   }
+  const [rotX, rotY, rotZ] = getMeshRotationRad();
   if (state.manifest.mesh) {
     const ext = state.manifest.mesh.split(".").pop().toLowerCase();
     if (ext === "glb" || ext === "gltf") {
       const loader = new GLTFLoader();
       loader.load(`/runs/${state.runId}/viewer/${state.manifest.mesh}`, (gltf) => {
+        gltf.scene.rotation.set(rotX, rotY, rotZ);
         geometryGroup.add(gltf.scene);
         refreshHeatmap();
       });
     } else if (ext === "obj") {
       const loader = new OBJLoader();
       loader.load(`/runs/${state.runId}/viewer/${state.manifest.mesh}`, (obj) => {
+        obj.rotation.set(rotX, rotY, rotZ);
         geometryGroup.add(obj);
         refreshHeatmap();
       });
@@ -2002,15 +2824,12 @@ async function loadMeshes() {
   }
   if (state.manifest.mesh_files && state.manifest.mesh_files.length) {
     const loader = new PLYLoader();
-    // Get rotation from UI slider (degrees); default stays 0 to match ray paths.
-    const meshRotationDeg = parseFloat(ui.meshRotation?.value || 0);
     state.manifest.mesh_files.forEach((name) => {
       loader.load(`/runs/${state.runId}/viewer/${name}`, (geom) => {
-        // Apply Z-axis rotation to align mesh with radio map coordinates
-        geom.rotateZ((meshRotationDeg * Math.PI) / 180);
         geom.computeVertexNormals();
         const mat = new THREE.MeshStandardMaterial({ color: 0x9aa8b1, opacity: 0.6, transparent: true });
         const mesh = new THREE.Mesh(geom, mat);
+        mesh.rotation.set(rotX, rotY, rotZ);
         geometryGroup.add(mesh);
         refreshHeatmap();
       });
@@ -2019,9 +2838,10 @@ async function loadMeshes() {
 }
 
 function addMarkers() {
+  const markerRadius = getMarkerRadius();
   const txMat = new THREE.MeshStandardMaterial({ color: 0xdc2626, emissive: 0xdc2626, emissiveIntensity: 0.4 });
   const rxMat = new THREE.MeshStandardMaterial({ color: 0x2563eb, emissive: 0x2563eb, emissiveIntensity: 0.4 });
-  const geo = new THREE.SphereGeometry(2.2, 16, 16);
+  const geo = new THREE.SphereGeometry(markerRadius, 16, 16);
   const tx = new THREE.Mesh(geo, txMat);
   const rx = new THREE.Mesh(geo, rxMat);
   tx.name = "tx";
@@ -2049,7 +2869,10 @@ function addMarkers() {
       direction = new THREE.Vector3(1, 0, 0);
     }
     direction.normalize();
-    const arrow = new THREE.ArrowHelper(direction, origin, 18, 0xf97316, 4, 2);
+    const arrowLength = Math.max(markerRadius * 8, 1.5);
+    const arrowHeadLength = Math.max(markerRadius * 2.0, 0.6);
+    const arrowHeadWidth = Math.max(markerRadius * 1.0, 0.4);
+    const arrow = new THREE.ArrowHelper(direction, origin, arrowLength, 0xf97316, arrowHeadLength, arrowHeadWidth);
     arrow.name = "tx_direction";
     markerGroup.add(arrow);
   }
@@ -2098,7 +2921,7 @@ function addMarkers() {
 
   if (ui.toggleRisFocus && ui.toggleRisFocus.checked && focusTargets.length) {
     const focusMat = new THREE.MeshStandardMaterial({ color: 0xf59e0b, emissive: 0xf59e0b, emissiveIntensity: 0.6 });
-    const focusGeo = new THREE.SphereGeometry(1.8, 14, 14);
+    const focusGeo = new THREE.SphereGeometry(Math.max(markerRadius * 0.8, 0.12), 14, 14);
     const lineMat = new THREE.LineBasicMaterial({ color: 0xf59e0b });
     focusTargets.forEach(({ target, source }) => {
       const focus = new THREE.Mesh(focusGeo, focusMat);
@@ -2115,10 +2938,11 @@ function addMarkers() {
 }
 
 function addAlignmentMarkers() {
+  const markerRadius = getMarkerRadius();
   // Reference height for markers (slightly above ground)
-  const markerZ = 3;
-  const axisLength = 100;
-  const markerSize = 5;
+  const markerZ = Math.max(markerRadius * 1.5, 0.2);
+  const axisLength = Math.max(getSceneScale() * 0.6, markerRadius * 12);
+  const markerSize = Math.max(markerRadius * 1.2, 0.12);
 
   // Create axis lines from origin
   // X-axis = RED, Y-axis = GREEN
@@ -2491,9 +3315,30 @@ function fitCamera() {
   }
   const center = box.getCenter(new THREE.Vector3());
   const size = box.getSize(new THREE.Vector3());
-  const radius = Math.max(size.x, size.y, size.z) * 0.9 + 10;
+  const maxDim = Math.max(size.x, size.y, size.z);
+  let radius = Math.max(maxDim * 1.2, 1);
+  if (state.viewerScale && state.viewerScale.enabled) {
+    const target = Number(state.viewerScale.targetSize) || maxDim;
+    if (maxDim > 0 && Number.isFinite(target) && target > 0) {
+      const scaleFactor = target / maxDim;
+      if (Number.isFinite(scaleFactor) && scaleFactor > 0) {
+        radius = radius / scaleFactor;
+        radius = Math.max(radius, maxDim * 0.5, 1);
+      }
+    }
+  }
   camera.position.set(center.x + radius, center.y + radius, center.z + radius);
   controls.target.copy(center);
+}
+
+function refreshViewerSize() {
+  const container = document.getElementById("viewerCanvas");
+  if (!container || !renderer || !camera) return;
+  const width = container.clientWidth || 1;
+  const height = container.clientHeight || 1;
+  camera.aspect = width / height;
+  camera.updateProjectionMatrix();
+  renderer.setSize(width, height);
 }
 
 function renderPathTable() {
@@ -2693,7 +3538,7 @@ async function submitJob() {
   if (profile.runtime) {
     payload.runtime = profile.runtime;
   }
-  if (ui.runProfile.value === "custom") {
+  if (ui.runProfile.value === "custom" || ui.runProfile.value === "indoor_box_high") {
     const backend = ui.customBackend.value;
     payload.runtime = {
       force_cpu: backend === "cpu",
@@ -2787,6 +3632,19 @@ async function submitJob() {
       sampling_boost: samplingPayload,
     });
   }
+  if (ui.simComputePaths && !ui.simComputePaths.checked) {
+    payload.simulation = Object.assign(payload.simulation || {}, {
+      compute_paths: false,
+    });
+  }
+  if (state.activeTab === "indoor" || ui.runProfile.value === "indoor_box_high") {
+    payload.simulation = Object.assign(payload.simulation || {}, {
+      scale_similarity: { enabled: false, factor: 1.0 },
+    });
+    if (ui.indoorSkipPaths && ui.indoorSkipPaths.checked) {
+      payload.simulation.compute_paths = false;
+    }
+  }
   const radioStyle = {};
   if (ui.radioMapPlotStyle && ui.radioMapPlotStyle.value) {
     radioStyle.plot_style = ui.radioMapPlotStyle.value;
@@ -2855,7 +3713,11 @@ async function submitJob() {
     payload.simulation = Object.assign(payload.simulation || {}, { ris: true });
     payload.radio_map = Object.assign(payload.radio_map || {}, { ris: true });
   }
-  const scenePayload = JSON.parse(JSON.stringify(state.sceneOverride || {}));
+  const profileConfig = getProfileConfig();
+  const baseScene = !state.sceneOverrideDirty
+    ? ((profileConfig && profileConfig.data && profileConfig.data.scene) || state.sceneOverride || {})
+    : (state.sceneOverride || {});
+  const scenePayload = JSON.parse(JSON.stringify(baseScene));
   const txPayload = { position: state.markers.tx };
   const txPower = readNumber(ui.txPowerDbm);
   if (txPower !== null) txPayload.power_dbm = txPower;
@@ -2918,6 +3780,11 @@ function bindUI() {
   if (ui.meshRunSelect) {
     ui.meshRunSelect.addEventListener("change", async () => {
       state.meshSourceBuiltin = ui.meshRunSelect.value;
+      if (state.meshSourceBuiltin === "__run__") {
+        state.meshSourceRunId = state.runId;
+        await refreshMeshFromRun(state.runId);
+        return;
+      }
       const runId = await resolveMeshRunForBuiltin(state.meshSourceBuiltin);
       if (!runId) {
         setMeta(`No run with mesh for ${state.meshSourceBuiltin}`);
@@ -2940,7 +3807,7 @@ function bindUI() {
   
   if (!ui.runProfile) console.error("ui.runProfile is missing");
   ui.runProfile.addEventListener("change", () => {
-    if (ui.runProfile.value === "cpu_only") {
+    if (ui.runProfile.value === "cpu_only" || ui.runProfile.value === "indoor_box_high") {
       const config = getProfileConfig();
       applyRadioMapDefaults(config);
       applyCustomDefaults(config);
@@ -2968,6 +3835,23 @@ function bindUI() {
       setMeta("Reset tuning to profile defaults");
     });
   }
+  if (ui.indoorViewerNormalize) {
+    ui.indoorViewerNormalize.addEventListener("change", () => syncViewerScaleFromUi());
+  }
+  if (ui.indoorViewerTargetSize) {
+    ui.indoorViewerTargetSize.addEventListener("change", () => syncViewerScaleFromUi());
+    ui.indoorViewerTargetSize.addEventListener("input", () => syncViewerScaleFromUi());
+  }
+  if (ui.indoorSkipPaths) {
+    ui.indoorSkipPaths.addEventListener("change", () => {
+      setMeta(ui.indoorSkipPaths.checked ? "Indoor: path tracing disabled" : "Indoor: path tracing enabled");
+    });
+  }
+  if (ui.simComputePaths) {
+    ui.simComputePaths.addEventListener("change", () => {
+      setMeta(ui.simComputePaths.checked ? "Ray tracing enabled" : "Ray tracing disabled");
+    });
+  }
   
   if (!ui.applyMarkers) console.error("ui.applyMarkers is missing");
   ui.applyMarkers.addEventListener("click", () => {
@@ -2991,6 +3875,9 @@ function bindUI() {
   }
   if (ui.debugRis) {
     ui.debugRis.addEventListener("click", () => applyRisDebugPreset());
+  }
+  if (ui.presetIndoorHighRes) {
+    ui.presetIndoorHighRes.addEventListener("click", () => applyIndoorHighResPreset());
   }
   if (ui.risPresetFocus) {
     ui.risPresetFocus.addEventListener("click", () => applyRisFocusPreset());
@@ -3086,6 +3973,37 @@ function bindUI() {
     updateRisControlVisibility();
     updateRisConfigPreview();
   });
+
+  if (!ui.ccConfigSource) console.error("ui.ccConfigSource is missing");
+  if (ui.ccConfigSource) {
+    ui.ccConfigSource.addEventListener("change", updateCcConfigSourceVisibility);
+  }
+  if (!ui.ccCsiType) console.error("ui.ccCsiType is missing");
+  if (ui.ccCsiType) {
+    ui.ccCsiType.addEventListener("change", updateCcCsiVisibility);
+  }
+  if (!ui.ccStart) console.error("ui.ccStart is missing");
+  if (ui.ccStart) ui.ccStart.addEventListener("click", submitCcJob);
+  if (!ui.ccRefresh) console.error("ui.ccRefresh is missing");
+  if (ui.ccRefresh) ui.ccRefresh.addEventListener("click", refreshCcJobs);
+  if (!ui.ccLoadResults) console.error("ui.ccLoadResults is missing");
+  if (ui.ccLoadResults) ui.ccLoadResults.addEventListener("click", () => loadCcResults(ui.ccRunSelect.value));
+  if (!ui.ccRunSelect) console.error("ui.ccRunSelect is missing");
+  if (ui.ccRunSelect) ui.ccRunSelect.addEventListener("change", () => loadCcResults(ui.ccRunSelect.value));
+  if (!ui.ccPlotTabs) console.error("ui.ccPlotTabs is missing");
+  if (ui.ccPlotTabs) {
+    ui.ccPlotTabs.addEventListener("click", (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLButtonElement)) return;
+      const file = target.dataset.plot;
+      if (!file) return;
+      state.cc.selectedPlot = file;
+      ui.ccPlotTabs.querySelectorAll(".plot-tab-button").forEach((btn) => {
+        btn.classList.toggle("is-active", btn === target);
+      });
+      renderCcPlotSingle(state.cc.activeRunId || ui.ccRunSelect.value, file);
+    });
+  }
 
   const risPreviewInputs = [
     ui.risConfigPath,
@@ -3268,9 +4186,12 @@ updateRisConfigSourceVisibility();
 updateRisControlVisibility();
 updateRisConfigPreview();
 updateRisPreview();
+updateCcConfigSourceVisibility();
+updateCcCsiVisibility();
 setMainTab("sim");
-fetchConfigs().then(fetchRuns).then(fetchBuiltinScenes).then(refreshRisJobs);
+fetchConfigs().then(fetchRuns).then(fetchBuiltinScenes).then(() => Promise.all([refreshRisJobs(), refreshCcJobs()]));
 setInterval(() => {
   refreshJobs();
   refreshRisJobs();
+  refreshCcJobs();
 }, 3000);

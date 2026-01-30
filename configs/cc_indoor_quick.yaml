@@ -1,0 +1,94 @@
+project:
+  name: RIS_SIONNA
+  description: "Channel charting indoor quick demo"
+
+runtime:
+  prefer_gpu: true
+  force_cpu: false
+  tensorflow_import: auto
+  disable_pythreejs: true
+  mitsuba_variant: auto
+
+simulation:
+  frequency_hz: 28.0e9
+  max_depth: 3
+  max_num_paths_per_src: 80000
+  samples_per_src: 80000
+  los: true
+  specular_reflection: true
+  diffuse_reflection: false
+  refraction: false
+  diffraction: false
+
+scene:
+  type: builtin
+  builtin: box
+  export_mesh: true
+  tx:
+    name: tx
+    position: [-5.0, -5.0, 2.5]
+    look_at: [5.0, 5.0, 1.5]
+    power_dbm: 30.0
+  rx:
+    name: rx
+    position: [5.0, 5.0, 1.5]
+  arrays:
+    tx:
+      num_rows: 1
+      num_cols: 1
+      vertical_spacing: 0.5
+      horizontal_spacing: 0.5
+      pattern: iso
+      polarization: V
+    rx:
+      num_rows: 1
+      num_cols: 1
+      vertical_spacing: 0.5
+      horizontal_spacing: 0.5
+      pattern: iso
+      polarization: V
+
+radio_map:
+  enabled: false
+
+render:
+  enabled: false
+
+channel_charting:
+  enabled: true
+  role: downlink
+  trajectory:
+    type: straight
+    start: [-4.0, -4.0, 1.5]
+    end: [6.0, 6.0, 1.5]
+    num_steps: 80
+    dt_s: 0.1
+  csi:
+    type: cfr
+    ofdm:
+      num_subcarriers: 32
+      subcarrier_spacing_hz: 150e3
+  features:
+    type: r2m
+    window: 3
+    r2m:
+      beamspace: false
+      mode: diag
+  model:
+    type: autoencoder
+    embedding_dim: 2
+    hidden_dims: [64, 32]
+    epochs: 150
+    learning_rate: 1e-3
+    adjacency_weight: 0.2
+    normalize_features: true
+  tracking:
+    enabled: true
+    method: ema
+    alpha: 0.25
+  evaluation:
+    align: affine
+    dims: 2
+
+output:
+  base_dir: outputs

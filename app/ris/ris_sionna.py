@@ -30,6 +30,7 @@ _PHASE_PROFILE_KINDS = {
     "manual",
     "flat",
     "uniform",
+    "beam_spread",
 }
 
 def _assign_profile_values(profile: Any, values: Any) -> None:
@@ -380,7 +381,12 @@ def _tf_device_for_variant() -> Optional[str]:
     return "/CPU:0"
 
 
-def _apply_phase_profile(ris: Any, profile: Dict[str, Any], scene: Any | None = None) -> None:
+def _apply_phase_profile(
+    ris: Any,
+    profile: Dict[str, Any],
+    scene: Any | None = None,
+    geometry: Optional[Dict[str, Any]] = None,
+) -> None:
     kind = profile.get("kind") or "flat"
     if kind not in _PHASE_PROFILE_KINDS:
         raise ValueError(f"Unsupported RIS profile kind '{kind}'")
@@ -397,6 +403,7 @@ def _apply_phase_profile(ris: Any, profile: Dict[str, Any], scene: Any | None = 
         except Exception:
             pass
 
+    amplitude_mask = None
     if kind in {"flat", "uniform"}:
         import tensorflow as tf
 
@@ -443,6 +450,54 @@ def _apply_phase_profile(ris: Any, profile: Dict[str, Any], scene: Any | None = 
             phase_values = _quantize_phase_values(ris.phase_profile.values, profile.get("phase_bits"))
             _assign_profile_values(ris.phase_profile, tf.cast(phase_values, ris.phase_profile.values.dtype))
 
+    if kind == "beam_spread":
+        import tensorflow as tf
+
+        bw_deg = float(profile.get("beamwidth_deg", profile.get("spread_deg", 10.0)))
+        if bw_deg <= 0.0:
+            raise ValueError("beam_spread beamwidth_deg must be > 0")
+        frequency_hz = None
+        if scene is not None:
+            frequency_hz = getattr(scene, "frequency", None)
+        if frequency_hz is None:
+            raise ValueError("beam_spread requires scene.frequency to compute wavelength")
+        wavelength = _SPEED_OF_LIGHT_M_S / float(frequency_hz)
+        bw_rad = np.deg2rad(bw_deg)
+        target_aperture = 0.886 * wavelength / bw_rad
+        dx = None
+        dy = None
+        if geometry:
+            dx = geometry.get("dx_m") or geometry.get("dx")
+            dy = geometry.get("dy_m") or geometry.get("dy")
+        if dx is None or dy is None:
+            logger.warning("beam_spread missing dx/dy; using full aperture.")
+        else:
+            dx = float(dx)
+            dy = float(dy)
+            nx_eff = max(1, min(ris.num_cols, int(round(target_aperture / dx)) + 1))
+            ny_eff = max(1, min(ris.num_rows, int(round(target_aperture / dy)) + 1))
+            mask = np.zeros((ris.num_rows, ris.num_cols), dtype=float)
+            cx = (ris.num_cols - 1) / 2.0
+            cy = (ris.num_rows - 1) / 2.0
+            hx = (nx_eff - 1) / 2.0
+            hy = (ny_eff - 1) / 2.0
+            for iy in range(ris.num_rows):
+                for ix in range(ris.num_cols):
+                    if abs(ix - cx) <= hx + 1e-6 and abs(iy - cy) <= hy + 1e-6:
+                        mask[iy, ix] = 1.0
+            amplitude_mask = np.tile(mask[None, :, :], (ris.num_modes, 1, 1))
+
+        if sources and targets:
+            ris.phase_gradient_reflector(sources, targets)
+        else:
+            device = _tf_device_for_variant()
+            zeros = np.zeros((ris.num_modes, ris.num_rows, ris.num_cols), dtype=float)
+            if device:
+                with tf.device(device):
+                    _assign_profile_values(ris.phase_profile, tf.cast(zeros, ris.phase_profile.values.dtype))
+            else:
+                _assign_profile_values(ris.phase_profile, tf.cast(zeros, ris.phase_profile.values.dtype))
+
     amplitude = profile.get("amplitude")
     if amplitude is not None:
         import tensorflow as tf
@@ -460,6 +515,17 @@ def _apply_phase_profile(ris: Any, profile: Dict[str, Any], scene: Any | None = 
                 _assign_profile_values(ris.amplitude_profile, tf.cast(values, ris.amplitude_profile.values.dtype))
         else:
             _assign_profile_values(ris.amplitude_profile, tf.cast(values, ris.amplitude_profile.values.dtype))
+
+    if amplitude_mask is not None:
+        import tensorflow as tf
+
+        mask_values = tf.cast(amplitude_mask, ris.amplitude_profile.values.dtype)
+        device = _tf_device_for_variant()
+        if device:
+            with tf.device(device):
+                _assign_profile_values(ris.amplitude_profile, ris.amplitude_profile.values * mask_values)
+        else:
+            _assign_profile_values(ris.amplitude_profile, ris.amplitude_profile.values * mask_values)
 
     mode_powers = profile.get("mode_powers")
     if mode_powers is not None:
@@ -589,7 +655,7 @@ def add_ris_from_config(scene: Any, cfg: Dict[str, Any]) -> Optional[List[Dict[s
             profile_cfg = obj_cfg.get("profile", {}) or {}
             ris = _build_ris_object(obj_cfg)
             scene.add(ris)
-            _apply_phase_profile(ris, profile_cfg, scene=scene)
+            _apply_phase_profile(ris, profile_cfg, scene=scene, geometry=geometry)
             _warn_if_backside(ris, scene)
             summary = _ris_runtime_summary(ris, profile_cfg, geometry=geometry)
             summaries.append(summary)
