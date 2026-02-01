@@ -28,6 +28,7 @@ python -m app cc run --config configs/cc_indoor_quick.yaml
 - Choose a preset or config file
 - Adjust trajectory/CSI/features/model settings
 - Run and view results
+Note: if you want the YAML model params to apply, leave “Override model/training params” unchecked.
 
 ## Configuration
 Channel charting config lives under `channel_charting:` in YAML configs. See presets:
@@ -147,6 +148,7 @@ Implemented in `app/cc/model.py`.
 
 Currently supported:
 - `autoencoder`: MLP encoder/decoder
+- `dissimilarity_mds`: dissimilarity-metric charting (ADP cosine + MDS)
 
 Loss:
 - reconstruction + adjacency loss (temporal smoothness)
@@ -160,6 +162,28 @@ model:
   learning_rate: 1e-3
   adjacency_weight: 0.2
 ```
+
+### Dissimilarity-metric charting
+This option follows a dissimilarity-metric CC workflow and is useful when the autoencoder
+does not produce stable 3D embeddings. It computes an Angular-Delay Profile (ADP) from
+CSI, builds a cosine dissimilarity matrix, optionally fuses time, applies geodesic
+shortest paths (kNN graph), then runs classical MDS to obtain chart coordinates.
+
+```yaml
+model:
+  type: dissimilarity_mds
+dissimilarity:
+  metric: adp_cosine
+  fuse_time: true
+  time_window_s: 2.0
+  time_weight: 0.35
+  use_geodesic: true
+  knn: 10
+  max_taps: null
+  dims: 3
+```
+
+3D plotting: when the embedding has 3 dimensions, charts render as 3D plots.
 
 ## Tracking / smoothing
 Implemented in `app/cc/tracking.py`.
@@ -228,4 +252,3 @@ Each run writes to `outputs/<run_id>/`:
 - `app/cc/tracking.py` — smoothing
 - `app/cc/eval.py` — alignment + metrics
 - `app/cc/plots.py` — chart/trajectory plots
-

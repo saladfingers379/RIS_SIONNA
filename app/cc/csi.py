@@ -115,6 +115,26 @@ def _coerce_to_shape(arr: np.ndarray, target_shape: tuple[int, ...]) -> np.ndarr
     return out
 
 
+def _force_cfr_shape(h: np.ndarray, num_rx: int, num_tx: int, num_freq: int) -> np.ndarray:
+    # Collapse any unexpected middle dimensions into a single antenna dimension.
+    if h.ndim == 0:
+        return np.zeros((num_rx, 1, num_tx, 1, num_freq), dtype=np.complex64)
+    if h.shape[-1] != num_freq:
+        # If last dim is not frequency, try to move a matching dim to the end.
+        for idx, size in enumerate(h.shape):
+            if size == num_freq:
+                h = np.moveaxis(h, idx, -1)
+                break
+    flat = h.reshape(-1, h.shape[-1])
+    # Best effort: assign first dimension to num_rx and num_tx if possible.
+    total_links = flat.shape[0]
+    rx = max(1, num_rx)
+    tx = max(1, num_tx)
+    ant = max(1, total_links // (rx * tx))
+    trimmed = flat[: rx * tx * ant].reshape(rx, ant, tx, 1, h.shape[-1])
+    return trimmed
+
+
 def _build_subcarrier_frequencies(cfg: Dict[str, Any], fallback_center: float) -> Tuple[np.ndarray, float]:
     ofdm = cfg.get("ofdm", {}) if isinstance(cfg, dict) else {}
     num_sc = int(ofdm.get("num_subcarriers", 64))
@@ -220,7 +240,10 @@ def compute_csi(
             else:
                 h = _paths_cfr_from_a_tau(paths, freqs, num_rx, rx_ant, num_tx, tx_ant)
             if target_shape is not None:
-                h = _coerce_to_shape(h, target_shape)
+                try:
+                    h = _coerce_to_shape(h, target_shape)
+                except Exception:
+                    h = _force_cfr_shape(h, num_rx, num_tx, freqs.shape[0])
             snapshots.append(h)
         elif csi_type == "cir":
             cir_cfg = csi_cfg.get("cir", {})

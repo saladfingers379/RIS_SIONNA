@@ -13,6 +13,7 @@ from app.cc.csi import compute_csi
 from app.cc.eval import evaluate_chart
 from app.cc.features import extract_features
 from app.cc.model import train_autoencoder
+from app.cc.dissimilarity import dissimilarity_charting
 from app.cc.plots import plot_chart, plot_feature_summary, plot_losses, plot_trajectory_compare
 from app.cc.tracking import smooth_track
 from app.cc.trajectory import generate_trajectory
@@ -132,10 +133,14 @@ def run_channel_charting(config_path: str) -> Path:
         _write_progress(progress_path, 4, len(steps), "running", steps[4])
         model_cfg = cfg.get("channel_charting", {}).get("model", {})
         model_type = str(model_cfg.get("type", "autoencoder"))
-        if model_type != "autoencoder":
-            raise ValueError("Only autoencoder model is supported in MVP")
-        model_out = train_autoencoder(features, model_cfg)
-        embeddings = model_out["embeddings"]
+        model_out = {}
+        if model_type == "dissimilarity_mds":
+            dis_cfg = cfg.get("channel_charting", {}).get("dissimilarity", {})
+            embeddings, dis_meta = dissimilarity_charting(csi, dis_cfg)
+            model_out["dissimilarity"] = dis_meta
+        else:
+            model_out = train_autoencoder(features, model_cfg)
+            embeddings = model_out["embeddings"]
         np.savez_compressed(
             data_dir / "chart.npz",
             embeddings=embeddings,
@@ -188,6 +193,8 @@ def run_channel_charting(config_path: str) -> Path:
             "path": str(output_dir / "config.yaml"),
         },
     }
+    if model_out.get("dissimilarity"):
+        summary["metrics"]["dissimilarity"] = model_out["dissimilarity"]
     save_json(output_dir / "summary.json", summary)
 
     np.savez_compressed(

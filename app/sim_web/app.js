@@ -185,6 +185,7 @@ const ui = {
   ccEpochs: document.getElementById("ccEpochs"),
   ccLr: document.getElementById("ccLr"),
   ccAdjWeight: document.getElementById("ccAdjWeight"),
+  ccOverrideModel: document.getElementById("ccOverrideModel"),
   ccTrackingEnabled: document.getElementById("ccTrackingEnabled"),
   ccTrackingAlpha: document.getElementById("ccTrackingAlpha"),
   ccEvalDims: document.getElementById("ccEvalDims"),
@@ -2295,16 +2296,18 @@ async function submitCcJob() {
   }
   cc.features = features;
 
-  const model = {};
-  const embedDim = readNumber(ui.ccEmbedDim);
-  const epochs = readNumber(ui.ccEpochs);
-  const lr = readNumber(ui.ccLr);
-  const adj = readNumber(ui.ccAdjWeight);
-  if (embedDim !== null) model.embedding_dim = Math.round(embedDim);
-  if (epochs !== null) model.epochs = Math.round(epochs);
-  if (lr !== null) model.learning_rate = lr;
-  if (adj !== null) model.adjacency_weight = adj;
-  cc.model = model;
+  if (ui.ccOverrideModel && ui.ccOverrideModel.checked) {
+    const model = {};
+    const embedDim = readNumber(ui.ccEmbedDim);
+    const epochs = readNumber(ui.ccEpochs);
+    const lr = readNumber(ui.ccLr);
+    const adj = readNumber(ui.ccAdjWeight);
+    if (embedDim !== null) model.embedding_dim = Math.round(embedDim);
+    if (epochs !== null) model.epochs = Math.round(epochs);
+    if (lr !== null) model.learning_rate = lr;
+    if (adj !== null) model.adjacency_weight = adj;
+    cc.model = model;
+  }
 
   const tracking = {};
   if (ui.ccTrackingEnabled) tracking.enabled = ui.ccTrackingEnabled.checked;

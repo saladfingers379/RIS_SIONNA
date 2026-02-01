@@ -20,16 +20,25 @@ def plot_chart(
     if coords.size == 0:
         return None
     fig = plt.figure(figsize=(6, 5))
-    ax = fig.add_subplot(1, 1, 1)
-    if coords.shape[1] >= 2:
+    if coords.shape[1] >= 3:
+        ax = fig.add_subplot(1, 1, 1, projection="3d")
         c = color if color is not None else np.arange(coords.shape[0])
-        sc = ax.scatter(coords[:, 0], coords[:, 1], c=c, cmap="viridis", s=14)
-        fig.colorbar(sc, ax=ax, label="time")
-        if gt is not None and gt.shape[1] >= 2:
-            ax.plot(gt[:, 0], gt[:, 1], color="#e76f51", linewidth=1.5, label="GT")
+        ax.scatter(coords[:, 0], coords[:, 1], coords[:, 2], c=c, cmap="viridis", s=12)
+        if gt is not None and gt.shape[1] >= 3:
+            ax.plot(gt[:, 0], gt[:, 1], gt[:, 2], color="#e76f51", linewidth=1.5, label="GT")
             ax.legend(loc="best")
+        ax.set_zlabel("dim-3")
     else:
-        ax.plot(coords[:, 0])
+        ax = fig.add_subplot(1, 1, 1)
+        if coords.shape[1] >= 2:
+            c = color if color is not None else np.arange(coords.shape[0])
+            sc = ax.scatter(coords[:, 0], coords[:, 1], c=c, cmap="viridis", s=14)
+            fig.colorbar(sc, ax=ax, label="time")
+            if gt is not None and gt.shape[1] >= 2:
+                ax.plot(gt[:, 0], gt[:, 1], color="#e76f51", linewidth=1.5, label="GT")
+                ax.legend(loc="best")
+        else:
+            ax.plot(coords[:, 0])
     ax.set_title(title)
     ax.set_xlabel("dim-1")
     ax.set_ylabel("dim-2")

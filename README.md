@@ -47,6 +47,9 @@ pip install -e .
 ## Channel Charting / UE Tracking
 Full documentation lives in `docs/CHANNEL_CHARTING.md`.
 
+## Docs housekeeping
+Legacy/internal docs are archived under `docs/_archive/`.
+
 ## Dashboard (Streamlit)
 ```bash
 pip install -e ".[dashboard]"

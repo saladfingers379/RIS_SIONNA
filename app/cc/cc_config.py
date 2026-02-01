@@ -67,6 +67,16 @@ DEFAULT_CHANNEL_CHARTING = {
         "normalize_features": True,
         "seed": 7,
     },
+    "dissimilarity": {
+        "metric": "adp_cosine",
+        "fuse_time": True,
+        "time_window_s": 2.0,
+        "time_weight": 0.35,
+        "use_geodesic": True,
+        "knn": 10,
+        "max_taps": None,
+        "dims": 2,
+    },
     "tracking": {
         "enabled": True,
         "method": "ema",
