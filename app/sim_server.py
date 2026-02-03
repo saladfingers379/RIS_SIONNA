@@ -148,12 +148,28 @@ class SimRequestHandler(BaseHTTPRequestHandler):
         scenes = sorted(set(scenes))
         return {"scenes": scenes}
 
+    def _list_file_scenes(self) -> Dict[str, Any]:
+        output = []
+        try:
+            base = Path("scenes")
+            if not base.exists():
+                return {"scenes": output}
+            for scene_xml in sorted(base.glob("**/scene.xml")):
+                rel = scene_xml.as_posix()
+                label = scene_xml.parent.name or rel
+                output.append({"label": label, "path": rel})
+        except Exception:
+            output = []
+        return {"scenes": output}
+
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
         if parsed.path.startswith("/api/configs"):
             return _json_response(self, self._list_configs())
         if parsed.path.startswith("/api/scenes"):
             return _json_response(self, self._list_scenes())
+        if parsed.path.startswith("/api/scene_files"):
+            return _json_response(self, self._list_file_scenes())
         if parsed.path.startswith("/api/progress/"):
             run_id = parsed.path.split("/", 3)[3]
             run_dir = self.server.output_root / run_id

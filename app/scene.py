@@ -30,6 +30,19 @@ MATERIAL_LIBRARY = {
     "wood": {"itu_type": "wood", "thickness": 0.05},
 }
 
+ITU_NAME_MAP = {
+    "concrete": "itu_concrete",
+    "glass": "itu_glass",
+    "metal": "itu_metal",
+    "wood": "itu_wood",
+    "brick": "itu_brick",
+    "marble": "itu_marble",
+    "dry_earth": "itu_concrete",
+    "very_dry_ground": "itu_concrete",
+    "medium_dry_ground": "itu_concrete",
+    "wet_ground": "itu_concrete",
+}
+
 
 def _hash_scene_config(cfg: Dict[str, Any]) -> str:
     payload = json.dumps(cfg, sort_keys=True).encode("utf-8")
@@ -89,14 +102,25 @@ def _material_props(name: str) -> Dict[str, Any]:
     return {"itu_type": props["itu_type"], "thickness": props["thickness"]}
 
 
-def _itu_bsdf_xml(mat_name: str, bsdf_id: str) -> str:
-    props = _material_props(mat_name)
+def _itu_material_name(mat_name: str) -> str:
+    itu_name = ITU_NAME_MAP.get(mat_name, None)
+    if itu_name is None and mat_name.startswith("itu_"):
+        itu_name = mat_name
+    return itu_name or "itu_concrete"
+
+
+def _itu_bsdf_def_xml(itu_name: str) -> str:
     return (
-        f"  <bsdf type=\"itu_radio_material\" id=\"{bsdf_id}\">\n"
-        f"    <string name=\"type\" value=\"{props['itu_type']}\"/>\n"
-        f"    <float name=\"thickness\" value=\"{props['thickness']}\"/>\n"
+        f"  <bsdf type=\"twosided\" id=\"mat-{itu_name}\">\n"
+        "    <bsdf type=\"diffuse\">\n"
+        "      <rgb name=\"reflectance\" value=\"0.5\"/>\n"
+        "    </bsdf>\n"
         "  </bsdf>\n"
     )
+
+
+def _itu_bsdf_ref_xml(itu_name: str) -> str:
+    return f'    <ref id="mat-{itu_name}" name="bsdf"/>\n'
 
 
 def _write_procedural_scene_xml(path: Path, spec: Dict[str, Any]) -> None:
@@ -104,6 +128,10 @@ def _write_procedural_scene_xml(path: Path, spec: Dict[str, Any]) -> None:
     ground_size = ground.get("size", [160.0, 160.0])
     ground_elev = ground.get("elevation", 0.0)
     ground_mat = ground.get("material", "concrete")
+    itu_names = {_itu_material_name(ground_mat)}
+    for box in spec.get("boxes", []):
+        itu_names.add(_itu_material_name(box.get("material", "concrete")))
+    bsdf_defs = "".join(_itu_bsdf_def_xml(name) for name in sorted(itu_names))
     shapes = []
     shapes.append(
         f"""
@@ -112,7 +140,7 @@ def _write_procedural_scene_xml(path: Path, spec: Dict[str, Any]) -> None:
       <scale x=\"{ground_size[0]}\" y=\"{ground_size[1]}\" z=\"1\"/>
       <translate x=\"0\" y=\"0\" z=\"{ground_elev}\"/>
     </transform>
-{_itu_bsdf_xml(ground_mat, "rm-ground")}
+{_itu_bsdf_ref_xml(_itu_material_name(ground_mat))}
   </shape>
 """
     )
@@ -127,13 +155,14 @@ def _write_procedural_scene_xml(path: Path, spec: Dict[str, Any]) -> None:
       <scale x=\"{size[0]}\" y=\"{size[1]}\" z=\"{size[2]}\"/>
       <translate x=\"{center[0]}\" y=\"{center[1]}\" z=\"{center[2]}\"/>
     </transform>
-{_itu_bsdf_xml(mat_name, f"rm-box-{idx}")}
+{_itu_bsdf_ref_xml(_itu_material_name(mat_name))}
   </shape>
 """
         )
     xml = (
         "<scene version=\"3.0.0\">\n"
         "  <integrator type=\"path\"/>\n"
+        + bsdf_defs
         + "".join(shapes)
         + "\n</scene>\n"
     )
@@ -141,26 +170,17 @@ def _write_procedural_scene_xml(path: Path, spec: Dict[str, Any]) -> None:
 
 
 def _apply_materials(scene, spec: Dict[str, Any]) -> None:
-    try:
-        from sionna.rt.radio_materials import ITURadioMaterial  # pylint: disable=import-error
-    except Exception:
-        return
-
-    material_cache = {}
-
-    def _get_material(name: str):
-        if name in material_cache:
-            return material_cache[name]
-        props = MATERIAL_LIBRARY.get(name, MATERIAL_LIBRARY["concrete"])
-        mat = ITURadioMaterial(name=f"itu-{name}", itu_type=props["itu_type"], thickness=props["thickness"])
-        material_cache[name] = mat
-        return mat
+    def _get_material_name(name: str) -> str:
+        itu_name = ITU_NAME_MAP.get(name, None)
+        if itu_name is None and name.startswith("itu_"):
+            itu_name = name
+        return itu_name or "itu_concrete"
 
     ground = spec.get("ground", {})
     ground_mat = ground.get("material", "concrete")
     try:
         obj = scene.get("ground")
-        obj.radio_material = _get_material(ground_mat)
+        obj.radio_material = _get_material_name(ground_mat)
     except Exception:
         pass
 
@@ -168,7 +188,7 @@ def _apply_materials(scene, spec: Dict[str, Any]) -> None:
         mat_name = box.get("material", "concrete")
         try:
             obj = scene.get(f"box-{idx}")
-            obj.radio_material = _get_material(mat_name)
+            obj.radio_material = _get_material_name(mat_name)
         except Exception:
             continue
 
@@ -199,15 +219,37 @@ def _build_file_scene(rt, scene_cfg: Dict[str, Any], cfg: Optional[Dict[str, Any
         if "itu_radio_material" not in xml_text and "itu-radio-material" not in xml_text:
             raise
         logger.warning(
-            "itu_radio_material plugin not found; falling back to diffuse bsdf for '%s'. "
+            "itu-radio-material plugin not found; normalizing name or falling back to diffuse for '%s'. "
             "Results will not match radio-material propagation.",
             filename,
         )
+        # Normalize legacy plugin name if present.
+        xml_text = re.sub(r"itu[_-]radio_material", "itu-radio-material", xml_text, flags=re.IGNORECASE)
         # Replace any ITU radio material blocks with a diffuse placeholder.
-        diffuse_block = '<bsdf type="diffuse"><rgb name="reflectance" value="0.5"/></bsdf>'
+        def _diffuse_block(match: re.Match) -> str:
+            attrs = match.group("attrs") or ""
+            id_match = re.search(r'\bid\s*=\s*"([^"]+)"', attrs)
+            id_attr = f' id="{id_match.group(1)}"' if id_match else ""
+            return f'<bsdf type="diffuse"{id_attr}><rgb name="reflectance" value="0.5"/></bsdf>'
+
+        pattern = r"<bsdf\s+type=\"itu-radio-material\"(?P<attrs>[^>]*)>[\s\S]*?</bsdf>"
+        replaced = re.sub(pattern, _diffuse_block, xml_text, flags=re.IGNORECASE)
+        if replaced == xml_text:
+            # Fallback: handle variants with extra attributes/whitespace.
+            alt_pattern = r"<bsdf\s+type=\"itu-radio-material\"(?P<attrs>[^>]*)>[\s\S]*?</bsdf>"
+            replaced = re.sub(alt_pattern, _diffuse_block, xml_text, flags=re.IGNORECASE)
+        xml_text = replaced
+        # Make relative asset paths absolute for the cached copy.
+        base_dir = xml_path.parent
+        def _abspath(match: re.Match) -> str:
+            path = match.group("path")
+            if path.startswith("/") or path.startswith("${"):
+                return match.group(0)
+            abs_path = (base_dir / path).resolve()
+            return f'<string name="filename" value="{abs_path}"/>'
         xml_text = re.sub(
-            r"<bsdf\\s+type=\\\"itu[_-]radio_material\\\"[\\s\\S]*?</bsdf>",
-            diffuse_block,
+            r'<string\s+name=\"filename\"\s+value=\"(?P<path>[^\"]+)\"\s*/?>',
+            _abspath,
             xml_text,
             flags=re.IGNORECASE,
         )
@@ -215,7 +257,32 @@ def _build_file_scene(rt, scene_cfg: Dict[str, Any], cfg: Optional[Dict[str, Any
         cache_root.mkdir(parents=True, exist_ok=True)
         cache_path = cache_root / f"scene_{_hash_text(xml_text)}.xml"
         cache_path.write_text(xml_text, encoding="utf-8")
-        return rt.load_scene(str(cache_path))
+        scene = rt.load_scene(str(cache_path))
+        _apply_default_radio_materials(scene)
+        return scene
+
+
+def _apply_default_radio_materials(scene, default_name: str = "concrete") -> None:
+    """Ensure all objects have a radio material when ITU plugin is missing."""
+    try:
+        # Ensure every object has a concrete (non-placeholder) material.
+        fallback_name = ITU_NAME_MAP.get(default_name, "itu_concrete")
+        fallback = scene.get(fallback_name)
+        if fallback is None:
+            logger.warning("Default ITU material '%s' not found in scene.", fallback_name)
+            return
+        failed = []
+        for obj in scene.objects.values():
+            try:
+                mat = obj.radio_material
+                if mat is None or getattr(mat, "is_placeholder", False):
+                    obj.radio_material = fallback.name
+            except Exception:
+                failed.append(obj.name)
+        if failed:
+            logger.warning("Failed to assign default radio material to objects: %s", failed)
+    except Exception:
+        return
 
 
 def _build_procedural_scene(rt, scene_cfg: Dict[str, Any], cfg: Dict[str, Any]):
@@ -229,8 +296,7 @@ def _build_procedural_scene(rt, scene_cfg: Dict[str, Any], cfg: Dict[str, Any]):
         try:
             xml_text = xml_path.read_text(encoding="utf-8")
             if (
-                "itu_radio_material" not in xml_text
-                or "rm-" not in xml_text
+                "mat-itu_" not in xml_text
                 or "rotate x=\"1\" angle=\"-90\"" in xml_text
             ):
                 rewrite = True
@@ -270,6 +336,9 @@ def build_scene(cfg: Dict[str, Any], mitsuba_variant: Optional[str] = None):
         scene = builder(rt, scene_cfg, cfg)
     else:
         scene = builder(rt, scene_cfg, cfg)
+    # Ensure file scenes always have radio materials to satisfy Sionna RT checks.
+    if scene_type == "file":
+        _apply_default_radio_materials(scene)
 
     # Frequency setup
     sim_cfg = cfg.get("simulation", {})

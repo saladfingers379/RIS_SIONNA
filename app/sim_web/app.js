@@ -20,11 +20,8 @@ const state = {
   heatmap: null,
   manifest: null,
   selectedPath: null,
-  sceneSourceRunId: null,
   sceneOverride: null,
   sceneOverrideDirty: false,
-  meshSourceRunId: null,
-  meshSourceBuiltin: null,
   runInfo: null,
   runs: [],
   runConfigs: {},
@@ -63,8 +60,7 @@ const ui = {
   snapshot: document.getElementById("snapshot"),
   mainTabStrip: document.getElementById("mainTabStrip"),
   runProfile: document.getElementById("runProfile"),
-  sceneRunSelect: document.getElementById("sceneRunSelect"),
-  meshRunSelect: document.getElementById("meshRunSelect"),
+  sceneSelect: document.getElementById("sceneSelect"),
   runStats: document.getElementById("runStats"),
   txX: document.getElementById("txX"),
   txY: document.getElementById("txY"),
@@ -72,6 +68,7 @@ const ui = {
   txLookX: document.getElementById("txLookX"),
   txLookY: document.getElementById("txLookY"),
   txLookZ: document.getElementById("txLookZ"),
+  txLookAtRis: document.getElementById("txLookAtRis"),
   txYawDeg: document.getElementById("txYawDeg"),
   txPowerDbm: document.getElementById("txPowerDbm"),
   txPattern: document.getElementById("txPattern"),
@@ -212,6 +209,7 @@ const ui = {
   radioMapCenterX: document.getElementById("radioMapCenterX"),
   radioMapCenterY: document.getElementById("radioMapCenterY"),
   radioMapCenterZ: document.getElementById("radioMapCenterZ"),
+  radioMapPlaneZ: document.getElementById("radioMapPlaneZ"),
   radioMapPlotStyle: document.getElementById("radioMapPlotStyle"),
   radioMapPlotMetric: document.getElementById("radioMapPlotMetric"),
   radioMapPlotShowTx: document.getElementById("radioMapPlotShowTx"),
@@ -254,8 +252,15 @@ const ui = {
   toggleHeatmap: document.getElementById("toggleHeatmap"),
   toggleGuides: document.getElementById("toggleGuides"),
   toggleRisFocus: document.getElementById("toggleRisFocus"),
-  meshRotation: document.getElementById("meshRotation"),
-  meshRotationLabel: document.getElementById("meshRotationLabel"),
+  toggleRisFront: document.getElementById("toggleRisFront"),
+  meshRotationX: document.getElementById("meshRotationX"),
+  meshRotationXLabel: document.getElementById("meshRotationXLabel"),
+  meshRotationY: document.getElementById("meshRotationY"),
+  meshRotationYLabel: document.getElementById("meshRotationYLabel"),
+  meshRotationZ: document.getElementById("meshRotationZ"),
+  meshRotationZLabel: document.getElementById("meshRotationZLabel"),
+  meshRotationSnippet: document.getElementById("meshRotationSnippet"),
+  meshRotationCopy: document.getElementById("meshRotationCopy"),
   heatmapRotation: document.getElementById("heatmapRotation"),
   heatmapRotationLabel: document.getElementById("heatmapRotationLabel"),
   heatmapScale: document.getElementById("heatmapScale"),
@@ -468,6 +473,7 @@ function snapshotUiState() {
       centerX: readText(ui.radioMapCenterX),
       centerY: readText(ui.radioMapCenterY),
       centerZ: readText(ui.radioMapCenterZ),
+      planeZ: readText(ui.radioMapPlaneZ),
       plotStyle: readText(ui.radioMapPlotStyle),
       plotMetric: readText(ui.radioMapPlotMetric),
       showTx: readCheck(ui.radioMapPlotShowTx),
@@ -488,11 +494,13 @@ function snapshotUiState() {
       lookX: readText(ui.txLookX),
       lookY: readText(ui.txLookY),
       lookZ: readText(ui.txLookZ),
+      lookAtRis: readCheck(ui.txLookAtRis),
       yawDeg: readText(ui.txYawDeg),
       powerDbm: readText(ui.txPowerDbm),
       pattern: readText(ui.txPattern),
       polarization: readText(ui.txPolarization),
       showDirection: readCheck(ui.showTxDirection),
+      showRisFront: readCheck(ui.toggleRisFront),
     },
     ris: {
       enabled: readCheck(ui.simRisEnabled),
@@ -545,6 +553,7 @@ function applyUiState(snapshot) {
     setText(ui.radioMapCenterX, snapshot.radio.centerX);
     setText(ui.radioMapCenterY, snapshot.radio.centerY);
     setText(ui.radioMapCenterZ, snapshot.radio.centerZ);
+    setText(ui.radioMapPlaneZ, snapshot.radio.planeZ);
     setText(ui.radioMapPlotStyle, snapshot.radio.plotStyle);
     setText(ui.radioMapPlotMetric, snapshot.radio.plotMetric);
     setCheck(ui.radioMapPlotShowTx, snapshot.radio.showTx);
@@ -564,11 +573,13 @@ function applyUiState(snapshot) {
     setText(ui.txLookX, snapshot.tx.lookX);
     setText(ui.txLookY, snapshot.tx.lookY);
     setText(ui.txLookZ, snapshot.tx.lookZ);
+    setCheck(ui.txLookAtRis, snapshot.tx.lookAtRis);
     setText(ui.txYawDeg, snapshot.tx.yawDeg);
     setText(ui.txPowerDbm, snapshot.tx.powerDbm);
     setText(ui.txPattern, snapshot.tx.pattern);
     setText(ui.txPolarization, snapshot.tx.polarization);
     setCheck(ui.showTxDirection, snapshot.tx.showDirection);
+    setCheck(ui.toggleRisFront, snapshot.tx.showRisFront);
   }
   if (snapshot.ris) {
     setCheck(ui.simRisEnabled, snapshot.ris.enabled);
@@ -608,6 +619,14 @@ function applyUiState(snapshot) {
   refreshHeatmap();
 }
 
+function _degToRad(deg) {
+  return (deg * Math.PI) / 180.0;
+}
+
+function _radToDeg(rad) {
+  return (rad * 180.0) / Math.PI;
+}
+
 function clearRisList() {
   if (!ui.risList) return;
   ui.risList.innerHTML = "";
@@ -629,9 +648,9 @@ function addRisItem(initial) {
   setVal("posY", pos[1]);
   setVal("posZ", pos[2]);
   const ori = initial?.orientation || [0, 0, 0];
-  setVal("oriX", ori[0]);
-  setVal("oriY", ori[1]);
-  setVal("oriZ", ori[2]);
+  setVal("oriX", _radToDeg(ori[0]));
+  setVal("oriY", _radToDeg(ori[1]));
+  setVal("oriZ", _radToDeg(ori[2]));
   const look = initial?.look_at || [];
   if (look.length >= 3) {
     setVal("lookX", look[0]);
@@ -741,11 +760,12 @@ function readRisItems() {
       readNum(field("lookY")),
       readNum(field("lookZ")),
     ];
-    const orientation = [
+    const orientationDeg = [
       readNum(field("oriX")),
       readNum(field("oriY")),
       readNum(field("oriZ")),
     ];
+    const orientation = orientationDeg.map((val) => (val === null ? null : _degToRad(val)));
     const obj = {
       name,
       position,
@@ -855,6 +875,7 @@ function applyRisDebugPreset() {
   if (ui.radioMapCenterX) setInputValue(ui.radioMapCenterX, mid[0].toFixed(2));
   if (ui.radioMapCenterY) setInputValue(ui.radioMapCenterY, mid[1].toFixed(2));
   if (ui.radioMapCenterZ) setInputValue(ui.radioMapCenterZ, rx[2].toFixed(2));
+  if (ui.radioMapPlaneZ) setInputValue(ui.radioMapPlaneZ, rx[2].toFixed(2));
   if (ui.radioMapPlotStyle) ui.radioMapPlotStyle.value = "heatmap";
   if (ui.radioMapPlotMetric) ui.radioMapPlotMetric.value = "path_gain";
   if (ui.radioMapDiffToggle) ui.radioMapDiffToggle.checked = false;
@@ -881,6 +902,7 @@ function applyIndoorHighResPreset() {
   if (ui.radioMapCenterX) ui.radioMapCenterX.value = "0.0";
   if (ui.radioMapCenterY) ui.radioMapCenterY.value = "0.0";
   if (ui.radioMapCenterZ) ui.radioMapCenterZ.value = "1.5";
+  if (ui.radioMapPlaneZ) ui.radioMapPlaneZ.value = "1.5";
 
   const tx = [-3.0, -3.0, 1.5];
   const rx = [3.0, 3.0, 1.5];
@@ -942,6 +964,7 @@ function applyCenterMapPreset() {
   if (ui.radioMapCenterX) setInputValue(ui.radioMapCenterX, mid[0].toFixed(2));
   if (ui.radioMapCenterY) setInputValue(ui.radioMapCenterY, mid[1].toFixed(2));
   if (ui.radioMapCenterZ) setInputValue(ui.radioMapCenterZ, mid[2].toFixed(2));
+  if (ui.radioMapPlaneZ) setInputValue(ui.radioMapPlaneZ, mid[2].toFixed(2));
   rebuildScene();
   refreshHeatmap();
   setMeta("Centered radio map on Tx/Rx midpoint");
@@ -1019,14 +1042,14 @@ function getRisItemYaw(index) {
   if (!node) return 0;
   const el = node.querySelector('[data-field="oriZ"]');
   const val = el && el.value !== "" ? parseFloat(el.value) : 0;
-  return Number.isFinite(val) ? val : 0;
+  return Number.isFinite(val) ? _degToRad(val) : 0;
 }
 
 function updateRisItemYaw(index, yawRad) {
   const node = getRisItemNode(index);
   if (!node) return;
   const el = node.querySelector('[data-field="oriZ"]');
-  if (el) el.value = yawRad.toFixed(3);
+  if (el) el.value = _radToDeg(yawRad).toFixed(2);
   ["lookX", "lookY", "lookZ"].forEach((name) => {
     const lookEl = node.querySelector(`[data-field="${name}"]`);
     if (lookEl) lookEl.value = "";
@@ -1125,6 +1148,7 @@ function initViewer() {
     renderer.setSize(container.clientWidth, container.clientHeight);
   });
 
+  updateMeshRotationSnippet();
   animate();
 }
 
@@ -1593,6 +1617,37 @@ function getProfileDefinition() {
   return RUN_PROFILES[ui.runProfile.value] || RUN_PROFILES.cpu_only;
 }
 
+function loadUiSnapshot() {
+  try {
+    const raw = window.localStorage.getItem("sim_ui_snapshot");
+    return raw ? JSON.parse(raw) : null;
+  } catch (err) {
+    return null;
+  }
+}
+
+function saveUiSnapshot(snapshot) {
+  try {
+    window.localStorage.setItem("sim_ui_snapshot", JSON.stringify(snapshot));
+  } catch (err) {
+    // ignore
+  }
+}
+
+function applyUiSnapshot() {
+  const snap = loadUiSnapshot();
+  if (!snap) return;
+  applyUiState(snap);
+}
+
+let _persistTimer = null;
+function schedulePersistUiSnapshot() {
+  if (_persistTimer) window.clearTimeout(_persistTimer);
+  _persistTimer = window.setTimeout(() => {
+    saveUiSnapshot(snapshotUiState());
+  }, 250);
+}
+
 function resolveConfigPath(configName) {
   const match = state.configs.find((cfg) => cfg.name === configName);
   return match ? match.path : `configs/${configName}`;
@@ -1645,10 +1700,12 @@ function applyRadioMapDefaults(config) {
     setInputValue(ui.radioMapCenterX, radio.center[0]);
     setInputValue(ui.radioMapCenterY, radio.center[1]);
     setInputValue(ui.radioMapCenterZ, radio.center[2]);
+    setInputValue(ui.radioMapPlaneZ, radio.center[2]);
   } else {
     setInputValue(ui.radioMapCenterX, null);
     setInputValue(ui.radioMapCenterY, null);
     setInputValue(ui.radioMapCenterZ, null);
+    setInputValue(ui.radioMapPlaneZ, null);
   }
 }
 
@@ -1785,18 +1842,12 @@ async function fetchRuns() {
   const previous = state.runId;
   const previousDiff = ui.radioMapDiffRun ? ui.radioMapDiffRun.value : null;
   ui.runSelect.innerHTML = "";
-  ui.sceneRunSelect.innerHTML = "";
   if (ui.radioMapDiffRun) ui.radioMapDiffRun.innerHTML = "";
   state.runs.forEach((run) => {
     const opt = document.createElement("option");
     opt.value = run.run_id;
     opt.textContent = run.run_id;
     ui.runSelect.appendChild(opt);
-
-    const sceneOpt = document.createElement("option");
-    sceneOpt.value = run.run_id;
-    sceneOpt.textContent = run.run_id;
-    ui.sceneRunSelect.appendChild(sceneOpt);
 
     if (ui.radioMapDiffRun) {
       const diffOpt = document.createElement("option");
@@ -1808,45 +1859,70 @@ async function fetchRuns() {
   if (data.runs.length > 0) {
     state.runId = data.runs.find((r) => r.run_id === previous)?.run_id || data.runs[0].run_id;
     ui.runSelect.value = state.runId;
-    state.sceneSourceRunId = state.sceneSourceRunId || state.runId;
-    ui.sceneRunSelect.value = state.sceneSourceRunId;
     if (ui.radioMapDiffRun) {
       ui.radioMapDiffRun.value = previousDiff || state.runId;
     }
     await loadRun(state.runId);
-    const sceneDetails = await fetchRunDetails(state.sceneSourceRunId);
-    if (!state.sceneOverrideDirty) {
-      state.sceneOverride = sceneDetails && sceneDetails.config ? sceneDetails.config.scene : null;
-    }
   }
 }
 
+function _sceneSelectValue(scene) {
+  if (!scene || typeof scene !== "object") return "builtin:etoile";
+  const type = scene.type || "builtin";
+  if (type === "file" && scene.file) {
+    return `file:${scene.file}`;
+  }
+  if (type === "builtin") {
+    return `builtin:${scene.builtin || "etoile"}`;
+  }
+  return "builtin:etoile";
+}
+
 async function fetchBuiltinScenes() {
-  if (!ui.meshRunSelect) return;
+  if (!ui.sceneSelect) return;
   const res = await fetch("/api/scenes");
   if (!res.ok) {
-    ui.meshRunSelect.innerHTML = "<option value=\"\">(no scenes)</option>";
+    if (ui.sceneSelect) {
+      ui.sceneSelect.innerHTML = "<option value=\"\">(no scenes)</option>";
+    }
     return;
   }
   const data = await res.json();
-  const scenes = data.scenes || [];
-  state.builtinScenes = scenes;
-  ui.meshRunSelect.innerHTML = "";
-  const currentOpt = document.createElement("option");
-  currentOpt.value = "__run__";
-  currentOpt.textContent = "Use current run";
-  ui.meshRunSelect.appendChild(currentOpt);
-  scenes.forEach((name) => {
-    const opt = document.createElement("option");
-    opt.value = name;
-    opt.textContent = name;
-    ui.meshRunSelect.appendChild(opt);
-  });
-  if (!state.meshSourceBuiltin) {
-    state.meshSourceBuiltin = "__run__";
-    ui.meshRunSelect.value = state.meshSourceBuiltin;
-  } else {
-    ui.meshRunSelect.value = state.meshSourceBuiltin;
+  const builtinScenes = data.scenes || [];
+  state.builtinScenes = builtinScenes;
+  if (ui.sceneSelect) {
+    let fileScenes = [];
+    try {
+      const fileRes = await fetch("/api/scene_files");
+      if (fileRes.ok) {
+        const fileData = await fileRes.json();
+        fileScenes = fileData.scenes || [];
+      }
+    } catch (err) {
+      fileScenes = [];
+    }
+    ui.sceneSelect.innerHTML = "";
+    builtinScenes.forEach((name) => {
+      const opt = document.createElement("option");
+      opt.value = `builtin:${name}`;
+      opt.textContent = name;
+      ui.sceneSelect.appendChild(opt);
+    });
+    if (fileScenes.length) {
+      const spacer = document.createElement("option");
+      spacer.disabled = true;
+      spacer.textContent = "──────────";
+      ui.sceneSelect.appendChild(spacer);
+      fileScenes.forEach((entry) => {
+        const opt = document.createElement("option");
+        opt.value = `file:${entry.path}`;
+        opt.textContent = entry.label || entry.path;
+        ui.sceneSelect.appendChild(opt);
+      });
+    }
+    const selectedValue = _sceneSelectValue(state.sceneOverride);
+    const hasOption = Array.from(ui.sceneSelect.options).some((opt) => opt.value === selectedValue);
+    ui.sceneSelect.value = hasOption ? selectedValue : "builtin:etoile";
   }
 }
 
@@ -1856,54 +1932,6 @@ async function fetchRunDetails(runId) {
     return null;
   }
   return await res.json();
-}
-
-async function refreshMeshFromRun(runId) {
-  if (!runId) return;
-  const manifest = await fetch(`/runs/${runId}/viewer/scene_manifest.json`).then((r) => (r.ok ? r.json() : null));
-  if (!manifest) {
-    setMeta(`Mesh load failed for ${runId}`);
-    return;
-  }
-  state.manifest = manifest;
-  rebuildScene();
-}
-
-function _sceneKey(scene) {
-  if (!scene || typeof scene !== "object") return "builtin:etoile";
-  const type = scene.type || "builtin";
-  if (type === "builtin") {
-    return `builtin:${scene.builtin || "etoile"}`;
-  }
-  if (type === "file") {
-    return `file:${scene.file || ""}`;
-  }
-  if (type === "procedural") {
-    const spec = scene.procedural || {};
-    return `procedural:${JSON.stringify(spec)}`;
-  }
-  return `${type}`;
-}
-
-async function resolveMeshRunForBuiltin(builtinName) {
-  if (!builtinName) return null;
-  if (builtinName === "__run__") return state.runId;
-  const targetKey = `builtin:${builtinName}`;
-  for (const run of state.runs) {
-    if (!run.has_viewer) continue;
-    let runConfig = state.runConfigs[run.run_id];
-    if (!runConfig) {
-      const details = await fetchRunDetails(run.run_id);
-      runConfig = details && details.config ? details.config : null;
-      if (runConfig) state.runConfigs[run.run_id] = runConfig;
-    }
-    if (!runConfig) continue;
-    const runKey = _sceneKey(runConfig.scene || {});
-    if (runKey === targetKey) {
-      return run.run_id;
-    }
-  }
-  return null;
 }
 
 async function fetchProgress(runId) {
@@ -2372,26 +2400,11 @@ async function loadCcResults(runId) {
 async function loadRun(runId) {
   state.runId = runId;
   setMeta(`Loading ${runId}...`);
-  let meshRunId = state.meshSourceRunId || runId;
-  if (state.meshSourceBuiltin) {
-    if (state.meshSourceBuiltin === "__run__") {
-      meshRunId = runId;
-      state.meshSourceRunId = runId;
-      if (ui.meshRunSelect) ui.meshRunSelect.value = state.meshSourceBuiltin;
-    } else {
-      const resolved = await resolveMeshRunForBuiltin(state.meshSourceBuiltin);
-      if (resolved) {
-        meshRunId = resolved;
-        state.meshSourceRunId = resolved;
-        if (ui.meshRunSelect) ui.meshRunSelect.value = state.meshSourceBuiltin;
-      }
-    }
-  }
   try {
     const [markers, paths, manifest, heatmap, radioPlots, runInfo] = await Promise.all([
       fetch(`/runs/${runId}/viewer/markers.json`).then((r) => (r.ok ? r.json() : null)),
       fetch(`/runs/${runId}/viewer/paths.json`).then((r) => (r.ok ? r.json() : [])),
-      fetch(`/runs/${meshRunId}/viewer/scene_manifest.json`).then((r) => (r.ok ? r.json() : null)),
+      fetch(`/runs/${runId}/viewer/scene_manifest.json`).then((r) => (r.ok ? r.json() : null)),
       fetch(`/runs/${runId}/viewer/heatmap.json`).then((r) => (r.ok ? r.json() : null)),
       fetch(`/runs/${runId}/viewer/radio_map_plots.json`).then((r) => (r.ok ? r.json() : null)),
       fetchRunDetails(runId),
@@ -2405,15 +2418,6 @@ async function loadRun(runId) {
     state.heatmap = heatmap;
     state.radioMapPlots = (radioPlots && radioPlots.plots) ? radioPlots.plots : [];
     state.runInfo = runInfo;
-    const runScene = (runInfo && runInfo.config && runInfo.config.scene) || {};
-    if (runScene.type && runScene.type !== "builtin") {
-      if (!state.meshSourceBuiltin || state.meshSourceBuiltin === "etoile") {
-        state.meshSourceBuiltin = "__run__";
-        if (ui.meshRunSelect) ui.meshRunSelect.value = "__run__";
-        state.meshSourceRunId = runId;
-        await refreshMeshFromRun(runId);
-      }
-    }
     if (state.markers.ris.length === 0) {
       const risObjects = (runInfo && runInfo.config && runInfo.config.ris && runInfo.config.ris.objects) || [];
       if (Array.isArray(risObjects) && risObjects.length) {
@@ -2436,6 +2440,8 @@ async function loadRun(runId) {
       applySimTuningDefaults(configWrapper);
     }
     applyRisSimDefaults(configWrapper);
+    applyUiSnapshot();
+    updateSceneOverrideTxFromUi();
     rebuildScene();
     renderPathTable();
     renderPathStats();
@@ -2459,9 +2465,18 @@ function updateInputs() {
   const sceneCfg = state.sceneOverride || (state.runInfo && state.runInfo.config && state.runInfo.config.scene) || {};
   const txCfg = sceneCfg.tx || {};
   const txLookAt = Array.isArray(txCfg.look_at) ? txCfg.look_at : null;
-  if (ui.txLookX) setInputValue(ui.txLookX, txLookAt ? txLookAt[0] : null);
-  if (ui.txLookY) setInputValue(ui.txLookY, txLookAt ? txLookAt[1] : null);
-  if (ui.txLookZ) setInputValue(ui.txLookZ, txLookAt ? txLookAt[2] : null);
+  const lookAtRis = Boolean(txCfg.look_at_ris);
+  if (ui.txLookAtRis) ui.txLookAtRis.checked = lookAtRis;
+  if (lookAtRis && Array.isArray(state.markers.ris) && state.markers.ris.length) {
+    const risPos = state.markers.ris[0];
+    if (ui.txLookX) setInputValue(ui.txLookX, risPos[0]);
+    if (ui.txLookY) setInputValue(ui.txLookY, risPos[1]);
+    if (ui.txLookZ) setInputValue(ui.txLookZ, risPos[2]);
+  } else {
+    if (ui.txLookX) setInputValue(ui.txLookX, txLookAt ? txLookAt[0] : null);
+    if (ui.txLookY) setInputValue(ui.txLookY, txLookAt ? txLookAt[1] : null);
+    if (ui.txLookZ) setInputValue(ui.txLookZ, txLookAt ? txLookAt[2] : null);
+  }
   if (ui.txPowerDbm) setInputValue(ui.txPowerDbm, txCfg.power_dbm);
   const txOrientation = Array.isArray(txCfg.orientation) ? txCfg.orientation : null;
   if (ui.txYawDeg) {
@@ -2499,14 +2514,30 @@ function updateSceneOverrideTxFromUi() {
   } else if (sceneCfg.tx && "power_dbm" in sceneCfg.tx) {
     delete sceneCfg.tx.power_dbm;
   }
+  const lookAtRis = ui.txLookAtRis ? ui.txLookAtRis.checked : false;
   const lookX = readNumber(ui.txLookX);
   const lookY = readNumber(ui.txLookY);
   const lookZ = readNumber(ui.txLookZ);
-  if (lookX !== null && lookY !== null && lookZ !== null) {
+  if (lookAtRis) {
+    if (Array.isArray(state.markers.ris) && state.markers.ris.length) {
+      const risPos = state.markers.ris[0];
+      sceneCfg.tx.look_at = [risPos[0], risPos[1], risPos[2]];
+      sceneCfg.tx.look_at_ris = true;
+      if ("orientation" in sceneCfg.tx) delete sceneCfg.tx.orientation;
+      if (ui.txLookX) ui.txLookX.value = risPos[0];
+      if (ui.txLookY) ui.txLookY.value = risPos[1];
+      if (ui.txLookZ) ui.txLookZ.value = risPos[2];
+    } else {
+      if (sceneCfg.tx && "look_at_ris" in sceneCfg.tx) delete sceneCfg.tx.look_at_ris;
+      setMeta("Tx look-at RIS: no RIS objects available");
+    }
+  } else if (lookX !== null && lookY !== null && lookZ !== null) {
     sceneCfg.tx.look_at = [lookX, lookY, lookZ];
     if ("orientation" in sceneCfg.tx) delete sceneCfg.tx.orientation;
+    if (sceneCfg.tx && "look_at_ris" in sceneCfg.tx) delete sceneCfg.tx.look_at_ris;
   } else if (sceneCfg.tx && "look_at" in sceneCfg.tx) {
     delete sceneCfg.tx.look_at;
+    if (sceneCfg.tx && "look_at_ris" in sceneCfg.tx) delete sceneCfg.tx.look_at_ris;
   }
   const yawDeg = readNumber(ui.txYawDeg);
   if (yawDeg !== null && (sceneCfg.tx.look_at === undefined || sceneCfg.tx.look_at === null)) {
@@ -2791,6 +2822,18 @@ function addProxyGeometry() {
   });
 }
 
+function updateMeshRotationSnippet() {
+  if (!ui.meshRotationSnippet) return;
+  const x = parseFloat(ui.meshRotationX?.value || 0);
+  const y = parseFloat(ui.meshRotationY?.value || 0);
+  const z = parseFloat(ui.meshRotationZ?.value || 0);
+  ui.meshRotationSnippet.value = `<transform name="to_world">\n` +
+    `  <rotate x="1" angle="${x.toFixed(2)}"/>\n` +
+    `  <rotate y="1" angle="${y.toFixed(2)}"/>\n` +
+    `  <rotate z="1" angle="${z.toFixed(2)}"/>\n` +
+    `</transform>`;
+}
+
 function getMeshRotationRad() {
   const base = state.manifest && Array.isArray(state.manifest.mesh_rotation_deg)
     ? state.manifest.mesh_rotation_deg
@@ -2798,8 +2841,10 @@ function getMeshRotationRad() {
   const bx = (parseFloat(base[0]) || 0) * Math.PI / 180;
   const by = (parseFloat(base[1]) || 0) * Math.PI / 180;
   const bz = (parseFloat(base[2]) || 0) * Math.PI / 180;
-  const uiZ = parseFloat(ui.meshRotation?.value || 0) * Math.PI / 180;
-  return [bx, by, bz + uiZ];
+  const uiX = parseFloat(ui.meshRotationX?.value || 0) * Math.PI / 180;
+  const uiY = parseFloat(ui.meshRotationY?.value || 0) * Math.PI / 180;
+  const uiZ = parseFloat(ui.meshRotationZ?.value || 0) * Math.PI / 180;
+  return [bx + uiX, by + uiY, bz + uiZ];
 }
 
 async function loadMeshes() {
@@ -2880,6 +2925,7 @@ function addMarkers() {
     markerGroup.add(arrow);
   }
   const risMat = new THREE.MeshStandardMaterial({ color: 0x111827, emissive: 0x111827, emissiveIntensity: 0.4 });
+  const risFrontColor = 0xf97316;
   const risItems = ui.simRisEnabled && ui.simRisEnabled.checked ? readRisItems() : [];
   const risMarkers = risItems.length ? risItems : (Array.isArray(state.markers.ris) ? state.markers.ris.map((p) => ({ position: p })) : []);
   risMarkers.forEach((item, idx) => {
@@ -2893,17 +2939,42 @@ function addMarkers() {
     const ris = new THREE.Mesh(risGeo, risMat);
     ris.name = `ris_${idx}`;
     ris.position.set(pos[0], pos[1], pos[2]);
-    const orientation = Array.isArray(item.orientation) && item.orientation.length >= 3 ? item.orientation : null;
-    let yaw = orientation ? orientation[2] : getRisItemYaw(idx);
-    if (!orientation && Array.isArray(item.look_at) && item.look_at.length >= 3) {
-      const dx = item.look_at[0] - pos[0];
-      const dy = item.look_at[1] - pos[1];
-      yaw = Math.atan2(dy, dx);
-    }
-    const roll = orientation ? orientation[0] : 0;
-    const pitch = orientation ? orientation[1] : 0;
+  const orientation = Array.isArray(item.orientation) && item.orientation.length >= 3 ? item.orientation : null;
+  let yaw = orientation ? orientation[2] : getRisItemYaw(idx);
+  if (!orientation && Array.isArray(item.look_at) && item.look_at.length >= 3) {
+    const dx = item.look_at[0] - pos[0];
+    const dy = item.look_at[1] - pos[1];
+    yaw = Math.atan2(dy, dx);
+  }
+  const roll = orientation ? orientation[0] : 0;
+  const pitch = orientation ? orientation[1] : 0;
     ris.rotation.set(Math.PI / 2 + roll, pitch, yaw);
     markerGroup.add(ris);
+
+    if (ui.toggleRisFront && ui.toggleRisFront.checked) {
+      const origin = new THREE.Vector3(pos[0], pos[1], pos[2]);
+      let frontDir = new THREE.Vector3(1, 0, 0);
+      if (Array.isArray(item.look_at) && item.look_at.length >= 3) {
+        frontDir = new THREE.Vector3(
+          item.look_at[0] - pos[0],
+          item.look_at[1] - pos[1],
+          item.look_at[2] - pos[2]
+        );
+      } else {
+        const euler = new THREE.Euler(roll, pitch, yaw, "XYZ");
+        frontDir.applyEuler(euler);
+      }
+      if (frontDir.lengthSq() < 1e-6) {
+        frontDir = new THREE.Vector3(1, 0, 0);
+      }
+      frontDir.normalize();
+      const arrowLength = Math.max(Math.min(width, height) * 0.65, 0.6);
+      const arrowHeadLength = Math.max(arrowLength * 0.28, 0.25);
+      const arrowHeadWidth = Math.max(arrowLength * 0.12, 0.12);
+      const arrow = new THREE.ArrowHelper(frontDir, origin, arrowLength, risFrontColor, arrowHeadLength, arrowHeadWidth);
+      arrow.name = `ris_front_${idx}`;
+      markerGroup.add(arrow);
+    }
     if (ui.toggleRisFocus && ui.toggleRisFocus.checked && item.profile) {
       let target = null;
       if (item.profile.auto_aim && Array.isArray(state.markers.rx)) {
@@ -3559,7 +3630,7 @@ async function submitJob() {
     if (Object.keys(sim).length) {
       payload.simulation = sim;
     }
-    const radio = { auto_size: ui.radioMapAuto.checked };
+    const radio = { auto_size: ui.radioMapAuto ? ui.radioMapAuto.checked : false };
     const padding = readNumber(ui.radioMapPadding);
     if (padding !== null) {
       radio.auto_padding = padding;
@@ -3603,8 +3674,14 @@ async function submitJob() {
       radio.samples_per_tx = samplesPerTx;
     }
     if (Object.keys(radio).length) {
-      payload.radio_map = radio;
+      payload.radio_map = Object.assign(payload.radio_map || {}, radio);
     }
+  }
+
+  // Always allow Z-only heatmap plane control without forcing map size/cell overrides.
+  const planeZ = readNumber(ui.radioMapPlaneZ);
+  if (planeZ !== null) {
+    payload.radio_map = Object.assign(payload.radio_map || {}, { center_z_only: planeZ });
   }
 
   const scaleEnabled = ui.simScaleEnabled ? ui.simScaleEnabled.checked : false;
@@ -3716,6 +3793,19 @@ async function submitJob() {
     payload.simulation = Object.assign(payload.simulation || {}, { ris: true });
     payload.radio_map = Object.assign(payload.radio_map || {}, { ris: true });
   }
+  // Always honor the scene dropdown selection when submitting a job.
+  if (ui.sceneSelect && ui.sceneSelect.value) {
+    const value = ui.sceneSelect.value || "";
+    if (value.startsWith("file:")) {
+      const filePath = value.slice("file:".length);
+      state.sceneOverride = { type: "file", file: filePath };
+      state.sceneOverrideDirty = true;
+    } else if (value.startsWith("builtin:")) {
+      const name = value.slice("builtin:".length);
+      state.sceneOverride = { type: "builtin", builtin: name };
+      state.sceneOverrideDirty = true;
+    }
+  }
   const profileConfig = getProfileConfig();
   const baseScene = !state.sceneOverrideDirty
     ? ((profileConfig && profileConfig.data && profileConfig.data.scene) || state.sceneOverride || {})
@@ -3764,6 +3854,9 @@ function bindUI() {
   console.log("Starting bindUI...");
   if (!ui.refreshRuns) console.error("ui.refreshRuns is missing");
   ui.refreshRuns.addEventListener("click", fetchRuns);
+
+  document.addEventListener("input", schedulePersistUiSnapshot, true);
+  document.addEventListener("change", schedulePersistUiSnapshot, true);
   
   if (!ui.runSelect) console.error("ui.runSelect is missing");
   ui.runSelect.addEventListener("change", () => {
@@ -3772,42 +3865,25 @@ function bindUI() {
     loadRun(ui.runSelect.value);
   });
   
-  if (!ui.sceneRunSelect) console.error("ui.sceneRunSelect is missing");
-  ui.sceneRunSelect.addEventListener("change", async () => {
-    state.sceneOverrideDirty = false;
-    state.sceneSourceRunId = ui.sceneRunSelect.value;
-    const details = await fetchRunDetails(state.sceneSourceRunId);
-    state.sceneOverride = details && details.config ? details.config.scene : null;
-  });
-
-  if (ui.meshRunSelect) {
-    ui.meshRunSelect.addEventListener("change", async () => {
-      state.meshSourceBuiltin = ui.meshRunSelect.value;
-      if (state.meshSourceBuiltin === "__run__") {
-        state.meshSourceRunId = state.runId;
-        await refreshMeshFromRun(state.runId);
-        return;
-      }
-      const runId = await resolveMeshRunForBuiltin(state.meshSourceBuiltin);
-      if (!runId) {
-        setMeta(`No run with mesh for ${state.meshSourceBuiltin}`);
-        state.sceneOverride = {
-          type: "builtin",
-          builtin: state.meshSourceBuiltin,
-        };
-        state.sceneOverrideDirty = true;
-        return;
-      }
-      state.meshSourceRunId = runId;
-      await refreshMeshFromRun(state.meshSourceRunId);
+  if (!ui.sceneSelect) console.error("ui.sceneSelect is missing");
+  ui.sceneSelect.addEventListener("change", () => {
+    const value = ui.sceneSelect.value || "";
+    if (value.startsWith("file:")) {
+      const filePath = value.slice("file:".length);
+      state.sceneOverride = {
+        type: "file",
+        file: filePath,
+      };
+    } else {
+      const name = value.startsWith("builtin:") ? value.slice("builtin:".length) : value;
       state.sceneOverride = {
         type: "builtin",
-        builtin: state.meshSourceBuiltin,
+        builtin: name,
       };
-      state.sceneOverrideDirty = true;
-    });
-  }
-  
+    }
+    state.sceneOverrideDirty = true;
+  });
+
   if (!ui.runProfile) console.error("ui.runProfile is missing");
   ui.runProfile.addEventListener("change", () => {
     if (ui.runProfile.value === "cpu_only" || ui.runProfile.value === "indoor_box_high") {
@@ -3820,6 +3896,7 @@ function bindUI() {
       resetMarkersFromConfig(config);
     }
     updateCustomVisibility();
+    schedulePersistUiSnapshot();
   });
 
   const markTuningDirty = () => {
@@ -3864,11 +3941,28 @@ function bindUI() {
     rebuildScene();
   });
   
-  if (!ui.meshRotation) console.error("ui.meshRotation is missing");
-  ui.meshRotation.addEventListener("input", () => {
-    ui.meshRotationLabel.textContent = `${ui.meshRotation.value}`;
+  if (!ui.meshRotationX || !ui.meshRotationY || !ui.meshRotationZ) {
+    console.error("mesh rotation controls are missing");
+  }
+  const onMeshRotate = () => {
+    ui.meshRotationXLabel.textContent = `${ui.meshRotationX.value}`;
+    ui.meshRotationYLabel.textContent = `${ui.meshRotationY.value}`;
+    ui.meshRotationZLabel.textContent = `${ui.meshRotationZ.value}`;
+    updateMeshRotationSnippet();
     rebuildScene();
-  });
+  };
+  ui.meshRotationX.addEventListener("input", onMeshRotate);
+  ui.meshRotationY.addEventListener("input", onMeshRotate);
+  ui.meshRotationZ.addEventListener("input", onMeshRotate);
+  if (ui.meshRotationCopy) {
+    ui.meshRotationCopy.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(ui.meshRotationSnippet?.value || "");
+      } catch (err) {
+        console.error(err);
+      }
+    });
+  }
   
   if (!ui.runSim) console.error("ui.runSim is missing");
   ui.runSim.addEventListener("click", () => submitJob());
@@ -3927,6 +4021,21 @@ function bindUI() {
   if (ui.txYawDeg) ui.txYawDeg.addEventListener("change", updateSceneOverrideTxFromUi);
   if (ui.showTxDirection) ui.showTxDirection.addEventListener("change", rebuildScene);
   if (ui.toggleRisFocus) ui.toggleRisFocus.addEventListener("change", rebuildScene);
+  if (ui.txPattern) ui.txPattern.addEventListener("change", () => {
+    updateSceneOverrideTxFromUi();
+    schedulePersistUiSnapshot();
+  });
+  if (ui.txPolarization) ui.txPolarization.addEventListener("change", () => {
+    updateSceneOverrideTxFromUi();
+    schedulePersistUiSnapshot();
+  });
+  if (ui.txLookAtRis) ui.txLookAtRis.addEventListener("change", () => {
+    updateSceneOverrideTxFromUi();
+    schedulePersistUiSnapshot();
+  });
+  if (ui.radioMapPlaneZ) ui.radioMapPlaneZ.addEventListener("change", () => {
+    schedulePersistUiSnapshot();
+  });
   
   console.log("Binding RIS controls...");
   if (!ui.mainTabStrip) console.error("ui.mainTabStrip is missing");
@@ -4120,6 +4229,8 @@ function bindUI() {
   ui.toggleGuides.addEventListener("change", () => {
     alignmentGroup.visible = ui.toggleGuides.checked;
   });
+  if (!ui.toggleRisFront) console.error("ui.toggleRisFront is missing");
+  ui.toggleRisFront.addEventListener("change", rebuildScene);
   
   if (!ui.heatmapRotation) console.error("ui.heatmapRotation is missing");
   ui.heatmapRotation.addEventListener("input", () => {
@@ -4184,6 +4295,9 @@ try {
 }
 bindKeyboardNavigation();
 bindUI();
+applyUiSnapshot();
+updateSceneOverrideTxFromUi();
+schedulePersistUiSnapshot();
 updateRisActionVisibility();
 updateRisConfigSourceVisibility();
 updateRisControlVisibility();

@@ -18,7 +18,7 @@ from .io import create_output_dir, save_json, save_yaml
 from .metrics import build_paths_table, compute_path_metrics, extract_path_data
 from .plots import plot_radio_map, plot_radio_map_sionna, plot_histogram, plot_rays_3d
 from .viewer import generate_viewer
-from .scene import build_scene, export_scene_meshes, scene_sanity_report
+from .scene import build_scene, export_scene_meshes, scene_sanity_report, _apply_default_radio_materials
 from .utils.progress import progress_steps
 from .utils.system import (
     GpuMonitor,
@@ -226,6 +226,8 @@ def run_simulation(config_path: str, overrides: Optional[Dict[str, Any]] = None)
                     scene = build_scene(cfg.data, mitsuba_variant=variant)
                     timings["scene_build_s"] = time.time() - t0
                     scene_cfg = cfg.scene
+                    if scene_cfg.get("type") == "file":
+                        _apply_default_radio_materials(scene)
                     progress.advance(task_id)
                     step_idx += 1
 
@@ -403,6 +405,17 @@ def run_simulation(config_path: str, overrides: Optional[Dict[str, Any]] = None)
                         cfg_local = dict(target_cfg)
                         cfg_local.update(overrides)
                         cfg_local = _maybe_autosize(cfg_local)
+                        # Apply Z-only override after autosize/center calculation.
+                        if "center_z_only" in cfg_local:
+                            try:
+                                z_override = float(cfg_local.get("center_z_only"))
+                            except Exception:
+                                z_override = None
+                            if z_override is not None:
+                                center = cfg_local.get("center") or [0.0, 0.0, 0.0]
+                                if isinstance(center, (list, tuple)) and len(center) >= 2:
+                                    cfg_local = dict(cfg_local)
+                                    cfg_local["center"] = [float(center[0]), float(center[1]), z_override]
                         if "ris" in overrides:
                             use_ris_map = bool(overrides.get("ris"))
                         else:
@@ -437,7 +450,23 @@ def run_simulation(config_path: str, overrides: Optional[Dict[str, Any]] = None)
                         t0 = time.time()
                         progress.update(task_id, description=f"Radio map ({label})")
                         write_progress(step_idx, "running")
-                        kwargs = _radio_map_kwargs(radio_map_cfg, overrides)
+                        # Allow a Z-only override that doesn't affect X/Y center.
+                        cfg_base = radio_map_cfg
+                        z_override = None
+                        if "center_z_only" in cfg_base:
+                            try:
+                                z_override = float(cfg_base.get("center_z_only"))
+                            except Exception:
+                                z_override = None
+                        if "center_z_only" in overrides:
+                            try:
+                                z_override = float(overrides.get("center_z_only"))
+                            except Exception:
+                                z_override = z_override
+                        if z_override is not None:
+                            cfg_base = dict(cfg_base)
+                            cfg_base["center_z_only"] = z_override
+                        kwargs = _radio_map_kwargs(cfg_base, overrides)
                         result = scene.coverage_map(**kwargs)
                         timings_key = f"radio_map_{label}_s" if label else "radio_map_s"
                         timings[timings_key] = time.time() - t0

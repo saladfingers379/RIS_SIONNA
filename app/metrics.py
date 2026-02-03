@@ -65,12 +65,17 @@ def _path_power_by_type(paths) -> Optional[Dict[str, float]]:
         return None
     sum_axes = tuple(i for i in range(power.ndim) if i != path_axis)
     per_path = power.sum(axis=sum_axes)
+    per_path = np.atleast_1d(per_path)
 
     mask = _paths_mask(paths)
     valid = None
     if mask is not None:
-        mask = np.asarray(mask).reshape(-1, mask.shape[-1])
-        valid = mask.any(axis=0)
+        mask = np.asarray(mask)
+        if mask.ndim == 0:
+            valid = np.array([bool(mask)])
+        else:
+            mask = mask.reshape(-1, mask.shape[-1])
+            valid = mask.any(axis=0)
     if valid is None or valid.shape[-1] != per_path.shape[-1]:
         valid = np.ones_like(per_path, dtype=bool)
 

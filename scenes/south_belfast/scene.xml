@@ -1,0 +1,50 @@
+<scene version="3.0.0">
+    <!-- 
+         South Belfast Scene for Sionna RT 
+         Generated via Gemini CLI
+    -->
+
+    <!-- Integrator: Path Tracer -->
+    <integrator type="path">
+        <integer name="max_depth" value="8"/>
+    </integrator>
+
+    <!-- Sensor: Perspective Camera (Default View) -->
+    <sensor type="perspective">
+        <float name="fov" value="45"/>
+        <transform name="to_world">
+            <lookat origin="500, 500, 500" target="0, 0, 0" up="0, 0, 1"/>
+        </transform>
+    </sensor>
+
+    <!-- Light Source: Uniform Environment -->
+    <emitter type="constant">
+        <rgb name="radiance" value="1.0"/>
+    </emitter>
+
+    <!-- Radio Materials (Sionna RT expects bsdf ids like mat-itu_*) -->
+    <bsdf type="twosided" id="mat-itu_concrete">
+        <bsdf type="diffuse">
+            <rgb name="reflectance" value="0.5"/>
+        </bsdf>
+    </bsdf>
+    <!-- The City Mesh -->
+    <shape type="ply" id="city_mesh">
+        <string name="filename" value="meshes/south_belfast_tri.ply"/>
+        <transform name="to_world">
+            <rotate y="1" angle="180"/>
+            <translate x="0" y="0" z="23.05"/>
+        </transform>
+        
+        <!-- Radio Material for Sionna RT -->
+        <!-- Using ITU parameters for concrete/building materials as default -->
+        <ref id="mat-itu_concrete" name="bsdf"/>
+    </shape>
+    
+    <!-- Ground Plane (triangle mesh) -->
+    <shape type="ply" id="ground_mesh">
+        <string name="filename" value="meshes/south_belfast_ground_upright.ply"/>
+        <ref id="mat-itu_concrete" name="bsdf"/>
+    </shape>
+
+</scene>

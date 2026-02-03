@@ -1,0 +1,31 @@
+<scene version="3.0.0">
+  <!-- Ashby: 300x300 ground plane centered at origin -->
+  <integrator type="path">
+    <integer name="max_depth" value="8"/>
+  </integrator>
+
+  <emitter type="constant">
+    <rgb name="radiance" value="1.0"/>
+  </emitter>
+
+  <!-- Radio Materials (Sionna RT expects bsdf ids like mat-itu_*) -->
+  <bsdf type="twosided" id="mat-itu_concrete">
+    <bsdf type="diffuse">
+      <rgb name="reflectance" value="0.5"/>
+    </bsdf>
+  </bsdf>
+
+  <shape type="ply" id="city_mesh">
+    <string name="filename" value="meshes/ashby_city_clip.ply"/>
+    <transform name="to_world">
+      <rotate y="1" angle="180"/>
+      <translate x="0" y="0" z="23.05"/>
+    </transform>
+    <ref id="mat-itu_concrete" name="bsdf"/>
+  </shape>
+
+  <shape type="ply" id="ground_mesh">
+    <string name="filename" value="meshes/ashby_ground.ply"/>
+    <ref id="mat-itu_concrete" name="bsdf"/>
+  </shape>
+</scene>
