@@ -80,6 +80,7 @@ const ui = {
   applyMarkers: document.getElementById("applyMarkers"),
   dragMarkers: document.getElementById("dragMarkers"),
   runSim: document.getElementById("runSim"),
+  runSimTop: document.getElementById("runSimTop"),
   jobList: document.getElementById("jobList"),
   risConfigSource: document.getElementById("risConfigSource"),
   risConfigPath: document.getElementById("risConfigPath"),
@@ -253,14 +254,6 @@ const ui = {
   toggleGuides: document.getElementById("toggleGuides"),
   toggleRisFocus: document.getElementById("toggleRisFocus"),
   toggleRisFront: document.getElementById("toggleRisFront"),
-  meshRotationX: document.getElementById("meshRotationX"),
-  meshRotationXLabel: document.getElementById("meshRotationXLabel"),
-  meshRotationY: document.getElementById("meshRotationY"),
-  meshRotationYLabel: document.getElementById("meshRotationYLabel"),
-  meshRotationZ: document.getElementById("meshRotationZ"),
-  meshRotationZLabel: document.getElementById("meshRotationZLabel"),
-  meshRotationSnippet: document.getElementById("meshRotationSnippet"),
-  meshRotationCopy: document.getElementById("meshRotationCopy"),
   heatmapRotation: document.getElementById("heatmapRotation"),
   heatmapRotationLabel: document.getElementById("heatmapRotationLabel"),
   heatmapScale: document.getElementById("heatmapScale"),
@@ -281,7 +274,6 @@ const ui = {
   pathTableBody: document.getElementById("pathTableBody"),
   pathStats: document.getElementById("pathStats"),
   randomizeMarkers: document.getElementById("randomizeMarkers"),
-  presetIndoorHighRes: document.getElementById("presetIndoorHighRes"),
   addRis: document.getElementById("addRis"),
   debugRis: document.getElementById("debugRis"),
   risPresetFocus: document.getElementById("risPresetFocus"),
@@ -642,6 +634,11 @@ function addRisItem(initial) {
     const el = fields(name);
     if (el && value !== undefined && value !== null) el.value = value;
   };
+  const setCheck = (name, value) => {
+    const el = fields(name);
+    if (el) el.checked = Boolean(value);
+  };
+  setCheck("enabled", initial?.enabled !== false);
   setVal("name", initial?.name || `ris${ui.risList.children.length + 1}`);
   const pos = initial?.position || [0, 0, 2];
   setVal("posX", pos[0]);
@@ -749,6 +746,7 @@ function readRisItems() {
   ui.risList.querySelectorAll(".ris-item").forEach((node) => {
     const field = (name) => node.querySelector(`[data-field="${name}"]`);
     const name = (field("name")?.value || "").trim() || `ris${items.length + 1}`;
+    const enabled = field("enabled") ? field("enabled").checked : true;
     const pos = [
       readNum(field("posX")),
       readNum(field("posY")),
@@ -768,6 +766,7 @@ function readRisItems() {
     const orientation = orientationDeg.map((val) => (val === null ? null : _degToRad(val)));
     const obj = {
       name,
+      enabled,
       position,
       num_rows: Math.max(1, parseInt(field("rows")?.value || "12", 10)),
       num_cols: Math.max(1, parseInt(field("cols")?.value || "12", 10)),
@@ -1148,7 +1147,6 @@ function initViewer() {
     renderer.setSize(container.clientWidth, container.clientHeight);
   });
 
-  updateMeshRotationSnippet();
   animate();
 }
 
@@ -2477,7 +2475,9 @@ function updateInputs() {
     if (ui.txLookY) setInputValue(ui.txLookY, txLookAt ? txLookAt[1] : null);
     if (ui.txLookZ) setInputValue(ui.txLookZ, txLookAt ? txLookAt[2] : null);
   }
-  if (ui.txPowerDbm) setInputValue(ui.txPowerDbm, txCfg.power_dbm);
+  if (ui.txPowerDbm && txCfg.power_dbm !== undefined && txCfg.power_dbm !== null) {
+    setInputValue(ui.txPowerDbm, txCfg.power_dbm);
+  }
   const txOrientation = Array.isArray(txCfg.orientation) ? txCfg.orientation : null;
   if (ui.txYawDeg) {
     const yaw = txOrientation && txOrientation.length >= 3 ? txOrientation[2] : null;
@@ -2485,8 +2485,8 @@ function updateInputs() {
   }
   const arraysCfg = sceneCfg.arrays || {};
   const txArr = arraysCfg.tx || {};
-  if (ui.txPattern) ui.txPattern.value = txArr.pattern || "iso";
-  if (ui.txPolarization) ui.txPolarization.value = txArr.polarization || "V";
+  if (ui.txPattern && txArr.pattern) ui.txPattern.value = txArr.pattern;
+  if (ui.txPolarization && txArr.polarization) ui.txPolarization.value = txArr.polarization;
   if (ui.risList) {
     ui.risList.querySelectorAll(".ris-item").forEach((node) => {
       const autoAim = node.querySelector('[data-field="autoAim"]');
@@ -2822,18 +2822,6 @@ function addProxyGeometry() {
   });
 }
 
-function updateMeshRotationSnippet() {
-  if (!ui.meshRotationSnippet) return;
-  const x = parseFloat(ui.meshRotationX?.value || 0);
-  const y = parseFloat(ui.meshRotationY?.value || 0);
-  const z = parseFloat(ui.meshRotationZ?.value || 0);
-  ui.meshRotationSnippet.value = `<transform name="to_world">\n` +
-    `  <rotate x="1" angle="${x.toFixed(2)}"/>\n` +
-    `  <rotate y="1" angle="${y.toFixed(2)}"/>\n` +
-    `  <rotate z="1" angle="${z.toFixed(2)}"/>\n` +
-    `</transform>`;
-}
-
 function getMeshRotationRad() {
   const base = state.manifest && Array.isArray(state.manifest.mesh_rotation_deg)
     ? state.manifest.mesh_rotation_deg
@@ -2841,10 +2829,7 @@ function getMeshRotationRad() {
   const bx = (parseFloat(base[0]) || 0) * Math.PI / 180;
   const by = (parseFloat(base[1]) || 0) * Math.PI / 180;
   const bz = (parseFloat(base[2]) || 0) * Math.PI / 180;
-  const uiX = parseFloat(ui.meshRotationX?.value || 0) * Math.PI / 180;
-  const uiY = parseFloat(ui.meshRotationY?.value || 0) * Math.PI / 180;
-  const uiZ = parseFloat(ui.meshRotationZ?.value || 0) * Math.PI / 180;
-  return [bx + uiX, by + uiY, bz + uiZ];
+  return [bx, by, bz];
 }
 
 async function loadMeshes() {
@@ -2954,7 +2939,24 @@ function addMarkers() {
     if (ui.toggleRisFront && ui.toggleRisFront.checked) {
       const origin = new THREE.Vector3(pos[0], pos[1], pos[2]);
       let frontDir = new THREE.Vector3(1, 0, 0);
-      if (Array.isArray(item.look_at) && item.look_at.length >= 3) {
+      let target = null;
+      if (item.profile) {
+        const targets = item.profile.targets;
+        if (Array.isArray(targets) && targets.length >= 3 && typeof targets[0] === "number") {
+          target = targets;
+        } else if (Array.isArray(targets) && Array.isArray(targets[0]) && targets[0].length >= 3) {
+          target = targets[0];
+        } else if (item.profile.auto_aim && Array.isArray(state.markers.rx)) {
+          target = state.markers.rx;
+        }
+      }
+      if (Array.isArray(target) && target.length >= 3) {
+        frontDir = new THREE.Vector3(
+          target[0] - pos[0],
+          target[1] - pos[1],
+          target[2] - pos[2]
+        );
+      } else if (Array.isArray(item.look_at) && item.look_at.length >= 3) {
         frontDir = new THREE.Vector3(
           item.look_at[0] - pos[0],
           item.look_at[1] - pos[1],
@@ -3941,40 +3943,19 @@ function bindUI() {
     rebuildScene();
   });
   
-  if (!ui.meshRotationX || !ui.meshRotationY || !ui.meshRotationZ) {
-    console.error("mesh rotation controls are missing");
-  }
-  const onMeshRotate = () => {
-    ui.meshRotationXLabel.textContent = `${ui.meshRotationX.value}`;
-    ui.meshRotationYLabel.textContent = `${ui.meshRotationY.value}`;
-    ui.meshRotationZLabel.textContent = `${ui.meshRotationZ.value}`;
-    updateMeshRotationSnippet();
-    rebuildScene();
-  };
-  ui.meshRotationX.addEventListener("input", onMeshRotate);
-  ui.meshRotationY.addEventListener("input", onMeshRotate);
-  ui.meshRotationZ.addEventListener("input", onMeshRotate);
-  if (ui.meshRotationCopy) {
-    ui.meshRotationCopy.addEventListener("click", async () => {
-      try {
-        await navigator.clipboard.writeText(ui.meshRotationSnippet?.value || "");
-      } catch (err) {
-        console.error(err);
-      }
-    });
-  }
+  // mesh rotation controls removed
   
   if (!ui.runSim) console.error("ui.runSim is missing");
   ui.runSim.addEventListener("click", () => submitJob());
+  if (ui.runSimTop) {
+    ui.runSimTop.addEventListener("click", () => submitJob());
+  }
 
   if (ui.addRis) {
     ui.addRis.addEventListener("click", () => addRisItem());
   }
   if (ui.debugRis) {
     ui.debugRis.addEventListener("click", () => applyRisDebugPreset());
-  }
-  if (ui.presetIndoorHighRes) {
-    ui.presetIndoorHighRes.addEventListener("click", () => applyIndoorHighResPreset());
   }
   if (ui.risPresetFocus) {
     ui.risPresetFocus.addEventListener("click", () => applyRisFocusPreset());
@@ -4045,6 +4026,22 @@ function bindUI() {
       setMainTab(target.dataset.mainTab);
     }
   });
+
+  const rightTabStrip = document.getElementById("rightTabStrip");
+  if (rightTabStrip) {
+    rightTabStrip.addEventListener("click", (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLButtonElement)) return;
+      const tab = target.dataset.rightTab;
+      if (!tab) return;
+      rightTabStrip.querySelectorAll(".right-tab-button").forEach((btn) => {
+        btn.classList.toggle("is-active", btn.dataset.rightTab === tab);
+      });
+      document.querySelectorAll(".right-tab-panel").forEach((panel) => {
+        panel.classList.toggle("is-active", panel.dataset.rightTab === tab);
+      });
+    });
+  }
   
   if (!ui.risAction) console.error("ui.risAction is missing");
   ui.risAction.addEventListener("change", updateRisActionVisibility);

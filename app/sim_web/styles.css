@@ -20,7 +20,7 @@ body {
   color: var(--ink);
   background: var(--bg-1);
   height: 100vh;
-  overflow-x: hidden;
+  overflow: hidden;
 }
 
 .app {
@@ -151,6 +151,8 @@ button:hover {
   grid-template-columns: minmax(260px, 320px) 1fr minmax(280px, 360px);
   gap: 16px;
   padding: 16px;
+  height: 100%;
+  min-height: 0;
 }
 
 .main {
@@ -158,6 +160,7 @@ button:hover {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  overflow: hidden;
 }
 
 .main-tab-strip {
@@ -194,6 +197,9 @@ button:hover {
 .main-tab-panel {
   display: none;
   min-height: 0;
+  height: 100%;
+  overflow: hidden;
+  flex: 1;
 }
 
 .main-tab-panel.is-active {
@@ -274,8 +280,46 @@ button:hover {
   padding: 16px;
   box-shadow: var(--shadow);
   border: 1px solid #1f1f1f;
-  overflow: auto;
+  overflow: hidden;
   overflow-x: hidden;
+}
+
+.right-tab-strip {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.right-tab-button {
+  background: #e6e6e1;
+  color: #111;
+  border: 1px solid #1f1f1f;
+  border-bottom: none;
+  border-top-left-radius: 8px;
+  border-top-right-radius: 8px;
+  padding: 8px 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.right-tab-button.is-active {
+  background: var(--panel);
+}
+
+.right-tab-panel {
+  display: none;
+}
+
+.right-tab-panel.is-active {
+  display: block;
+}
+
+.panel.left {
+  overflow-y: auto;
+}
+
+.panel.right {
+  overflow-y: auto;
 }
 
 .panel h2 {

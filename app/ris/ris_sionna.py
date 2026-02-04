@@ -381,12 +381,100 @@ def _tf_device_for_variant() -> Optional[str]:
     return "/CPU:0"
 
 
+def _unit_vec(vec: np.ndarray) -> np.ndarray:
+    norm = np.linalg.norm(vec)
+    if norm <= 0.0:
+        return vec
+    return vec / norm
+
+
+def _format_vec(vec: np.ndarray) -> str:
+    return f"[{vec[0]:.3f}, {vec[1]:.3f}, {vec[2]:.3f}]"
+
+
+def _phase_signature(ris: Any) -> Optional[Tuple[float, float, float]]:
+    try:
+        import tensorflow as tf
+        values = ris.phase_profile.values
+        shape = values.shape
+        if shape.rank is None or shape.rank < 3:
+            return None
+        mid_y = int(shape[1]) // 2
+        mid_x = int(shape[2]) // 2
+        samples = tf.stack([values[0, 0, 0], values[0, mid_y, mid_x], values[0, -1, -1]])
+        out = samples.numpy().ravel().tolist()
+        return tuple(float(x) for x in out)
+    except Exception:
+        return None
+
+
+def _amplitude_signature(ris: Any) -> Optional[Tuple[float, float, float]]:
+    try:
+        import tensorflow as tf
+        values = ris.amplitude_profile.values
+        shape = values.shape
+        if shape.rank is None or shape.rank < 3:
+            return None
+        mid_y = int(shape[1]) // 2
+        mid_x = int(shape[2]) // 2
+        samples = tf.stack([values[0, 0, 0], values[0, mid_y, mid_x], values[0, -1, -1]])
+        out = samples.numpy().ravel().tolist()
+        return tuple(float(x) for x in out)
+    except Exception:
+        return None
+
+
+def _profile_stats(values: Any) -> Optional[Tuple[float, float, float]]:
+    try:
+        import tensorflow as tf
+        v = tf.cast(values, tf.float32)
+        v_min = tf.reduce_min(v).numpy().item()
+        v_max = tf.reduce_max(v).numpy().item()
+        v_mean = tf.reduce_mean(v).numpy().item()
+        return (float(v_min), float(v_mean), float(v_max))
+    except Exception:
+        return None
+
+
+def _tx_gain_db(scene: Any, direction: np.ndarray) -> Optional[float]:
+    try:
+        import tensorflow as tf
+        from sionna.rt.utils import rotate, theta_phi_from_unit_vec
+
+        tx = next(iter(scene.transmitters.values()))
+        tx_array = getattr(scene, "tx_array", None)
+        if tx_array is None or not getattr(tx_array, "antenna", None):
+            return None
+        patterns = getattr(tx_array.antenna, "patterns", None)
+        if not patterns:
+            return None
+
+        vec = tf.constant(direction[None, :], dtype=tx.orientation.dtype)
+        angles = tf.cast(tx.orientation, vec.dtype)
+        vec_local = rotate(vec, angles, inverse=True)[0]
+        vec_local = vec_local / tf.maximum(tf.norm(vec_local), tf.constant(1e-9, vec_local.dtype))
+        theta, phi = theta_phi_from_unit_vec(vec_local)
+
+        gains = []
+        for pat in patterns:
+            c_theta, c_phi = pat(theta, phi)
+            g = tf.abs(c_theta) ** 2 + tf.abs(c_phi) ** 2
+            gains.append(tf.cast(g, tf.float32))
+        if not gains:
+            return None
+        g_max = tf.reduce_max(tf.stack(gains))
+        g_db = 10.0 * tf.math.log(g_max) / tf.math.log(tf.constant(10.0, g_max.dtype))
+        return float(g_db.numpy())
+    except Exception:
+        return None
+
+
 def _apply_phase_profile(
     ris: Any,
     profile: Dict[str, Any],
     scene: Any | None = None,
     geometry: Optional[Dict[str, Any]] = None,
-) -> None:
+) -> tuple[list[np.ndarray], list[np.ndarray]]:
     kind = profile.get("kind") or "flat"
     if kind not in _PHASE_PROFILE_KINDS:
         raise ValueError(f"Unsupported RIS profile kind '{kind}'")
@@ -394,7 +482,7 @@ def _apply_phase_profile(
     sources = _ensure_xyz_list(profile.get("sources"), "profile.sources")
     targets = _ensure_xyz_list(profile.get("targets"), "profile.targets")
 
-    if profile.get("auto_aim") and scene is not None:
+    if profile.get("auto_aim") and scene is not None and not (sources and targets):
         try:
             tx = next(iter(scene.transmitters.values()))
             rx = next(iter(scene.receivers.values()))
@@ -531,6 +619,8 @@ def _apply_phase_profile(
     if mode_powers is not None:
         ris.amplitude_profile.mode_powers = [float(v) for v in mode_powers]
 
+    return sources, targets
+
 
 def _build_ris_object(obj_cfg: Dict[str, Any]) -> Any:
     import sionna.rt as rt
@@ -644,18 +734,29 @@ def add_ris_from_config(scene: Any, cfg: Dict[str, Any]) -> Optional[List[Dict[s
     summaries: List[Dict[str, Any]] = []
     if isinstance(ris_objects_cfg, list) and ris_objects_cfg:
         logger.info("RIS enabled: %d objects", len(ris_objects_cfg))
+        phase_signatures: Dict[Tuple[float, float, float], str] = {}
+        amp_signatures: Dict[Tuple[float, float, float], str] = {}
+        phase_ref = None
+        phase_ref_name = None
+        amp_ref = None
+        amp_ref_name = None
         for obj_cfg in ris_objects_cfg:
             if not isinstance(obj_cfg, dict):
                 raise ValueError("ris.objects entries must be mappings")
+            if obj_cfg.get("enabled") is False:
+                logger.info("RIS %s disabled in config; skipping.", obj_cfg.get("name", "ris"))
+                continue
             geometry = build_ris_geometry(ris_cfg, obj_cfg=obj_cfg)
             if geometry.get("mode") != "legacy":
                 obj_cfg = dict(obj_cfg)
                 obj_cfg["num_rows"] = geometry["nx"]
                 obj_cfg["num_cols"] = geometry["ny"]
-            profile_cfg = obj_cfg.get("profile", {}) or {}
+            profile_cfg = copy.deepcopy(obj_cfg.get("profile", {}) or {})
+            if "amplitude" in profile_cfg:
+                logger.info("RIS %s profile amplitude: %s", obj_cfg.get("name", "ris"), profile_cfg.get("amplitude"))
             ris = _build_ris_object(obj_cfg)
             scene.add(ris)
-            _apply_phase_profile(ris, profile_cfg, scene=scene, geometry=geometry)
+            sources, targets = _apply_phase_profile(ris, profile_cfg, scene=scene, geometry=geometry)
             _warn_if_backside(ris, scene)
             summary = _ris_runtime_summary(ris, profile_cfg, geometry=geometry)
             summaries.append(summary)
@@ -671,6 +772,67 @@ def add_ris_from_config(scene: Any, cfg: Dict[str, Any]) -> Optional[List[Dict[s
             rounding = geometry.get("rounding") or {}
             if any(abs(val) > 1e-6 for val in rounding.values() if isinstance(val, (int, float))):
                 logger.info("RIS geometry rounding: %s", rounding)
+
+            if sources and targets:
+                try:
+                    pos = np.asarray(ris.position, dtype=float).reshape(3)
+                    v_in = _unit_vec(pos - np.asarray(sources[0], dtype=float).reshape(3))
+                    v_out = _unit_vec(np.asarray(targets[0], dtype=float).reshape(3) - pos)
+                    g_tx = _tx_gain_db(scene, v_in)
+                    gain_text = f", G_tx={g_tx:.2f} dB" if g_tx is not None else ""
+                    logger.info("RIS %s aim: v_in=%s v_out=%s%s", ris.name, _format_vec(v_in), _format_vec(v_out), gain_text)
+                except Exception:
+                    pass
+
+            sig = _phase_signature(ris)
+            if sig is not None:
+                if sig in phase_signatures and phase_signatures[sig] != ris.name:
+                    logger.warning("RIS %s phase signature matches %s (possible shared phase profile).", ris.name, phase_signatures[sig])
+                else:
+                    phase_signatures[sig] = ris.name
+
+            amp_sig = _amplitude_signature(ris)
+            if amp_sig is not None:
+                logger.info("RIS %s amplitude signature: %s", ris.name, amp_sig)
+                if amp_sig in amp_signatures and amp_signatures[amp_sig] != ris.name:
+                    logger.warning("RIS %s amplitude signature matches %s (possible shared amplitude profile).", ris.name, amp_signatures[amp_sig])
+                else:
+                    amp_signatures[amp_sig] = ris.name
+
+            phase_stats = _profile_stats(ris.phase_profile.values)
+            if phase_stats is not None:
+                logger.info("RIS %s phase stats (min/mean/max): %.3e / %.3e / %.3e", ris.name, *phase_stats)
+            amp_stats = _profile_stats(ris.amplitude_profile.values)
+            if amp_stats is not None:
+                logger.info("RIS %s amplitude stats (min/mean/max): %.3e / %.3e / %.3e", ris.name, *amp_stats)
+
+            try:
+                phase_np = ris.phase_profile.values.numpy()
+                if phase_ref is None:
+                    phase_ref = phase_np
+                    phase_ref_name = ris.name
+                else:
+                    diff = float(np.max(np.abs(phase_np - phase_ref)))
+                    if diff < 1e-6:
+                        logger.error("RIS %s phase profile identical to %s (max abs diff %.2e).", ris.name, phase_ref_name, diff)
+                    else:
+                        logger.info("RIS %s phase diff vs %s: max abs %.2e", ris.name, phase_ref_name, diff)
+            except Exception:
+                pass
+
+            try:
+                amp_np = ris.amplitude_profile.values.numpy()
+                if amp_ref is None:
+                    amp_ref = amp_np
+                    amp_ref_name = ris.name
+                else:
+                    diff = float(np.max(np.abs(amp_np - amp_ref)))
+                    if diff < 1e-6:
+                        logger.error("RIS %s amplitude profile identical to %s (max abs diff %.2e).", ris.name, amp_ref_name, diff)
+                    else:
+                        logger.info("RIS %s amplitude diff vs %s: max abs %.2e", ris.name, amp_ref_name, diff)
+            except Exception:
+                pass
         return summaries
 
     # Backward-compatible workbench mode
