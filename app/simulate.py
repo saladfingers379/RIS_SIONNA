@@ -68,6 +68,61 @@ def _save_ris_profiles(scene, plots_dir: Path) -> None:
             pass
 
 
+
+
+def _assign_profile_values(profile: Any, values: Any) -> None:
+    try:
+        assign = getattr(profile.values, "assign", None)
+        if callable(assign):
+            assign(values)
+            return
+    except Exception:
+        pass
+    profile.values = values
+
+
+def _snapshot_ris_amplitudes(scene: Any) -> Dict[str, Any]:
+    snapshots: Dict[str, Any] = {}
+    try:
+        ris_objects = getattr(scene, "ris", {}) or {}
+    except Exception:
+        ris_objects = {}
+    for name, ris in ris_objects.items():
+        try:
+            snapshots[name] = ris.amplitude_profile.values.numpy()
+        except Exception:
+            snapshots[name] = None
+    return snapshots
+
+
+def _apply_ris_amplitude_mask(scene: Any, enabled: set[str]) -> None:
+    import tensorflow as tf
+
+    try:
+        ris_objects = getattr(scene, "ris", {}) or {}
+    except Exception:
+        ris_objects = {}
+    for name, ris in ris_objects.items():
+        if name in enabled:
+            continue
+        zeros = tf.zeros_like(ris.amplitude_profile.values)
+        _assign_profile_values(ris.amplitude_profile, zeros)
+
+
+def _restore_ris_amplitudes(scene: Any, snapshots: Dict[str, Any]) -> None:
+    import tensorflow as tf
+
+    try:
+        ris_objects = getattr(scene, "ris", {}) or {}
+    except Exception:
+        ris_objects = {}
+    for name, ris in ris_objects.items():
+        saved = snapshots.get(name)
+        if saved is None:
+            continue
+        _assign_profile_values(ris.amplitude_profile, tf.cast(saved, ris.amplitude_profile.values.dtype))
+
+
 def _rt_backend_from_variant(variant: str | None) -> str:
     if not variant:
         return "unknown"
@@ -445,6 +500,7 @@ def run_simulation(config_path: str, overrides: Optional[Dict[str, Any]] = None)
                         overrides: Dict[str, Any],
                         suffix: Optional[str],
                         write_default: bool,
+                        enabled_ris: Optional[set[str]] = None,
                     ) -> tuple[Dict[str, Any], Dict[str, Any]]:
                         nonlocal radio_map
                         t0 = time.time()
@@ -467,7 +523,15 @@ def run_simulation(config_path: str, overrides: Optional[Dict[str, Any]] = None)
                             cfg_base = dict(cfg_base)
                             cfg_base["center_z_only"] = z_override
                         kwargs = _radio_map_kwargs(cfg_base, overrides)
-                        result = scene.coverage_map(**kwargs)
+                        snapshots = None
+                        if enabled_ris is not None:
+                            snapshots = _snapshot_ris_amplitudes(scene)
+                            _apply_ris_amplitude_mask(scene, enabled_ris)
+                        try:
+                            result = scene.coverage_map(**kwargs)
+                        finally:
+                            if snapshots is not None:
+                                _restore_ris_amplitudes(scene, snapshots)
                         timings_key = f"radio_map_{label}_s" if label else "radio_map_s"
                         timings[timings_key] = time.time() - t0
                         radio_map = result
@@ -649,6 +713,7 @@ def run_simulation(config_path: str, overrides: Optional[Dict[str, Any]] = None)
                                 }
                         except Exception as exc:
                             logger.warning("Radio map diff failed: %s", exc)
+
 
                     write_progress(step_idx, "running")
                     if radio_map is not None:

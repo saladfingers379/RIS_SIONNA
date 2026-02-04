@@ -61,6 +61,28 @@ This suggests the **mixing occurs downstream** during solver application (likely
 - In `solver_cm`, mapped RIS index to `ris.object_id` directly.
 - Result: **duplication persists**.
 
+### 4) `_ris_transition_matrices` per-RIS gamma evaluation
+- Replaced the global `r()` evaluation with a **per-RIS evaluation** at each RIS’
+  actual cell positions transformed to the RIS LCS (y/z coordinates).
+- Goal: ensure multi-RIS uses distinct per-RIS phase profiles when computing
+  modulation coefficients for RIS paths.
+- Outcome: per-RIS `gamma` values **did differ** at runtime, but the **visual
+  duplication persisted**. This suggests the visible issue is not from a shared
+  profile in `_ris_transition_matrices`.
+
+### 5) `solver_cm` RIS index grouping
+- Grouped RIS hits by **Mitsuba index order** (0..N-1) instead of `object_id`,
+  to align with the output of `_ris_intersect`.
+- Confirmed per-RIS `gamma` statistics differ in coverage-map code paths.
+- Outcome: **did not fix** the observed duplication in outputs.
+
+### 6) Runtime instrumentation (temporary)
+- Added temporary per-RIS `gamma` statistics in `solver_paths` and `solver_cm`
+  to verify distinct per-RIS profiles were being applied.
+- Stats confirmed **different phase behavior per RIS**, but the final rendered
+  outputs still appeared duplicated.
+- Instrumentation was removed after validation.
+
 ## Current Local Patch Diff Summary (by file)
 ### app/ris/ris_sionna.py
 - Auto-aim conditional
@@ -73,10 +95,12 @@ This suggests the **mixing occurs downstream** during solver application (likely
 
 ### .venv/lib/python3.11/site-packages/sionna/rt/solver_paths.py
 - `_ris_transition_matrices` per-RIS coefficient slicing
+- `_ris_transition_matrices` per-RIS gamma evaluation using RIS cell LCS points
 
 ### .venv/lib/python3.11/site-packages/sionna/rt/solver_cm.py
 - Reworked RIS ID mapping
 - Fixes for TensorFlow shape errors
+- Grouped RIS hits by Mitsuba index order (0..N-1) instead of object IDs
 
 ### .venv/lib/python3.11/site-packages/sionna/rt/solver_base.py
 - `_ris_intersect` returns RIS index instead of Mitsuba shape ID
@@ -85,6 +109,10 @@ This suggests the **mixing occurs downstream** during solver application (likely
 - **Bug persists**: Multi-RIS behavior still collapses to a single pattern.
 - Individual RIS runs are correct.
 - Evidence suggests the **mixing occurs inside Sionna’s solver** when combining RIS contributions, not in our adapter.
+**Additional note:** Even with per-RIS gamma confirmed distinct in both path and
+coverage-map code paths, the rendered outputs still **look duplicated**. This
+reinforces that the problem is downstream of profile evaluation and remains
+unresolved.
 
 ## Next Steps (Suggested)
 1. Instrument inside Sionna RT solver with per-RIS `gamma` statistics at the exact point of application.

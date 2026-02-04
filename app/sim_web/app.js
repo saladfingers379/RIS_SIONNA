@@ -15,6 +15,8 @@ window.onerror = function (msg, url, line) {
 const state = {
   runId: null,
   followLatestRun: true,
+  loadingRun: false,
+  lastLoadedRunId: null,
   markers: { tx: [0, 0, 0], rx: [0, 0, 0], ris: [] },
   paths: [],
   heatmap: null,
@@ -1855,12 +1857,15 @@ async function fetchRuns() {
     }
   });
   if (data.runs.length > 0) {
-    state.runId = data.runs.find((r) => r.run_id === previous)?.run_id || data.runs[0].run_id;
-    ui.runSelect.value = state.runId;
+    const nextRunId = data.runs.find((r) => r.run_id === previous)?.run_id || data.runs[0].run_id;
+    state.runId = nextRunId;
+    ui.runSelect.value = nextRunId;
     if (ui.radioMapDiffRun) {
-      ui.radioMapDiffRun.value = previousDiff || state.runId;
+      ui.radioMapDiffRun.value = previousDiff || nextRunId;
     }
-    await loadRun(state.runId);
+    if (!state.loadingRun && state.lastLoadedRunId !== nextRunId) {
+      await loadRun(nextRunId);
+    }
   }
 }
 
@@ -2396,6 +2401,8 @@ async function loadCcResults(runId) {
 }
 
 async function loadRun(runId) {
+  if (state.loadingRun) return;
+  state.loadingRun = true;
   state.runId = runId;
   setMeta(`Loading ${runId}...`);
   try {
@@ -2447,9 +2454,12 @@ async function loadRun(runId) {
     if (ui.radioMapDiffToggle && ui.radioMapDiffToggle.checked) {
       await refreshHeatmapDiff();
     }
+    state.lastLoadedRunId = runId;
   } catch (err) {
     console.error("Load run failed:", err);
     setMeta(`Failed to load ${runId}`);
+  } finally {
+    state.loadingRun = false;
   }
 }
 
@@ -3592,11 +3602,13 @@ async function refreshJobs() {
       item.textContent = `${job.run_id}${label} · ${job.status}${stepLabel}${pctLabel}`;
     })
   );
-  if (needsRunRefresh) {
+  if (needsRunRefresh && !state.loadingRun) {
     await fetchRuns();
   }
-  if (state.followLatestRun && newestCompleted && ui.runSelect.value !== newestCompleted) {
-    ui.runSelect.value = newestCompleted;
+  if (!state.loadingRun && state.followLatestRun && newestCompleted && state.runId !== newestCompleted) {
+    if (ui.runSelect) {
+      ui.runSelect.value = newestCompleted;
+    }
     await loadRun(newestCompleted);
   }
 }
@@ -3864,7 +3876,9 @@ function bindUI() {
   ui.runSelect.addEventListener("change", () => {
     state.followLatestRun = false;
     state.sceneOverrideDirty = false;
-    loadRun(ui.runSelect.value);
+    if (!state.loadingRun) {
+      loadRun(ui.runSelect.value);
+    }
   });
   
   if (!ui.sceneSelect) console.error("ui.sceneSelect is missing");
