@@ -213,6 +213,7 @@ const ui = {
   radioMapCenterY: document.getElementById("radioMapCenterY"),
   radioMapCenterZ: document.getElementById("radioMapCenterZ"),
   radioMapPlaneZ: document.getElementById("radioMapPlaneZ"),
+  floorElevation: document.getElementById("floorElevation"),
   radioMapPlotStyle: document.getElementById("radioMapPlotStyle"),
   radioMapPlotMetric: document.getElementById("radioMapPlotMetric"),
   radioMapPlotShowTx: document.getElementById("radioMapPlotShowTx"),
@@ -259,6 +260,7 @@ const ui = {
   heatmapRotation: document.getElementById("heatmapRotation"),
   heatmapRotationLabel: document.getElementById("heatmapRotationLabel"),
   heatmapScale: document.getElementById("heatmapScale"),
+  heatmapScaleBar: document.querySelector("#heatmapScale .heatmap-scale-bar"),
   heatmapScaleMin: document.getElementById("heatmapScaleMin"),
   heatmapScaleMax: document.getElementById("heatmapScaleMax"),
   heatmapMin: document.getElementById("heatmapMin"),
@@ -267,6 +269,8 @@ const ui = {
   heatmapMaxLabel: document.getElementById("heatmapMaxLabel"),
   heatmapMinInput: document.getElementById("heatmapMinInput"),
   heatmapMaxInput: document.getElementById("heatmapMaxInput"),
+  materialList: document.getElementById("materialList"),
+  meshList: document.getElementById("meshList"),
   radioMapPreviewSelect: document.getElementById("radioMapPreviewSelect"),
   radioMapPreviewImage: document.getElementById("radioMapPreviewImage"),
   radioMapDiffRun: document.getElementById("radioMapDiffRun"),
@@ -513,6 +517,9 @@ function snapshotUiState() {
       targetSize: readText(ui.indoorViewerTargetSize),
       skipPaths: readCheck(ui.indoorSkipPaths),
     },
+    viewer: {
+      floorElevation: readText(ui.floorElevation),
+    },
   };
 }
 
@@ -599,6 +606,9 @@ function applyUiState(snapshot) {
     setCheck(ui.indoorViewerNormalize, snapshot.indoorViewer.normalize);
     setText(ui.indoorViewerTargetSize, snapshot.indoorViewer.targetSize);
     setCheck(ui.indoorSkipPaths, snapshot.indoorViewer.skipPaths);
+  }
+  if (snapshot.viewer) {
+    setText(ui.floorElevation, snapshot.viewer.floorElevation);
   }
   if (snapshot.computePaths !== undefined) {
     setCheck(ui.simComputePaths, snapshot.computePaths);
@@ -1213,6 +1223,15 @@ function readScientificNumber(input) {
   if (!input || input.value === "") return null;
   const val = Number(input.value.trim());
   return Number.isFinite(val) ? val : null;
+}
+
+function getFloorElevation() {
+  const override = readNumber(ui.floorElevation);
+  if (override !== null) return override;
+  const proxyElev = state.manifest && state.manifest.proxy && state.manifest.proxy.ground
+    ? state.manifest.proxy.ground.elevation
+    : null;
+  return proxyElev !== undefined && proxyElev !== null ? proxyElev : 0;
 }
 
 function setInputValue(input, value) {
@@ -2450,6 +2469,7 @@ async function loadRun(runId) {
     rebuildScene();
     renderPathTable();
     renderPathStats();
+    renderMaterialList();
     setMeta(`${runId} · ${state.paths.length} paths`);
     if (ui.radioMapDiffToggle && ui.radioMapDiffToggle.checked) {
       await refreshHeatmapDiff();
@@ -2472,6 +2492,18 @@ function updateInputs() {
   ui.rxZ.value = state.markers.rx[2];
   const sceneCfg = state.sceneOverride || (state.runInfo && state.runInfo.config && state.runInfo.config.scene) || {};
   const txCfg = sceneCfg.tx || {};
+  if (ui.floorElevation) {
+    if (sceneCfg.floor_elevation !== undefined && sceneCfg.floor_elevation !== null) {
+      setInputValue(ui.floorElevation, sceneCfg.floor_elevation);
+    } else if (ui.floorElevation.value === "") {
+      const proxyElev = state.manifest && state.manifest.proxy && state.manifest.proxy.ground
+        ? state.manifest.proxy.ground.elevation
+        : null;
+      if (proxyElev !== undefined && proxyElev !== null) {
+        setInputValue(ui.floorElevation, proxyElev);
+      }
+    }
+  }
   const txLookAt = Array.isArray(txCfg.look_at) ? txCfg.look_at : null;
   const lookAtRis = Boolean(txCfg.look_at_ris);
   if (ui.txLookAtRis) ui.txLookAtRis.checked = lookAtRis;
@@ -2567,6 +2599,22 @@ function updateSceneOverrideTxFromUi() {
   state.sceneOverrideDirty = true;
 }
 
+function updateSceneOverrideFloorFromUi() {
+  if (!ui.floorElevation) return;
+  const sceneCfg = state.sceneOverride || {};
+  const floorZ = readNumber(ui.floorElevation);
+  if (floorZ !== null) {
+    sceneCfg.floor_elevation = floorZ;
+    sceneCfg.procedural = sceneCfg.procedural || {};
+    sceneCfg.procedural.ground = sceneCfg.procedural.ground || {};
+    sceneCfg.procedural.ground.elevation = floorZ;
+  } else if ("floor_elevation" in sceneCfg) {
+    delete sceneCfg.floor_elevation;
+  }
+  state.sceneOverride = sceneCfg;
+  state.sceneOverrideDirty = true;
+}
+
 function renderRunStats() {
   const info = state.runInfo || {};
   const summary = info.summary || {};
@@ -2647,12 +2695,23 @@ function updateHeatmapScaleLabels() {
   ui.heatmapScaleMax.textContent = ui.heatmapMax.value || "--";
 }
 
+function updateHeatmapScaleGradient() {
+  if (!ui.heatmapScaleBar) return;
+  const useDiff = ui.radioMapDiffToggle && ui.radioMapDiffToggle.checked;
+  const stops = useDiff ? HEATMAP_DIFF_STOPS : HEATMAP_STOPS;
+  const cssStops = stops.map((s) => `${_rgbToCss(s.color)} ${Math.round(s.pos * 100)}%`);
+  ui.heatmapScaleBar.style.background = `linear-gradient(90deg, ${cssStops.join(", ")})`;
+}
+
 function updateHeatmapScaleVisibility(force) {
   if (!ui.heatmapScale) return;
   const visible = force !== undefined
     ? force
     : Boolean(ui.toggleHeatmap.checked && getActiveHeatmap() && getActiveHeatmap().values);
   ui.heatmapScale.classList.toggle("is-hidden", !visible);
+  if (visible) {
+    updateHeatmapScaleGradient();
+  }
 }
 
 function getRisGeometryForIndex(idx) {
@@ -2813,7 +2872,7 @@ function addProxyGeometry() {
   const proxy = state.manifest.proxy;
   if (proxy.ground) {
     const size = proxy.ground.size || [200, 200];
-    const elev = proxy.ground.elevation || 0;
+    const elev = getFloorElevation();
     const geo = new THREE.PlaneGeometry(size[0], size[1]);
     const mat = new THREE.MeshStandardMaterial({ color: 0xdbe2e9, side: THREE.DoubleSide });
     const ground = new THREE.Mesh(geo, mat);
@@ -3026,7 +3085,7 @@ function addMarkers() {
 function addAlignmentMarkers() {
   const markerRadius = getMarkerRadius();
   // Reference height for markers (slightly above ground)
-  const markerZ = Math.max(markerRadius * 1.5, 0.2);
+  const markerZ = getFloorElevation() + Math.max(markerRadius * 1.5, 0.2);
   const axisLength = Math.max(getSceneScale() * 0.6, markerRadius * 12);
   const markerSize = Math.max(markerRadius * 1.2, 0.12);
 
@@ -3356,6 +3415,10 @@ function _lerpColor(a, b, t) {
   ];
 }
 
+function _rgbToCss(rgb) {
+  return `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`;
+}
+
 function _gradientColor(stops, t) {
   if (t <= 0) return stops[0].color;
   if (t >= 1) return stops[stops.length - 1].color;
@@ -3370,26 +3433,28 @@ function _gradientColor(stops, t) {
   return stops[stops.length - 1].color;
 }
 
+const HEATMAP_STOPS = [
+  { pos: 0.0, color: [12, 74, 110] },
+  { pos: 0.25, color: [20, 184, 166] },
+  { pos: 0.5, color: [250, 204, 21] },
+  { pos: 0.75, color: [249, 115, 22] },
+  { pos: 1.0, color: [220, 38, 38] },
+];
+
+const HEATMAP_DIFF_STOPS = [
+  { pos: 0.0, color: [30, 64, 175] },
+  { pos: 0.35, color: [59, 130, 246] },
+  { pos: 0.5, color: [255, 255, 255] },
+  { pos: 0.65, color: [248, 113, 113] },
+  { pos: 1.0, color: [190, 24, 93] },
+];
+
 function heatmapColor(t) {
-  const stops = [
-    { pos: 0.0, color: [12, 74, 110] },
-    { pos: 0.25, color: [20, 184, 166] },
-    { pos: 0.5, color: [250, 204, 21] },
-    { pos: 0.75, color: [249, 115, 22] },
-    { pos: 1.0, color: [220, 38, 38] },
-  ];
-  return _gradientColor(stops, t);
+  return _gradientColor(HEATMAP_STOPS, t);
 }
 
 function heatmapColorDiff(t) {
-  const stops = [
-    { pos: 0.0, color: [30, 64, 175] },
-    { pos: 0.35, color: [59, 130, 246] },
-    { pos: 0.5, color: [255, 255, 255] },
-    { pos: 0.65, color: [248, 113, 113] },
-    { pos: 1.0, color: [190, 24, 93] },
-  ];
-  return _gradientColor(stops, t);
+  return _gradientColor(HEATMAP_DIFF_STOPS, t);
 }
 
 function fitCamera() {
@@ -3477,6 +3542,47 @@ function renderPathStats() {
   `;
 }
 
+function renderMaterialList() {
+  if (!ui.materialList || !ui.meshList) return;
+  ui.materialList.innerHTML = "";
+  ui.meshList.innerHTML = "";
+  const manifest = state.manifest || {};
+  const meshEntries = Array.isArray(manifest.mesh_manifest) ? manifest.mesh_manifest : [];
+  const meshFiles = [];
+  if (manifest.mesh) meshFiles.push({ file: manifest.mesh, display: manifest.mesh });
+  if (Array.isArray(manifest.mesh_files)) {
+    manifest.mesh_files.forEach((f) => meshFiles.push({ file: f, display: f }));
+  }
+  const meshesToRender = meshEntries.length ? meshEntries : meshFiles;
+  if (meshesToRender.length === 0) {
+    ui.meshList.textContent = "No mesh files for this run.";
+  } else {
+    meshesToRender.forEach((entry) => {
+      const name = entry.display || entry.file || "mesh";
+      const meta = entry.shape_id ? `id:${entry.shape_id}` : "mesh";
+      const row = document.createElement("div");
+      row.className = "material-row";
+      row.innerHTML = `<span class="material-name">${name}</span><span class="material-value">${meta}</span>`;
+      ui.meshList.appendChild(row);
+    });
+  }
+
+  const mats = Array.isArray(manifest.materials) ? manifest.materials : [];
+  if (!mats.length) {
+    ui.materialList.textContent = "No material metadata found.";
+    return;
+  }
+  mats.forEach((item) => {
+    const name = item.object || "object";
+    const mat = item.radio_material || "unknown";
+    const note = item.is_placeholder ? "placeholder" : "radio";
+    const row = document.createElement("div");
+    row.className = "material-row";
+    row.innerHTML = `<span class="material-name">${name}</span><span class="material-value">${mat} · ${note}</span>`;
+    ui.materialList.appendChild(row);
+  });
+}
+
 function highlightPath(path) {
   if (highlightLine) {
     rayGroup.remove(highlightLine);
@@ -3533,7 +3639,8 @@ function onMouseMove(event) {
   const mouse = getMouse(event);
   const raycaster = new THREE.Raycaster();
   raycaster.setFromCamera(mouse, camera);
-  const plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+  const floorZ = getFloorElevation();
+  const plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -floorZ);
   const point = new THREE.Vector3();
   raycaster.ray.intersectPlane(plane, point);
   dragging.position.copy(point);
@@ -3825,6 +3932,15 @@ async function submitJob() {
     ? ((profileConfig && profileConfig.data && profileConfig.data.scene) || state.sceneOverride || {})
     : (state.sceneOverride || {});
   const scenePayload = JSON.parse(JSON.stringify(baseScene));
+  const floorZ = readNumber(ui.floorElevation);
+  if (floorZ !== null) {
+    scenePayload.floor_elevation = floorZ;
+    if (scenePayload.type === "procedural" || scenePayload.procedural) {
+      scenePayload.procedural = scenePayload.procedural || {};
+      scenePayload.procedural.ground = scenePayload.procedural.ground || {};
+      scenePayload.procedural.ground.elevation = floorZ;
+    }
+  }
   const txPayload = { position: state.markers.tx };
   const txPower = readNumber(ui.txPowerDbm);
   if (txPower !== null) txPayload.power_dbm = txPower;
@@ -4031,6 +4147,18 @@ function bindUI() {
   if (ui.radioMapPlaneZ) ui.radioMapPlaneZ.addEventListener("change", () => {
     schedulePersistUiSnapshot();
   });
+  if (ui.floorElevation) {
+    ui.floorElevation.addEventListener("input", () => {
+      updateSceneOverrideFloorFromUi();
+      rebuildScene();
+      schedulePersistUiSnapshot();
+    });
+    ui.floorElevation.addEventListener("change", () => {
+      updateSceneOverrideFloorFromUi();
+      rebuildScene();
+      schedulePersistUiSnapshot();
+    });
+  }
   
   console.log("Binding RIS controls...");
   if (!ui.mainTabStrip) console.error("ui.mainTabStrip is missing");
@@ -4185,6 +4313,7 @@ function bindUI() {
   if (ui.radioMapDiffToggle) {
     ui.radioMapDiffToggle.addEventListener("change", () => {
       refreshHeatmapDiff();
+      updateHeatmapScaleGradient();
     });
   }
   risPreviewInputs.forEach((input) => {

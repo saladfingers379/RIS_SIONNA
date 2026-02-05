@@ -635,7 +635,7 @@ input {
 .heatmap-scale-bar {
   height: 8px;
   border-radius: 999px;
-  background: linear-gradient(90deg, #22c55e 0%, #f97316 100%);
+  background: linear-gradient(90deg, #0c4a6e 0%, #14b8a6 25%, #facc15 50%, #f97316 75%, #dc2626 100%);
   border: 1px solid rgba(0, 0, 0, 0.2);
 }
 
@@ -643,6 +643,33 @@ input {
   display: flex;
   justify-content: space-between;
   font-size: 11px;
+}
+
+.material-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #fafaf7;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  font-size: 12px;
+}
+
+.material-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.material-name {
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.material-value {
+  color: #475569;
+  text-align: right;
 }
 
 .is-hidden {

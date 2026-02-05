@@ -843,7 +843,7 @@ def run_simulation(config_path: str, overrides: Optional[Dict[str, Any]] = None)
 
                 save_json(output_dir / "summary.json", summary)
                 try:
-                    generate_viewer(output_dir, cfg.data)
+                    generate_viewer(output_dir, cfg.data, scene=scene)
                 except Exception as exc:  # pragma: no cover
                     logger.warning("Viewer generation failed: %s", exc)
                 logger.info("Run complete: %s", output_dir)

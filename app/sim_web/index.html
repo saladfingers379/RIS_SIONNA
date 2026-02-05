@@ -47,6 +47,11 @@
               <div class="help-text">Sets radio-map plane height without changing size/cell resolution.</div>
             </div>
             <div class="field">
+              <label>Floor Z (m)</label>
+              <input id="floorElevation" type="number" step="0.1" placeholder="0.0" />
+              <div class="help-text">Viewer-only floor height. Affects proxy ground + drag plane.</div>
+            </div>
+            <div class="field">
               <label>Scene</label>
               <select id="sceneSelect"></select>
             </div>
@@ -424,6 +429,7 @@
         <div class="right-tab-strip" id="rightTabStrip">
           <button class="right-tab-button is-active" data-right-tab="ris" type="button">RIS Config</button>
           <button class="right-tab-button" data-right-tab="paths" type="button">Path Table</button>
+          <button class="right-tab-button" data-right-tab="materials" type="button">Materials</button>
         </div>
         <div class="right-tab-panel is-active" data-right-tab="ris">
           <details class="panel-section" open>
@@ -518,6 +524,18 @@
               </thead>
               <tbody id="pathTableBody"></tbody>
             </table>
+          </div>
+        </div>
+        <div class="right-tab-panel" data-right-tab="materials">
+          <h2>Materials</h2>
+          <div class="help-text">Loaded mesh files and their scene radio materials.</div>
+          <div class="field">
+            <label>Meshes</label>
+            <div class="material-list" id="meshList"></div>
+          </div>
+          <div class="field">
+            <label>Scene Objects</label>
+            <div class="material-list" id="materialList"></div>
           </div>
         </div>
       </section>

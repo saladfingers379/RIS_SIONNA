@@ -168,6 +168,54 @@ def _write_procedural_scene_xml(path: Path, spec: Dict[str, Any]) -> None:
     )
     path.write_text(xml, encoding="utf-8")
 
+def _apply_floor_elevation_xml(xml_text: str, floor_z: float, target_ids: Optional[List[str]] = None) -> str:
+    if floor_z == 0:
+        return xml_text
+    target_ids = target_ids or ["ground", "ground_mesh", "floor", "floor_mesh", "ground_plane"]
+    # Map of id -> updated
+    updated = {tid: False for tid in target_ids}
+
+    def _update_shape(match: re.Match) -> str:
+        shape = match.group(0)
+        shape_id = match.group("id")
+        if shape_id not in updated or updated[shape_id]:
+            return shape
+        updated[shape_id] = True
+        # If a translate exists, adjust z.
+        def _bump_translate(m: re.Match) -> str:
+            attrs = m.group("attrs") or ""
+            z_match = re.search(r'\bz\s*=\s*"([^"]+)"', attrs)
+            if z_match:
+                try:
+                    z_val = float(z_match.group(1))
+                except ValueError:
+                    z_val = 0.0
+                new_z = z_val + floor_z
+                return re.sub(r'\bz\s*=\s*"[^"]+"', f'z="{new_z}"', m.group(0))
+            return m.group(0).replace("/>", f' z="{floor_z}"/>')
+
+        if re.search(r"<translate\b", shape):
+            shape = re.sub(r"<translate\b(?P<attrs>[^>]*)/>", _bump_translate, shape, count=1)
+            return shape
+        # If there's a transform, insert translate as first child.
+        if re.search(r"<transform\b", shape):
+            return re.sub(
+                r"(<transform\b[^>]*>)",
+                r"\1\n      <translate x=\"0\" y=\"0\" z=\"{:.6f}\"/>".format(floor_z),
+                shape,
+                count=1,
+            )
+        # Otherwise add a new transform block.
+        insert = (
+            "\n    <transform name=\"to_world\">\n"
+            f"      <translate x=\"0\" y=\"0\" z=\"{floor_z:.6f}\"/>\n"
+            "    </transform>\n"
+        )
+        return shape.replace(">", ">" + insert, 1)
+
+    pattern = r"<shape\b[^>]*\bid=\"(?P<id>[^\"]+)\"[^>]*>[\s\S]*?</shape>"
+    return re.sub(pattern, _update_shape, xml_text, flags=re.IGNORECASE)
+
 
 def _apply_materials(scene, spec: Dict[str, Any]) -> None:
     def _get_material_name(name: str) -> str:
@@ -206,18 +254,21 @@ def _build_file_scene(rt, scene_cfg: Dict[str, Any], cfg: Optional[Dict[str, Any
     filename = scene_cfg.get("file")
     if not filename:
         raise ValueError("scene.file must be set when scene.type is 'file'")
-    try:
-        return rt.load_scene(filename)
-    except RuntimeError as exc:
-        msg = str(exc)
-        if "itu_radio_material" not in msg and "itu-radio-material" not in msg:
-            raise
-        xml_path = Path(filename)
-        if not xml_path.exists():
-            raise
-        xml_text = xml_path.read_text(encoding="utf-8")
-        if "itu_radio_material" not in xml_text and "itu-radio-material" not in xml_text:
-            raise
+    floor_z = float(scene_cfg.get("floor_elevation", 0.0) or 0.0)
+    floor_targets = scene_cfg.get("floor_targets")
+
+    xml_path = Path(filename)
+    if not xml_path.exists():
+        raise FileNotFoundError(f"Scene file not found: {filename}")
+
+    def _write_cached_scene(xml_text: str):
+        cache_root = Path((cfg or {}).get("output", {}).get("base_dir", "outputs")) / "_cache" / "file_scenes"
+        cache_root.mkdir(parents=True, exist_ok=True)
+        cache_path = cache_root / f"scene_{_hash_text(xml_text)}.xml"
+        cache_path.write_text(xml_text, encoding="utf-8")
+        return cache_path
+
+    def _normalize_itu_materials(xml_text: str) -> str:
         logger.warning(
             "itu-radio-material plugin not found; normalizing name or falling back to diffuse for '%s'. "
             "Results will not match radio-material propagation.",
@@ -238,8 +289,9 @@ def _build_file_scene(rt, scene_cfg: Dict[str, Any], cfg: Optional[Dict[str, Any
             # Fallback: handle variants with extra attributes/whitespace.
             alt_pattern = r"<bsdf\s+type=\"itu-radio-material\"(?P<attrs>[^>]*)>[\s\S]*?</bsdf>"
             replaced = re.sub(alt_pattern, _diffuse_block, xml_text, flags=re.IGNORECASE)
-        xml_text = replaced
-        # Make relative asset paths absolute for the cached copy.
+        return replaced
+
+    def _absolutize_assets(xml_text: str) -> str:
         base_dir = xml_path.parent
         def _abspath(match: re.Match) -> str:
             path = match.group("path")
@@ -247,16 +299,43 @@ def _build_file_scene(rt, scene_cfg: Dict[str, Any], cfg: Optional[Dict[str, Any
                 return match.group(0)
             abs_path = (base_dir / path).resolve()
             return f'<string name="filename" value="{abs_path}"/>'
-        xml_text = re.sub(
+        return re.sub(
             r'<string\s+name=\"filename\"\s+value=\"(?P<path>[^\"]+)\"\s*/?>',
             _abspath,
             xml_text,
             flags=re.IGNORECASE,
         )
-        cache_root = Path((cfg or {}).get("output", {}).get("base_dir", "outputs")) / "_cache" / "file_scenes"
-        cache_root.mkdir(parents=True, exist_ok=True)
-        cache_path = cache_root / f"scene_{_hash_text(xml_text)}.xml"
-        cache_path.write_text(xml_text, encoding="utf-8")
+
+    if floor_z == 0.0:
+        try:
+            return rt.load_scene(filename)
+        except RuntimeError as exc:
+            msg = str(exc)
+            if "itu_radio_material" not in msg and "itu-radio-material" not in msg:
+                raise
+            xml_text = xml_path.read_text(encoding="utf-8")
+            if "itu_radio_material" not in xml_text and "itu-radio-material" not in xml_text:
+                raise
+            xml_text = _normalize_itu_materials(xml_text)
+            xml_text = _absolutize_assets(xml_text)
+            cache_path = _write_cached_scene(xml_text)
+            scene = rt.load_scene(str(cache_path))
+            _apply_default_radio_materials(scene)
+            return scene
+
+    # Floor elevation requested: load via cached XML.
+    xml_text = xml_path.read_text(encoding="utf-8")
+    xml_text = _apply_floor_elevation_xml(xml_text, floor_z, floor_targets)
+    xml_text = _absolutize_assets(xml_text)
+    cache_path = _write_cached_scene(xml_text)
+    try:
+        return rt.load_scene(str(cache_path))
+    except RuntimeError as exc:
+        msg = str(exc)
+        if "itu_radio_material" not in msg and "itu-radio-material" not in msg:
+            raise
+        xml_text = _normalize_itu_materials(xml_text)
+        cache_path = _write_cached_scene(xml_text)
         scene = rt.load_scene(str(cache_path))
         _apply_default_radio_materials(scene)
         return scene
@@ -423,18 +502,53 @@ def export_scene_meshes(scene, output_dir: Path, scene_id: str, cache_root: Opti
     cache_dir.mkdir(parents=True, exist_ok=True)
 
     cached_meshes = list(cache_dir.glob("*.ply"))
+    manifest_path = cache_dir / "mesh_manifest.json"
     if cached_meshes:
+        if not manifest_path.exists():
+            manifest = []
+            mi_scene = scene.mi_scene
+            for idx, mesh in enumerate(mi_scene.shapes()):
+                shape_id = None
+                try:
+                    shape_id = mesh.id()
+                except Exception:
+                    shape_id = None
+                manifest.append(
+                    {
+                        "index": idx,
+                        "file": f"mesh_{idx:03d}.ply",
+                        "shape_id": shape_id,
+                    }
+                )
+            manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
         for src in cached_meshes:
             dst = mesh_dir / src.name
             if src.resolve() != dst.resolve():
                 shutil.copyfile(src, dst)
+        if manifest_path.exists():
+            dst_manifest = mesh_dir / manifest_path.name
+            if manifest_path.resolve() != dst_manifest.resolve():
+                shutil.copyfile(manifest_path, dst_manifest)
         return
 
     mi_scene = scene.mi_scene
+    manifest = []
     for idx, mesh in enumerate(mi_scene.shapes()):
         try:
             path = cache_dir / f"mesh_{idx:03d}.ply"
             mesh.write_ply(str(path))
+            shape_id = None
+            try:
+                shape_id = mesh.id()
+            except Exception:
+                shape_id = None
+            manifest.append(
+                {
+                    "index": idx,
+                    "file": path.name,
+                    "shape_id": shape_id,
+                }
+            )
         except Exception:
             continue
 
@@ -442,6 +556,11 @@ def export_scene_meshes(scene, output_dir: Path, scene_id: str, cache_root: Opti
         dst = mesh_dir / src.name
         if src.resolve() != dst.resolve():
             shutil.copyfile(src, dst)
+    if manifest:
+        manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+        dst_manifest = mesh_dir / manifest_path.name
+        if manifest_path.resolve() != dst_manifest.resolve():
+            shutil.copyfile(manifest_path, dst_manifest)
 
 
 def scene_sanity_report(scene, cfg: Dict[str, Any]) -> Dict[str, Any]:

@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import json
 import shutil
+import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -95,7 +96,7 @@ def _ensure_vendor(viewer_dir: Path) -> None:
     ensure_three_vendor(viewer_dir)
 
 
-def generate_viewer(output_dir: Path, config: Dict[str, Any]) -> Optional[Path]:
+def generate_viewer(output_dir: Path, config: Dict[str, Any], scene=None) -> Optional[Path]:
     viewer_dir = output_dir / "viewer"
     viewer_dir.mkdir(parents=True, exist_ok=True)
     _ensure_vendor(viewer_dir)
@@ -122,6 +123,7 @@ def generate_viewer(output_dir: Path, config: Dict[str, Any]) -> Optional[Path]:
 
     mesh_dir = output_dir / "scene_mesh"
     mesh_files = []
+    mesh_manifest = []
     if mesh_dir.exists():
         out_mesh_dir = viewer_dir / "meshes"
         out_mesh_dir.mkdir(parents=True, exist_ok=True)
@@ -130,6 +132,12 @@ def generate_viewer(output_dir: Path, config: Dict[str, Any]) -> Optional[Path]:
             if src.resolve() != dst.resolve():
                 shutil.copyfile(src, dst)
             mesh_files.append(f"meshes/{dst.name}")
+        manifest_src = mesh_dir / "mesh_manifest.json"
+        if manifest_src.exists():
+            try:
+                mesh_manifest = json.loads(manifest_src.read_text(encoding="utf-8"))
+            except Exception:
+                mesh_manifest = []
 
     proxy_enabled = scene_cfg.get("proxy_enabled", False)
     proxy = scene_cfg.get("proxy") if proxy_enabled else None
@@ -193,6 +201,113 @@ def generate_viewer(output_dir: Path, config: Dict[str, Any]) -> Optional[Path]:
         "mesh_rotation_deg": scene_cfg.get("mesh_rotation_deg"),
         "proxy": proxy,
     }
+    if mesh_manifest:
+        source_map = {}
+        scene_file = scene_cfg.get("file")
+        if scene_cfg.get("type") == "file" and scene_file:
+            try:
+                xml_text = Path(scene_file).read_text(encoding="utf-8")
+                pattern = (
+                    r"<shape\\b[^>]*\\bid=\"(?P<id>[^\"]+)\"[^>]*>\\s*"
+                    r"(?:[\\s\\S]*?)<string\\s+name=\"filename\"\\s+value=\"(?P<file>[^\"]+)\""
+                )
+                for match in re.finditer(pattern, xml_text, flags=re.IGNORECASE):
+                    sid = match.group("id")
+                    src = match.group("file")
+                    source_map[sid] = src
+            except Exception:
+                source_map = {}
+        enriched = []
+        for item in mesh_manifest:
+            shape_id = item.get("shape_id")
+            src_name = source_map.get(shape_id) if shape_id else None
+            display = src_name or shape_id or item.get("file")
+            enriched.append(
+                {
+                    "file": f"meshes/{item.get('file')}",
+                    "shape_id": shape_id,
+                    "source": src_name,
+                    "display": display,
+                }
+            )
+        scene_manifest["mesh_manifest"] = enriched
+    materials = []
+    objects = []
+    if scene is not None:
+        try:
+            objects = list(getattr(scene, "objects", {}).values())
+        except Exception:
+            objects = []
+
+    def _material_row(name, rm):
+        radio_material = None
+        is_placeholder = False
+        if isinstance(rm, str):
+            radio_material = rm
+        elif rm is not None:
+            radio_material = getattr(rm, "name", str(rm))
+            is_placeholder = bool(getattr(rm, "is_placeholder", False))
+        return {
+            "object": name,
+            "radio_material": radio_material,
+            "is_placeholder": is_placeholder,
+        }
+
+    if objects:
+        for obj in objects:
+            name = getattr(obj, "name", None)
+            if name is None:
+                continue
+            try:
+                rm = obj.radio_material
+            except Exception:
+                rm = None
+            materials.append(_material_row(name, rm))
+    elif scene is not None:
+        # Fallback: use Mitsuba shape ids and resolve via scene.get(name).
+        try:
+            shape_ids = []
+            for shape in scene.mi_scene.shapes():
+                try:
+                    sid = shape.id()
+                except Exception:
+                    sid = None
+                if sid:
+                    shape_ids.append(str(sid))
+            for sid in shape_ids:
+                rm = None
+                try:
+                    obj = scene.get(sid)
+                    rm = obj.radio_material
+                except Exception:
+                    rm = None
+                materials.append(_material_row(sid, rm))
+        except Exception:
+            materials = []
+    else:
+        # Last resort: parse file scene XML to extract bsdf references.
+        scene_file = scene_cfg.get("file")
+        if scene_cfg.get("type") == "file" and scene_file:
+            try:
+                xml_text = Path(scene_file).read_text(encoding="utf-8")
+                shape_pattern = r"<shape\\b[^>]*\\bid=\"(?P<id>[^\"]+)\"[^>]*>(?P<body>[\\s\\S]*?)</shape>"
+                for match in re.finditer(shape_pattern, xml_text, flags=re.IGNORECASE):
+                    sid = match.group("id")
+                    body = match.group("body") or ""
+                    bsdf_id = None
+                    ref_match = re.search(r"<ref\\b[^>]*\\bname=\"bsdf\"[^>]*\\bid=\"([^\"]+)\"", body)
+                    if not ref_match:
+                        ref_match = re.search(r"<ref\\b[^>]*\\bid=\"([^\"]+)\"[^>]*\\bname=\"bsdf\"", body)
+                    if ref_match:
+                        bsdf_id = ref_match.group(1)
+                    else:
+                        bsdf_match = re.search(r"<bsdf\\b[^>]*\\bid=\"([^\"]+)\"", body)
+                        if bsdf_match:
+                            bsdf_id = bsdf_match.group(1)
+                    materials.append(_material_row(sid, bsdf_id))
+            except Exception:
+                materials = []
+    scene_manifest["materials"] = materials
     (viewer_dir / "scene_manifest.json").write_text(
         json.dumps(scene_manifest, indent=2), encoding="utf-8"
     )
