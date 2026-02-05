@@ -326,6 +326,9 @@ def build_scene(cfg: Dict[str, Any], mitsuba_variant: Optional[str] = None):
     apply_mitsuba_variant(mitsuba_variant)
     assert_mitsuba_variant(mitsuba_variant, context="build_scene")
     import sionna.rt as rt
+    from .utils.sionna_patches import apply_sionna_multi_ris_patch
+
+    apply_sionna_multi_ris_patch()
 
     scene_cfg = cfg.get("scene", {})
     scene_type = scene_cfg.get("type", "builtin")

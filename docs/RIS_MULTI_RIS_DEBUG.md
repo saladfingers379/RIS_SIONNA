@@ -114,6 +114,39 @@ coverage-map code paths, the rendered outputs still **look duplicated**. This
 reinforces that the problem is downstream of profile evaluation and remains
 unresolved.
 
+## Resolution (2026-02-05)
+**Root cause (coverage-map path):** Sionna RT 0.19.2’s coverage-map RIS reflection
+path was **concatenating per-RIS rays using zero-padded tensors** without keeping
+all associated ray metadata aligned (e.g., `int_point`, `k_tx`, `samples_tx_indices`,
+`radii_curv`, `angular_opening`). This created **cross-RIS mixing** after
+concatenation and made multiple RIS appear to share one pattern, even though
+per-RIS `gamma` was distinct.
+
+**Fix applied:** Added a local patch that replaces
+`SolverCoverageMap._apply_ris_reflection` with a version that:
+- filters rays **per RIS**,
+- computes reflection **per RIS**,
+- concatenates only **real samples** (no padding),
+- keeps **all ray metadata aligned** with the corresponding rays.
+
+**Implementation details:**
+- New file: `app/utils/sionna_patches.py`
+  - Provides `apply_sionna_multi_ris_patch()` monkeypatching the Sionna
+    class method.
+- Hooked into scene build:
+  - `app/scene.py` imports and calls `apply_sionna_multi_ris_patch()` before
+    any solver is instantiated.
+
+**Why this is acceptable:**
+- Uses official Sionna RT APIs; no CUDA hacks or LD_PRELOAD.
+- Patch is localized, explicit, and guarded to apply once.
+- Avoids CPU fallback and does not change adapter logic.
+
+**Notes:**
+- This fix targets the **coverage-map** RIS pipeline (solver_cm).
+- If duplication reappears in **compute_paths**, investigate solver_paths
+  concatenation or RIS transition matrix logic separately.
+
 ## Next Steps (Suggested)
 1. Instrument inside Sionna RT solver with per-RIS `gamma` statistics at the exact point of application.
 2. Compare the per-RIS `gamma` tensors used during path evaluation.
