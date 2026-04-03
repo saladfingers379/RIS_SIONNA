@@ -6,6 +6,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>RIS_SIONNA Omniverse-lite Simulator</title>
   <link rel="stylesheet" href="styles.css" />
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [["\\(", "\\)"]],
+        displayMath: [["\\[", "\\]"]],
+      },
+      svg: { fontCache: "global" },
+    };
+  </script>
+  <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
 </head>
 
 <body>
@@ -31,7 +41,10 @@
       <div class="main-tab-strip" id="mainTabStrip">
         <button class="main-tab-button is-active" data-main-tab="sim" type="button">Simulation</button>
         <button class="main-tab-button" data-main-tab="indoor" type="button">Indoor</button>
+        <button class="main-tab-button" data-main-tab="campaign" type="button">Indoor Campaign</button>
+        <button class="main-tab-button" data-main-tab="campaign2" type="button">Indoor Campaign 2</button>
         <button class="main-tab-button" data-main-tab="ris" type="button">RIS Lab</button>
+        <button class="main-tab-button" data-main-tab="models" type="button">Propagation Models</button>
         <button class="main-tab-button" data-main-tab="cc" type="button">Channel Charting</button>
       </div>
 
@@ -62,7 +75,7 @@
                 <option value="gpu_low">GPU Low</option>
                 <option value="gpu_medium">GPU Medium</option>
                 <option value="gpu_high">GPU High</option>
-                <option value="indoor_box_high">Indoor Box High</option>
+                <option value="indoor_box_high">Indoor Chamber (IEEE TAP)</option>
                 <option value="custom">Custom</option>
               </select>
             </div>
@@ -227,6 +240,10 @@
                   <input id="txLookAtRis" type="checkbox" />
                   Look at RIS
                 </label>
+                <label class="toggle">
+                  <input id="txAutoPlaceRis" type="checkbox" />
+                  Auto-place Tx from RIS
+                </label>
               </div>
               <div>
                 <label>Tx Yaw (deg)</label>
@@ -251,6 +268,10 @@
                   <option value="dipole">dipole</option>
                   <option value="hw_dipole">hw_dipole</option>
                   <option value="tr38901">tr38901</option>
+                  <option value="horn_15dbi">horn_15dbi</option>
+                  <option value="horn_15dbi_front">horn_15dbi_front</option>
+                  <option value="horn_22dbi">horn_22dbi</option>
+                  <option value="horn_22dbi_front">horn_22dbi_front</option>
                 </select>
               </div>
               <div>
@@ -266,12 +287,18 @@
                 <input id="showTxDirection" type="checkbox" />
                 Show Tx direction
               </label>
+              <button id="applyIeeeTapPreset" type="button">Apply IEEE Chamber Preset</button>
               <button id="applyMarkers">Apply Markers</button>
               <button id="randomizeMarkers" type="button">Randomize Tx/Rx</button>
               <label class="toggle">
                 <input id="dragMarkers" type="checkbox" />
                 Drag markers in 3D
               </label>
+              <div class="field">
+                <label for="txRxOrbScale">Tx/Rx orb size <span id="txRxOrbScaleValue">100%</span></label>
+                <input id="txRxOrbScale" type="range" min="0.15" max="1.0" step="0.05" value="1.0" />
+                <div class="help-text">100% is the original default size.</div>
+              </div>
             </div>
           </div>
         </details>
@@ -283,6 +310,10 @@
               <input id="simComputePaths" type="checkbox" checked />
               Ray tracing (compute paths)
             </label>
+            <label class="toggle">
+              <input id="simRisIsolation" type="checkbox" />
+              RIS-only isolation (LOS off, specular off)
+            </label>
             <div class="job-buttons">
               <button id="runSim">Run Simulation</button>
             </div>
@@ -291,6 +322,255 @@
               <h3>Job Status</h3>
               <div id="jobList"></div>
             </div>
+          </div>
+        </details>
+
+        <details class="panel-section campaign-only">
+          <summary>Indoor Campaign</summary>
+          <div class="panel-section-body">
+            <div class="help-text">Batch chamber sweep that moves one device along an angular arc and accumulates results into one resumable campaign run.</div>
+            <div class="field-grid">
+              <div>
+                <label>Sweep device</label>
+                <select id="campaignSweepDevice">
+                  <option value="rx">Receiver</option>
+                  <option value="tx">Transmitter</option>
+                </select>
+              </div>
+              <div>
+                <label>Radius (m)</label>
+                <input id="campaignRadius" type="number" step="0.01" value="2.00" />
+                <input id="campaignRadiusSlider" type="range" min="0.20" max="1.30" step="0.01" value="1.10" />
+              </div>
+              <div>
+                <label>Max angles/job</label>
+                <input id="campaignChunkSize" type="number" step="1" min="1" value="12" />
+              </div>
+            </div>
+            <div class="field-grid">
+              <div>
+                <label>Start angle (deg)</label>
+                <input id="campaignStartAngle" type="number" step="1" value="-90" />
+              </div>
+              <div>
+                <label>Stop angle (deg)</label>
+                <input id="campaignStopAngle" type="number" step="1" value="90" />
+              </div>
+              <div>
+                <label>Step (deg)</label>
+                <input id="campaignStepAngle" type="number" step="1" min="1" value="2" />
+              </div>
+              <div>
+                <label>Arc height offset (m)</label>
+                <input id="campaignArcHeightOffset" type="number" step="0.01" value="0.00" />
+              </div>
+            </div>
+            <div class="field">
+              <label>Pivot (x y z)</label>
+              <div class="triple">
+                <input id="campaignPivotX" type="number" step="0.01" value="0" />
+                <input id="campaignPivotY" type="number" step="0.01" value="0" />
+                <input id="campaignPivotZ" type="number" step="0.01" value="1.5" />
+              </div>
+              <div class="job-buttons">
+                <label class="toggle">
+                  <input id="campaignPivotFollowRis" type="checkbox" checked />
+                  Keep pivot on RIS
+                </label>
+                <button id="campaignPivotUseRis" type="button">Use RIS Position</button>
+              </div>
+              <div class="help-text">The swept device is placed on a circle around this pivot using the chosen radius.</div>
+            </div>
+            <div class="field-grid">
+              <label class="toggle">
+                <input id="campaignCompactOutput" type="checkbox" />
+                Compact output mode
+              </label>
+              <label class="toggle">
+                <input id="campaignDisableRender" type="checkbox" checked />
+                Disable scene render
+              </label>
+              <label class="toggle">
+                <input id="campaignPruneRuns" type="checkbox" />
+                Prune per-angle artifacts
+              </label>
+            </div>
+            <div class="field-grid">
+              <div>
+                <label>Coarse cell size (m)</label>
+                <input id="campaignCoarseCell" type="number" step="0.01" value="0.10" />
+              </div>
+              <div>
+                <label>Resume existing run</label>
+                <select id="campaignResumeRun">
+                  <option value="">New campaign run</option>
+                </select>
+              </div>
+            </div>
+            <div class="job-buttons">
+              <button id="campaignStart" type="button">Run Campaign Chunk</button>
+              <button id="campaignRunAll" type="button">Run All Chunks</button>
+              <button id="campaignRefresh" type="button">Refresh Campaign</button>
+            </div>
+            <div id="campaignJobStatus">Idle.</div>
+            <div class="help-text" id="campaignProgress"></div>
+            <pre class="log-view" id="campaignLog"></pre>
+            <div class="job-status">
+              <h3>Recent Campaign Jobs</h3>
+              <div id="campaignJobList"></div>
+            </div>
+          </div>
+        </details>
+
+        <details class="panel-section campaign-only">
+          <summary>Campaign Results</summary>
+          <div class="panel-section-body">
+            <div class="field">
+              <label>Campaign run</label>
+              <select id="campaignRunSelect"></select>
+            </div>
+            <div class="job-buttons">
+              <button id="campaignLoadResults" type="button">Load Campaign Results</button>
+            </div>
+            <div id="campaignResultStatus" class="help-text"></div>
+            <div class="metrics-card" id="campaignMetrics"></div>
+            <div class="plot-tab-strip" id="campaignPlotTabs">
+              <button class="plot-tab-button is-active" data-plot="campaign_rx_power_dbm.png" type="button">Rx Power</button>
+              <button class="plot-tab-button" data-plot="campaign_path_gain_db.png" type="button">Path Gain</button>
+              <button class="plot-tab-button" data-plot="campaign_rx_power_compare_dbm.png" type="button">Rx On/Off</button>
+              <button class="plot-tab-button" data-plot="campaign_path_gain_compare_db.png" type="button">Gain On/Off</button>
+              <button class="plot-tab-button" data-plot="campaign_rx_power_delta_db.png" type="button">Rx Delta</button>
+              <button class="plot-tab-button" data-plot="campaign_path_gain_delta_db.png" type="button">Gain Delta</button>
+            </div>
+            <figure class="plot-card single">
+              <img id="campaignPlotImage" alt="Campaign plot" />
+              <figcaption id="campaignPlotCaption"></figcaption>
+            </figure>
+          </div>
+        </details>
+
+        <details class="panel-section campaign2-only">
+          <summary>Indoor Campaign 2</summary>
+          <div class="panel-section-body">
+            <div class="help-text">QUB near-field recreation: fixed Rx, co-rotating Tx and RIS, per-frequency angular cuts, and normalized peak-vs-frequency outputs.</div>
+            <div class="field-grid">
+              <div>
+                <label>Target angles (deg)</label>
+                <input id="campaign2TargetAngles" type="text" value="0,15,45,60" />
+              </div>
+              <div>
+                <label>Polarization</label>
+                <select id="campaign2Polarization">
+                  <option value="both">Both</option>
+                  <option value="V">Vertical</option>
+                  <option value="H">Horizontal</option>
+                </select>
+              </div>
+              <div>
+                <label>Max series/job</label>
+                <input id="campaign2ChunkSize" type="number" step="1" min="1" value="1" />
+              </div>
+            </div>
+            <div class="field-grid">
+              <div>
+                <label>Freq start (GHz)</label>
+                <input id="campaign2FrequencyStart" type="number" step="0.1" value="27.0" />
+              </div>
+              <div>
+                <label>Freq stop (GHz)</label>
+                <input id="campaign2FrequencyStop" type="number" step="0.1" value="29.0" />
+              </div>
+              <div>
+                <label>Freq step (GHz)</label>
+                <input id="campaign2FrequencyStep" type="number" step="0.1" min="0.1" value="1.0" />
+              </div>
+            </div>
+            <div class="field-grid">
+              <div>
+                <label>Turntable start (deg)</label>
+                <input id="campaign2StartAngle" type="number" step="1" value="-90" />
+              </div>
+              <div>
+                <label>Turntable stop (deg)</label>
+                <input id="campaign2StopAngle" type="number" step="1" value="90" />
+              </div>
+              <div>
+                <label>Turntable step (deg)</label>
+                <input id="campaign2StepAngle" type="number" step="1" min="1" value="2" />
+              </div>
+            </div>
+            <div class="field-grid">
+              <div>
+                <label>Tx-RIS distance (m)</label>
+                <input id="campaign2TxRisDistance" type="number" step="0.01" value="0.40" />
+              </div>
+              <div>
+                <label>Target radius (m)</label>
+                <input id="campaign2TargetDistance" type="number" step="0.01" value="2.00" />
+              </div>
+              <div>
+                <label>Tx incidence (deg)</label>
+                <input id="campaign2TxIncidenceAngle" type="number" step="1" value="-30" />
+              </div>
+            </div>
+            <div class="field-grid">
+              <label class="toggle">
+                <input id="campaign2CompactOutput" type="checkbox" checked />
+                Compact output mode
+              </label>
+              <label class="toggle">
+                <input id="campaign2DisableRender" type="checkbox" checked />
+                Disable scene render
+              </label>
+              <label class="toggle">
+                <input id="campaign2PruneRuns" type="checkbox" checked />
+                Prune per-sample artifacts
+              </label>
+            </div>
+            <div class="field-grid">
+              <div>
+                <label>Coarse cell size (m)</label>
+                <input id="campaign2CoarseCell" type="number" step="0.01" value="0.10" />
+              </div>
+              <div>
+                <label>Resume existing run</label>
+                <select id="campaign2ResumeRun">
+                  <option value="">New campaign run</option>
+                </select>
+              </div>
+            </div>
+            <div class="job-buttons">
+              <button id="campaign2Start" type="button">Run Series Chunk</button>
+              <button id="campaign2RunAll" type="button">Run All Chunks</button>
+              <button id="campaign2Refresh" type="button">Refresh Campaign</button>
+            </div>
+            <div id="campaign2JobStatus">Idle.</div>
+            <div class="help-text" id="campaign2Progress"></div>
+            <pre class="log-view" id="campaign2Log"></pre>
+            <div class="job-status">
+              <h3>Recent Campaign Jobs</h3>
+              <div id="campaign2JobList"></div>
+            </div>
+          </div>
+        </details>
+
+        <details class="panel-section campaign2-only">
+          <summary>Campaign 2 Results</summary>
+          <div class="panel-section-body">
+            <div class="field">
+              <label>Campaign run</label>
+              <select id="campaign2RunSelect"></select>
+            </div>
+            <div class="job-buttons">
+              <button id="campaign2LoadResults" type="button">Load Campaign Results</button>
+            </div>
+            <div id="campaign2ResultStatus" class="help-text"></div>
+            <div class="metrics-card" id="campaign2Metrics"></div>
+            <div class="plot-tab-strip" id="campaign2PlotTabs"></div>
+            <figure class="plot-card single">
+              <img id="campaign2PlotImage" alt="Campaign 2 plot" />
+              <figcaption id="campaign2PlotCaption"></figcaption>
+            </figure>
           </div>
         </details>
 
@@ -418,6 +698,9 @@
             <label><input id="toggleGuides" type="checkbox" /> Guides</label>
             <label><input id="toggleRisFocus" type="checkbox" /> RIS Focus</label>
             <label><input id="toggleRisFront" type="checkbox" /> RIS Front</label>
+            <label><input id="toggleCcRoute" type="checkbox" checked /> CC Route</label>
+            <label><input id="toggleCcAntennas" type="checkbox" checked /> CC Antennas</label>
+            <label><input id="toggleCcPrediction" type="checkbox" checked /> CC Prediction</label>
           </div>
         </div>
         <div class="viewer-overlay viewer-overlay-bottom">
@@ -546,6 +829,14 @@
     <div class="layout" id="indoorLayout"></div>
   </div>
 
+  <div class="main-tab-panel" data-main-tab="campaign">
+    <div class="layout" id="campaignLayout"></div>
+  </div>
+
+  <div class="main-tab-panel" data-main-tab="campaign2">
+    <div class="layout" id="campaign2Layout"></div>
+  </div>
+
   <div class="main-tab-panel" data-main-tab="ris">
     <div class="ris-layout">
       <section class="panel ris-panel">
@@ -570,6 +861,7 @@
                 <select id="risAction">
                   <option value="run">Run</option>
                   <option value="validate">Validate</option>
+                  <option value="compare">QUB Model</option>
                 </select>
               </div>
               <div>
@@ -584,6 +876,38 @@
               <label>Reference file (CSV/NPZ/MAT)</label>
               <input id="risReferencePath" type="text" placeholder="refs/pattern.csv" />
               <div class="help-text">Required for validation runs.</div>
+            </div>
+            <div class="field" id="risCompareField" style="display:none;">
+              <label>Compare Options</label>
+              <div class="field-grid">
+                <label class="toggle">
+                  <input id="risCompareUseSionna" type="checkbox" checked />
+                  Include Sionna RT models
+                </label>
+                <label class="toggle">
+                  <input id="risCompareUsePaths" type="checkbox" checked />
+                  Include `compute_paths()`
+                </label>
+                <label class="toggle">
+                  <input id="risCompareUseCoverage" type="checkbox" checked />
+                  Include `coverage_map()`
+                </label>
+              </div>
+              <div class="field-grid">
+                <div>
+                  <label>Sionna sampled angles</label>
+                  <input id="risCompareAngles" type="number" min="11" step="1" value="25" />
+                </div>
+                <div>
+                  <label>Normalization</label>
+                  <select id="risCompareNormalization">
+                    <option value="peak_0db">Peak 0 dB</option>
+                    <option value="unit_power">Unit power</option>
+                    <option value="">None</option>
+                  </select>
+                </div>
+              </div>
+              <div class="help-text">Analytical models always run. Sionna models are optional and slower.</div>
             </div>
             <div class="job-buttons">
               <button id="risStart" type="button">Run RIS Lab</button>
@@ -840,6 +1164,9 @@
               <button class="plot-tab-button" data-plot="pattern_cartesian.png" type="button">Pattern</button>
               <button class="plot-tab-button" data-plot="pattern_polar.png" type="button">Polar</button>
               <button class="plot-tab-button" data-plot="validation_overlay.png" type="button">Validation</button>
+              <button class="plot-tab-button" data-plot="compare_overlay_norm_db.png" type="button">QUB vs Sionna (Norm)</button>
+              <button class="plot-tab-button" data-plot="compare_overlay_abs_db.png" type="button">QUB vs Sionna (Abs)</button>
+              <button class="plot-tab-button" data-plot="compare_error_db.png" type="button">QUB vs Sionna Error</button>
             </div>
             <figure class="plot-card single" id="risPlotSingle">
               <img id="risPlotImage" alt="RIS plot" />
@@ -867,8 +1194,8 @@
   </div>
 
   <div class="main-tab-panel" data-main-tab="cc">
-    <div class="cc-layout">
-      <section class="panel cc-panel">
+    <div class="layout" id="ccLayout">
+      <section class="panel left" id="ccLeftPanel">
         <details class="panel-section" open>
           <summary>Run</summary>
           <div class="panel-section-body">
@@ -882,7 +1209,9 @@
             <div class="field cc-config-preset">
               <label>Preset</label>
               <select id="ccPreset">
-                <option value="configs/cc_indoor_quick.yaml">Indoor quick demo</option>
+                <option value="configs/cc_indoor_quick.yaml">Indoor quick demo (SISO)</option>
+                <option value="configs/cc_ashby_improved.yaml" selected>Ashby MIMO improved</option>
+                <option value="configs/cc_ashby_mds.yaml">Ashby MIMO + MDS (recommended)</option>
                 <option value="configs/cc_wideband_mimo.yaml">Wideband MIMO charting</option>
                 <option value="configs/cc_high_fidelity.yaml">High fidelity / slow</option>
               </select>
@@ -901,6 +1230,11 @@
                 Use current Tx/Rx markers
               </label>
             </div>
+          <div class="field">
+            <label>Scene</label>
+            <select id="ccSceneSelect"></select>
+            <div class="help-text">Scene selection used when "Use current scene overrides" is enabled.</div>
+          </div>
             <div class="field">
               <label>Link role</label>
               <select id="ccRole">
@@ -957,6 +1291,31 @@
               <label>Waypoints (one per line: x,y,z)</label>
               <textarea id="ccWaypoints" rows="4" placeholder="0,0,1.5\n10,5,1.5\n20,10,1.5"></textarea>
             </div>
+          <div class="field">
+            <label>Route builder (viewer)</label>
+            <div class="field-grid">
+              <label class="toggle">
+                <input id="ccRouteDraw" type="checkbox" />
+                Click to add waypoints
+              </label>
+              <label class="toggle">
+                <input id="ccRouteSnapFloor" type="checkbox" checked />
+                Snap Z to floor
+              </label>
+            </div>
+            <div class="field-grid">
+              <div>
+                <label>Route Z (m)</label>
+                <input id="ccRouteZ" type="number" step="0.1" value="1.5" />
+              </div>
+              <div class="job-buttons">
+                <button id="ccRouteUndo" type="button">Undo last</button>
+                <button id="ccRouteClear" type="button">Clear route</button>
+              </div>
+            </div>
+            <div class="help-text">Tip: hold Shift while clicking to remove the last point.</div>
+            <div class="help-text" id="ccRouteStatus">0 waypoints</div>
+          </div>
             <div class="field-grid">
               <div>
                 <label>Random walk step std</label>
@@ -1102,9 +1461,39 @@
             </div>
           </div>
         </details>
+
+        <details class="panel-section" open>
+          <summary>Measurement Antennas</summary>
+          <div class="panel-section-body">
+            <div class="field-grid">
+              <label class="toggle">
+                <input id="ccAntennaPlace" type="checkbox" />
+                Click to place antenna
+              </label>
+            </div>
+            <div class="field-grid">
+              <div>
+                <label>Antenna Z (m)</label>
+                <input id="ccAntennaZ" type="number" step="0.5" value="10.0" />
+              </div>
+              <div>
+                <label>Array (NxN)</label>
+                <input id="ccAntennaArray" type="number" step="1" min="1" max="8" value="4" />
+              </div>
+            </div>
+            <div class="job-buttons">
+              <button id="ccAntennaUndoBtn" type="button">Undo last</button>
+              <button id="ccAntennaClearBtn" type="button">Clear all</button>
+            </div>
+            <div class="help-text" id="ccAntennaStatus">0 antennas</div>
+            <div id="ccAntennaList" class="help-text" style="max-height:120px;overflow-y:auto;font-size:11px;"></div>
+          </div>
+        </details>
       </section>
 
-      <section class="panel cc-panel">
+      <!-- viewer will be moved here dynamically -->
+
+      <section class="panel right" id="ccRightPanel">
         <details class="panel-section" open>
           <summary>Status</summary>
           <div class="panel-section-body">
@@ -1145,6 +1534,174 @@
           </div>
         </details>
       </section>
+    </div>
+  </div>
+
+  <div class="main-tab-panel" data-main-tab="models">
+    <div class="models-layout">
+      <div class="models-main">
+        <section class="models-card">
+          <h2>RIS Propagation Models (LaTeX)</h2>
+          <p>
+            This page consolidates the math used in this project and the two RIS propagation models used by
+            Sionna v0.19.2.
+          </p>
+        </section>
+
+        <section class="models-card">
+          <h3>Project Baseline Model (Machado/Tang-style Discrete Aperture Sum)</h3>
+          <p>Used as the analytical foundation for RIS Lab validation and link-budget reasoning.</p>
+          <div class="math-title">B1. Received Power (Discrete RIS Sum)</div>
+          <div class="math-block">
+\[
+P_r=\frac{P_tG_tG_rl_u^4}{16\pi^2}
+\left|
+\sum_{m=1}^{M}\sum_{n=1}^{N}
+\frac{F_{n,m}^{\mathrm{combine}}\rho_{n,m}}{r^t_{n,m}r^r_{n,m}}
+e^{-j\frac{2\pi}{\lambda}(r^t_{n,m}+r^r_{n,m})}
+\right|^2
+\]
+          </div>
+          <div class="math-title">B2. Element-Wise Distance Definitions</div>
+          <div class="math-block">
+\[
+r^t_{n,m}=\sqrt{(x_t-x_{n,m})^2+(y_t-y_{n,m})^2+z_t^2},\qquad
+r^r_{n,m}=\sqrt{(x_r-x_{n,m})^2+(y_r-y_{n,m})^2+z_r^2}
+\]
+          </div>
+          <div class="math-title">B3. Refined Area-Based Form</div>
+          <div class="math-block">
+\[
+P_r=P_t\frac{G_tG_r(d_xd_y)^2}{16\pi^2}
+\left|
+\sum_{m=1}^{M}\sum_{n=1}^{N}
+\frac{\sqrt{F_{n,m}^{\mathrm{combine}}}\Gamma_{n,m}}{r^t_{n,m}r^r_{n,m}}
+e^{-j\frac{2\pi}{\lambda}(r^t_{n,m}+r^r_{n,m})}
+\right|^2
+\]
+          </div>
+        </section>
+
+        <section class="models-card">
+          <h3>Sionna v0.19.2 RIS Model 1: <code>compute_paths()</code> (Degli-Esposti et al.)</h3>
+          <p>Reradiation is modeled by equivalent local sources per RIS cell (RIS primer Eq. 44).</p>
+          <div class="math-title">S1.1 Equivalent Reradiated Field</div>
+          <div class="math-block">
+\[
+\mathbf{E}_n(\mathbf{s})=
+\sqrt{\frac{4\pi}{\lambda^2}\frac{P_nG_e(\mathbf{s})}{4\pi}}
+\;e^{-j\mathbf{k}_r(\mathbf{s})^\mathsf{T}\mathbf{s}}
+\]
+          </div>
+          <div class="math-title">S1.2 Cell Power</div>
+          <div class="math-block">
+\[
+P_n=\frac{\lambda^2}{64\pi^3}
+\frac{P_tG_t(\hat{\mathbf{r}}_i)G_e(-\hat{\mathbf{r}}_i)}{r_i^2}
+\]
+          </div>
+          <div class="math-title">S1.3 Reflection-Vector Law</div>
+          <div class="math-block">
+\[
+\mathbf{k}_r(\mathbf{s})=\mathbf{k}_i(\mathbf{s})+\nabla\chi(\mathbf{s})
+\]
+          </div>
+        </section>
+
+        <section class="models-card">
+          <h3>Sionna v0.19.2 RIS Model 2: <code>coverage_map()</code> (Vitucci et al.)</h3>
+          <p>Uses a locally curved phase profile and angular taper for coverage-map computation (RIS primer Eq. 45–51).</p>
+          <div class="math-title">S2.1 Local Reflection-Vector Law</div>
+          <div class="math-block">
+\[
+\mathbf{k}_r=\mathbf{k}_i+\nabla\chi(\mathbf{s})
+\]
+          </div>
+          <div class="math-title">S2.2 Corrected Local Phase</div>
+          <div class="math-block">
+\[
+\tilde{\chi}(\mathbf{s})=\chi(\mathbf{s})-\frac{k}{2}(\mathbf{s}-\mathbf{c})^\mathsf{T}\mathbf{C}(\mathbf{s}-\mathbf{c})
+\]
+          </div>
+          <div class="math-title">S2.3 Curvature Matrix and Geometric Relation</div>
+          <div class="math-block">
+\[
+\mathbf{C}=
+\begin{bmatrix}
+\frac{\cos\theta_r^\*}{\lVert \mathbf{r}-\mathbf{c}\rVert} & 0\\
+0 & \frac{1}{\lVert \mathbf{r}-\mathbf{c}\rVert}
+\end{bmatrix},
+\qquad
+\mathbf{r}=\mathbf{c}+\hat{\mathbf{r}}_n\sqrt{\frac{A}{4\pi\cos\theta_r^\*}}
+\]
+          </div>
+          <div class="math-title">S2.4 Received Power from Element Contribution</div>
+          <div class="math-block">
+\[
+P_r=\frac{P_nG_r\lambda^2}{(4\pi)^2r_r^2}
+\left|\frac{1+\cos\theta_r^\*}{2}\right|^{2\alpha_r}
+\]
+          </div>
+          <div class="math-title">S2.5 Coverage-Map Closed Form</div>
+          <div class="math-block">
+\[
+P_r=\frac{A^2}{\lambda^2(4\pi)^2r_i^2r_r^2}
+\left|\frac{1+\cos\theta_r^\*}{2}\right|^{2\alpha_r}
+P_tG_tG_r
+\]
+          </div>
+          <div class="math-title">S2.6 Definition of \(P_n\)</div>
+          <div class="math-block">
+\[
+\text{with}\quad
+P_n=\frac{A}{4\pi r_i^2\lambda^2}P_tG_t
+\left|\frac{1+\cos\theta_r^\*}{2}\right|^{2\alpha_r}
+\]
+          </div>
+        </section>
+      </div>
+
+      <aside class="models-card models-sidebar">
+        <h3>Symbol Legend</h3>
+        <div class="models-symbols">
+          <div class="models-symbol-row"><div class="models-symbol">\(P_t\)</div><div>Transmit power.</div></div>
+          <div class="models-symbol-row"><div class="models-symbol">\(P_r\)</div><div>Received power.</div></div>
+          <div class="models-symbol-row"><div class="models-symbol">\(P_n\)</div><div>Power associated with RIS element \(n\) (or local reradiated contribution).</div></div>
+          <div class="models-symbol-row"><div class="models-symbol">\(G_t, G_r\)</div><div>Transmit and receive antenna gains.</div></div>
+          <div class="models-symbol-row"><div class="models-symbol">\(G_e(\cdot)\)</div><div>RIS unit-cell radiation gain pattern.</div></div>
+          <div class="models-symbol-row"><div class="models-symbol">\(F_{n,m}^{\mathrm{combine}}\)</div><div>Joint normalized power radiation factor for the \((n,m)\)-th RIS cell.</div></div>
+          <div class="models-symbol-row"><div class="models-symbol">\(\rho_{n,m}\)</div><div>Complex reflection coefficient in the project baseline equation.</div></div>
+          <div class="models-symbol-row"><div class="models-symbol">\(\Gamma_{n,m}\)</div><div>Complex reflection coefficient in the refined Tang model notation.</div></div>
+          <div class="models-symbol-row"><div class="models-symbol">\(\lambda\)</div><div>Wavelength.</div></div>
+          <div class="models-symbol-row"><div class="models-symbol">\(l_u\)</div><div>Unit-cell side length (project baseline model).</div></div>
+          <div class="models-symbol-row"><div class="models-symbol">\(d_x, d_y\)</div><div>RIS element pitch/size terms along x and y.</div></div>
+          <div class="models-symbol-row"><div class="models-symbol">\(A\)</div><div>RIS unit-cell effective area.</div></div>
+          <div class="models-symbol-row"><div class="models-symbol">\(M, N\)</div><div>Number of RIS cells along each axis.</div></div>
+          <div class="models-symbol-row"><div class="models-symbol">\(m, n\)</div><div>RIS cell indices.</div></div>
+          <div class="models-symbol-row"><div class="models-symbol">\(r^t_{n,m}\)</div><div>Distance from Tx to RIS cell \((n,m)\).</div></div>
+          <div class="models-symbol-row"><div class="models-symbol">\(r^r_{n,m}\)</div><div>Distance from RIS cell \((n,m)\) to Rx.</div></div>
+          <div class="models-symbol-row"><div class="models-symbol">\(r_i, r_r\)</div><div>Incident and reradiated path lengths used in Sionna formulas.</div></div>
+          <div class="models-symbol-row"><div class="models-symbol">\((x_t,y_t,z_t)\)</div><div>Transmitter coordinates.</div></div>
+          <div class="models-symbol-row"><div class="models-symbol">\((x_r,y_r,z_r)\)</div><div>Receiver coordinates.</div></div>
+          <div class="models-symbol-row"><div class="models-symbol">\((x_{n,m},y_{n,m})\)</div><div>RIS cell \((n,m)\) coordinates in the RIS plane.</div></div>
+          <div class="models-symbol-row"><div class="models-symbol">\(\mathbf{E}_n(\mathbf{s})\)</div><div>Equivalent reradiated electric field from unit \(n\) at point \(\mathbf{s}\).</div></div>
+          <div class="models-symbol-row"><div class="models-symbol">\(\mathbf{s}\)</div><div>Point on the RIS surface (local surface coordinate).</div></div>
+          <div class="models-symbol-row"><div class="models-symbol">\(\chi(\mathbf{s}),\tilde{\chi}(\mathbf{s})\)</div><div>RIS phase profile and locally corrected phase profile.</div></div>
+          <div class="models-symbol-row"><div class="models-symbol">\(\mathbf{k}_i,\mathbf{k}_r\)</div><div>Incident and reflected wave vectors.</div></div>
+          <div class="models-symbol-row"><div class="models-symbol">\(\nabla\chi(\mathbf{s})\)</div><div>Spatial phase gradient on the RIS.</div></div>
+          <div class="models-symbol-row"><div class="models-symbol">\(k\)</div><div>Wavenumber (\(k=2\pi/\lambda\)).</div></div>
+          <div class="models-symbol-row"><div class="models-symbol">\(\mathbf{C}\)</div><div>Local phase-curvature matrix used by the coverage-map model.</div></div>
+          <div class="models-symbol-row"><div class="models-symbol">\(\lVert\cdot\rVert\)</div><div>Euclidean norm (vector magnitude).</div></div>
+          <div class="models-symbol-row"><div class="models-symbol">\((\cdot)^\mathsf{T}\)</div><div>Vector/matrix transpose.</div></div>
+          <div class="models-symbol-row"><div class="models-symbol">\(\mathbf{c}\)</div><div>Reference/center point on the RIS for local approximation.</div></div>
+          <div class="models-symbol-row"><div class="models-symbol">\(\mathbf{r},\hat{\mathbf{r}}_n,\hat{\mathbf{r}}_i\)</div><div>Receiver-related vector and unit direction vectors in Sionna RIS equations.</div></div>
+          <div class="models-symbol-row"><div class="models-symbol">\(\theta_r^\*\)</div><div>Effective reradiation angle in the Vitucci-based coverage-map model.</div></div>
+          <div class="models-symbol-row"><div class="models-symbol">\(\alpha_r\)</div><div>Angular taper exponent in the coverage-map model.</div></div>
+          <div class="models-symbol-row"><div class="models-symbol">\(j\)</div><div>Imaginary unit.</div></div>
+          <div class="models-symbol-row"><div class="models-symbol">\(e\)</div><div>Base of natural exponential in phasor terms.</div></div>
+          <div class="models-symbol-row"><div class="models-symbol">\(\pi\)</div><div>Pi constant.</div></div>
+        </div>
+      </aside>
     </div>
   </div>
 
@@ -1252,6 +1809,11 @@
       </div>
     </div>
   </template>
+  <!-- Lightbox overlay for enlarged plot images -->
+  <div id="plotLightbox" class="plot-lightbox" style="display:none;">
+    <img id="plotLightboxImg" alt="Enlarged chart" />
+    <button id="plotLightboxClose" class="plot-lightbox-close" type="button">&times;</button>
+  </div>
   </main>
   </div>
   <script type="module" src="app.js?v=dev"></script>

@@ -37,23 +37,6 @@ def _expand_mask(mask: np.ndarray, target: np.ndarray) -> np.ndarray | None:
     return mask.reshape(shape)
 
 
-def _normalize_a_tau(
-    a: np.ndarray,
-    tau: np.ndarray,
-    num_rx: int,
-    rx_ant: int,
-    num_tx: int,
-    tx_ant: int,
-) -> tuple[np.ndarray, np.ndarray]:
-    total_links = max(1, num_rx * rx_ant * num_tx * tx_ant)
-    a_flat = a.reshape(total_links, -1)
-    tau_flat = tau.reshape(total_links, -1)
-    num_paths = a_flat.shape[1]
-    a_norm = a_flat.reshape(num_rx, rx_ant, num_tx, tx_ant, num_paths)
-    tau_norm = tau_flat.reshape(num_rx, rx_ant, num_tx, tx_ant, num_paths)
-    return a_norm, tau_norm
-
-
 def _paths_cfr_from_a_tau(
     paths: Any,
     freqs: np.ndarray,
@@ -62,9 +45,22 @@ def _paths_cfr_from_a_tau(
     num_tx: int,
     tx_ant: int,
 ) -> np.ndarray:
-    a = _as_complex(getattr(paths, "a"))
-    tau = _to_numpy(getattr(paths, "tau"))
+    """Compute CFR from raw path coefficients and delays.
 
+    Sionna 0.19.2 shapes:
+      paths.a   : [batch, num_rx, rx_ant, num_tx, tx_ant, max_paths, time_steps]
+      paths.tau  : [batch, num_rx, num_tx, max_paths]
+
+    tau has NO antenna dimensions — delays are shared across antenna elements.
+    """
+    target = (num_rx, rx_ant, num_tx, tx_ant, freqs.shape[0])
+    a_raw = _as_complex(getattr(paths, "a"))
+    tau_raw = _to_numpy(getattr(paths, "tau"))
+
+    if a_raw.ndim == 0 or a_raw.size == 0:
+        return np.zeros(target, dtype=np.complex64)
+
+    # --- Apply path mask if available ---
     mask = None
     for attr in ("mask", "targets_sources_mask"):
         if hasattr(paths, attr):
@@ -73,23 +69,93 @@ def _paths_cfr_from_a_tau(
             except Exception:
                 mask = None
             break
+
+    # --- Squeeze leading batch dim (exactly one) ---
+    # Sionna 0.19.2 prepends a batch dim of size 1:
+    #   a  : [batch, num_rx, rx_ant, num_tx, tx_ant, max_paths, time_steps]
+    #   tau: [batch, num_rx, num_tx, max_paths]
+    a = a_raw
+    tau = tau_raw
+    # a: expect 7-d with batch; squeeze to 6-d
+    if a.ndim == 7 and a.shape[0] == 1:
+        a = a[0]  # → (num_rx, rx_ant, num_tx, tx_ant, max_paths, time)
+    # tau: expect 4-d with batch; squeeze to 3-d
+    if tau.ndim == 4 and tau.shape[0] == 1:
+        tau = tau[0]  # → (num_rx, num_tx, max_paths)
+
+    # --- Collapse trailing time dim if present ---
+    # a expected after squeeze: (num_rx, rx_ant, num_tx, tx_ant, num_paths, time)
+    if a.ndim == 6:
+        a = a[..., 0]  # → (num_rx, rx_ant, num_tx, tx_ant, num_paths)
+
+    # Apply mask (broadcast-safe)
     if mask is not None:
-        mask = _expand_mask(mask, a)
-        if mask is not None:
-            a = a * mask
+        try:
+            em = _expand_mask(mask, a)
+            if em is not None:
+                a = a * em
+        except Exception:
+            pass
 
-    try:
-        a_norm, tau_norm = _normalize_a_tau(a, tau, num_rx, rx_ant, num_tx, tx_ant)
-    except Exception:
-        a_norm = a
-        tau_norm = tau
-
-    num_paths = a_norm.shape[-1] if a_norm.ndim else 0
+    # --- Determine number of paths ---
+    num_paths = a.shape[-1] if a.ndim >= 1 else 0
     if num_paths == 0:
-        return np.zeros((num_rx, rx_ant, num_tx, tx_ant, freqs.shape[0]), dtype=np.complex64)
+        return np.zeros(target, dtype=np.complex64)
 
-    exp = np.exp(-1j * 2.0 * np.pi * tau_norm[..., None] * freqs[None, ...])
-    h = np.sum(a_norm[..., None] * exp, axis=-2)
+    # --- Normalize a to 5-d: (num_rx, rx_ant, num_tx, tx_ant, num_paths) ---
+    try:
+        a_5d = a.reshape(num_rx, rx_ant, num_tx, tx_ant, num_paths)
+    except Exception:
+        # Fallback: flatten and pad/trim
+        a_flat = a.reshape(-1, num_paths)
+        needed = num_rx * rx_ant * num_tx * tx_ant
+        if a_flat.shape[0] >= needed:
+            a_5d = a_flat[:needed].reshape(num_rx, rx_ant, num_tx, tx_ant, num_paths)
+        else:
+            padded = np.zeros((needed, num_paths), dtype=a.dtype)
+            padded[: a_flat.shape[0]] = a_flat
+            a_5d = padded.reshape(num_rx, rx_ant, num_tx, tx_ant, num_paths)
+
+    # --- Normalize tau to 3-d: (num_rx, num_tx, num_paths) ---
+    # tau does NOT have antenna dims in Sionna 0.19.2
+    # tau's last dim should match a's num_paths; reconcile if different
+    tau_num_paths = tau.shape[-1] if tau.ndim >= 1 else 0
+    if tau_num_paths != num_paths:
+        # Path count mismatch — pad or trim tau to match a's path count
+        if tau.ndim >= 2:
+            tau_flat = tau.reshape(-1, tau_num_paths)
+        else:
+            tau_flat = tau.reshape(1, -1)
+        if tau_num_paths > num_paths:
+            tau = tau_flat[:, :num_paths]
+        else:
+            padded = np.zeros((tau_flat.shape[0], num_paths))
+            padded[:, :tau_num_paths] = tau_flat
+            tau = padded
+    try:
+        tau_3d = tau.reshape(num_rx, num_tx, num_paths)
+    except Exception:
+        tau_flat = tau.ravel()
+        needed = num_rx * num_tx * num_paths
+        if tau_flat.size >= needed:
+            tau_3d = tau_flat[:needed].reshape(num_rx, num_tx, num_paths)
+        else:
+            padded = np.zeros(needed)
+            padded[: min(tau_flat.size, needed)] = tau_flat[: min(tau_flat.size, needed)]
+            tau_3d = padded.reshape(num_rx, num_tx, num_paths)
+
+    # Broadcast tau to (num_rx, 1, num_tx, 1, num_paths) for antenna dims
+    tau_5d = tau_3d[:, np.newaxis, :, np.newaxis, :]
+
+    # --- Compute CFR: H(f) = sum_paths a * exp(-j2pi*f*tau) ---
+    # a_5d:  (num_rx, rx_ant, num_tx, tx_ant, num_paths)
+    # tau_5d: (num_rx, 1,      num_tx, 1,      num_paths)
+    # freqs:  (num_freq,)
+    # exp → (num_rx, 1, num_tx, 1, num_paths, num_freq) via broadcasting
+    exp = np.exp(-1j * 2.0 * np.pi * tau_5d[..., np.newaxis] * freqs[np.newaxis, :])
+    # a_5d[..., np.newaxis] → (num_rx, rx_ant, num_tx, tx_ant, num_paths, num_freq)
+    h = np.sum(a_5d[..., np.newaxis] * exp, axis=-2)
+    # h shape: (num_rx, rx_ant, num_tx, tx_ant, num_freq)
     return h
 
 
@@ -115,24 +181,36 @@ def _coerce_to_shape(arr: np.ndarray, target_shape: tuple[int, ...]) -> np.ndarr
     return out
 
 
-def _force_cfr_shape(h: np.ndarray, num_rx: int, num_tx: int, num_freq: int) -> np.ndarray:
-    # Collapse any unexpected middle dimensions into a single antenna dimension.
-    if h.ndim == 0:
-        return np.zeros((num_rx, 1, num_tx, 1, num_freq), dtype=np.complex64)
+def _force_cfr_shape(
+    h: np.ndarray,
+    num_rx: int,
+    num_tx: int,
+    num_freq: int,
+    rx_ant: int = 1,
+    tx_ant: int = 1,
+) -> np.ndarray:
+    # Collapse any unexpected middle dimensions into the target shape:
+    #   (num_rx, rx_ant, num_tx, tx_ant, num_freq)
+    target = (max(1, num_rx), max(1, rx_ant), max(1, num_tx), max(1, tx_ant), num_freq)
+    target_size = int(np.prod(target))
+    if h.ndim == 0 or h.size == 0:
+        return np.zeros(target, dtype=np.complex64)
     if h.shape[-1] != num_freq:
-        # If last dim is not frequency, try to move a matching dim to the end.
         for idx, size in enumerate(h.shape):
             if size == num_freq:
                 h = np.moveaxis(h, idx, -1)
                 break
+    if h.size == target_size:
+        return h.reshape(target)
+    # Flatten to (links, freq) and pad/trim to match target
     flat = h.reshape(-1, h.shape[-1])
-    # Best effort: assign first dimension to num_rx and num_tx if possible.
-    total_links = flat.shape[0]
-    rx = max(1, num_rx)
-    tx = max(1, num_tx)
-    ant = max(1, total_links // (rx * tx))
-    trimmed = flat[: rx * tx * ant].reshape(rx, ant, tx, 1, h.shape[-1])
-    return trimmed
+    needed = target[0] * target[1] * target[2] * target[3]
+    if flat.shape[0] >= needed:
+        trimmed = flat[:needed]
+    else:
+        trimmed = np.zeros((needed, flat.shape[-1]), dtype=flat.dtype)
+        trimmed[: flat.shape[0]] = flat
+    return trimmed.reshape(target)
 
 
 def _build_subcarrier_frequencies(cfg: Dict[str, Any], fallback_center: float) -> Tuple[np.ndarray, float]:
@@ -168,6 +246,7 @@ def compute_csi(
     cfg: Dict[str, Any],
     positions: np.ndarray,
     times: np.ndarray,
+    measurement_antennas: list | None = None,
 ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     cc_cfg = cfg.get("channel_charting", {})
     csi_cfg = cc_cfg.get("csi", {})
@@ -176,6 +255,12 @@ def compute_csi(
 
     role = str(cc_cfg.get("role", "downlink")).lower()
     move_tx = role == "uplink"
+
+    # Resolve measurement antennas from config or argument
+    if measurement_antennas is None:
+        measurement_antennas = cc_cfg.get("measurement_antennas", [])
+    if not measurement_antennas:
+        measurement_antennas = []
 
     tx = next(iter(scene.transmitters.values()))
     rx = next(iter(scene.receivers.values()))
@@ -199,16 +284,45 @@ def compute_csi(
 
     num_rx = len(scene.receivers)
     num_tx = len(scene.transmitters)
-    rx_ant = int(getattr(scene.rx_array, "num_rows", 1)) * int(getattr(scene.rx_array, "num_cols", 1))
-    tx_ant = int(getattr(scene.tx_array, "num_rows", 1)) * int(getattr(scene.tx_array, "num_cols", 1))
+
+    # Sionna 0.19.2 PlanarArray has .num_ant but NOT .num_rows / .num_cols.
+    # Prefer num_ant (total elements), falling back to rows * cols for newer
+    # versions that may expose them.
+    def _array_element_count(arr) -> int:
+        na = getattr(arr, "num_ant", None)
+        if na is not None:
+            return max(1, int(na))
+        rows = int(getattr(arr, "num_rows", 1))
+        cols = int(getattr(arr, "num_cols", 1))
+        return max(1, rows * cols)
+
+    rx_ant = _array_element_count(scene.rx_array)
+    tx_ant = _array_element_count(scene.tx_array)
+    import logging as _log
+    _log.getLogger(__name__).info(
+        "CSI array config: num_rx=%d, rx_ant=%d, num_tx=%d, tx_ant=%d",
+        num_rx, rx_ant, num_tx, tx_ant,
+    )
+
+    # When measurement antennas are provided, we collect CSI from each one
+    # and concatenate along a new leading "antenna" axis so the feature
+    # extractor sees richer multi-view observations.
+    use_multi_antenna = len(measurement_antennas) > 0
+
+    n_antenna_sources = 1 + len(measurement_antennas) if use_multi_antenna else 1
+    num_freq_total = freqs.shape[0] * n_antenna_sources
 
     snapshots = []
     target_shape = None
     if csi_type == "cfr":
-        target_shape = (num_rx, rx_ant, num_tx, tx_ant, freqs.shape[0])
+        target_shape = (num_rx, rx_ant, num_tx, tx_ant, num_freq_total)
     cir_tau = None
     taps_tau = None
+    n_pos = len(positions)
+    _csi_log = _log.getLogger(__name__)
     for idx, pos in enumerate(positions):
+        if idx % max(1, n_pos // 10) == 0 or idx == n_pos - 1:
+            _csi_log.info("CSI progress: %d/%d positions (%.0f%%)", idx + 1, n_pos, 100.0 * (idx + 1) / n_pos)
         if move_tx:
             tx.position = np.array(pos, dtype=float)
         else:
@@ -231,19 +345,67 @@ def compute_csi(
                 path_out[key].append(np.array([]))
 
         if csi_type == "cfr":
-            if hasattr(paths, "cfr"):
-                cfr = paths.cfr(freqs, num_time_steps=1, out_type="numpy")
-                h = _as_complex(cfr)
-                # Shape: [num_rx, rx_ant, num_tx, tx_ant, time, num_freq]
-                if h.ndim >= 6:
-                    h = h[:, :, :, :, 0, :]
-            else:
-                h = _paths_cfr_from_a_tau(paths, freqs, num_rx, rx_ant, num_tx, tx_ant)
-            if target_shape is not None:
+            try:
+                if hasattr(paths, "cfr"):
+                    cfr = paths.cfr(freqs, num_time_steps=1, out_type="numpy")
+                    h = _as_complex(cfr)
+                    # Sionna can return various shapes depending on version /
+                    # array config.  Squeeze any leading batch dims of size 1,
+                    # then collapse the time dimension (second-to-last) if
+                    # present.
+                    while h.ndim > 5 and h.shape[0] == 1:
+                        h = h[0]
+                    # After squeezing, expect:
+                    #   5-d: (num_rx, rx_ant, num_tx, tx_ant, num_freq)
+                    #   6-d: (num_rx, rx_ant, num_tx, tx_ant, time, num_freq)
+                    if h.ndim == 6:
+                        h = h[:, :, :, :, 0, :]
+                    elif h.ndim > 6:
+                        # Collapse unexpected middle dims
+                        h = h.reshape(h.shape[0], h.shape[1], h.shape[2],
+                                      h.shape[3], -1, h.shape[-1])
+                        h = h[:, :, :, :, 0, :]
+                else:
+                    h = _paths_cfr_from_a_tau(paths, freqs, num_rx, rx_ant, num_tx, tx_ant)
+            except Exception:
+                h = np.zeros(target_shape, dtype=np.complex64)
+            # Force to consistent per-antenna shape
+            single_shape = (num_rx, rx_ant, num_tx, tx_ant, freqs.shape[0])
+            if h.shape != single_shape:
                 try:
-                    h = _coerce_to_shape(h, target_shape)
+                    h = _coerce_to_shape(h, single_shape)
                 except Exception:
-                    h = _force_cfr_shape(h, num_rx, num_tx, freqs.shape[0])
+                    try:
+                        h = _force_cfr_shape(h, num_rx, num_tx, freqs.shape[0], rx_ant, tx_ant)
+                        if h.shape != single_shape:
+                            h = _coerce_to_shape(h, single_shape)
+                    except Exception:
+                        h = np.zeros(single_shape, dtype=np.complex64)
+
+            # Multi-antenna: collect CSI from each measurement antenna
+            if use_multi_antenna:
+                multi_h = [h]
+                orig_pos = np.array(tx.position, dtype=float)
+                for ma in measurement_antennas:
+                    ma_pos = ma.get("position", ma) if isinstance(ma, dict) else ma
+                    tx.position = np.array(ma_pos, dtype=float)
+                    try:
+                        ma_paths = _compute_paths(scene, sim_cfg)
+                        ma_h = _paths_cfr_from_a_tau(ma_paths, freqs, num_rx, rx_ant, num_tx, tx_ant)
+                    except Exception:
+                        ma_h = np.zeros(single_shape, dtype=np.complex64)
+                    if ma_h.shape != single_shape:
+                        try:
+                            ma_h = _coerce_to_shape(ma_h, single_shape)
+                        except Exception:
+                            ma_h = np.zeros(single_shape, dtype=np.complex64)
+                    multi_h.append(ma_h)
+                tx.position = orig_pos
+                # Concatenate along frequency axis
+                h = np.concatenate(multi_h, axis=-1)
+
+            if target_shape is not None and h.shape != target_shape:
+                h = _coerce_to_shape(h, target_shape)
             snapshots.append(h)
         elif csi_type == "cir":
             cir_cfg = csi_cfg.get("cir", {})
@@ -283,7 +445,21 @@ def compute_csi(
             if taps_tau is None:
                 taps_tau = tau
 
-    csi_array = np.stack(snapshots, axis=0) if snapshots else np.zeros((0,))
+    # Ensure all snapshots share the same shape before stacking
+    if snapshots:
+        ref_shape = target_shape if target_shape is not None else snapshots[0].shape
+        fixed = []
+        for i, s in enumerate(snapshots):
+            if s.shape != ref_shape:
+                try:
+                    fixed.append(_coerce_to_shape(s, ref_shape))
+                except Exception:
+                    fixed.append(np.zeros(ref_shape, dtype=np.complex64))
+            else:
+                fixed.append(s)
+        csi_array = np.stack(fixed, axis=0)
+    else:
+        csi_array = np.zeros((0,))
     csi_out["data"] = csi_array
     if csi_type == "cir" and cir_tau is not None:
         csi_out["tau_s"] = cir_tau

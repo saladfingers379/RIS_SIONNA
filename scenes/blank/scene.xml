@@ -1,0 +1,16 @@
+<scene version="3.0.0">
+  <integrator type="path">
+    <integer name="max_depth" value="2"/>
+  </integrator>
+
+  <bsdf type="twosided" id="mat-itu_absorber">
+    <bsdf type="diffuse">
+      <rgb name="reflectance" value="0.0"/>
+    </bsdf>
+  </bsdf>
+
+  <shape type="ply" id="blank_anchor">
+    <string name="filename" value="meshes/anchor_triangle.ply"/>
+    <ref id="mat-itu_absorber" name="bsdf"/>
+  </shape>
+</scene>

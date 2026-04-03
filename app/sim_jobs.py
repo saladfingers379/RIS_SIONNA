@@ -13,6 +13,7 @@ import yaml
 
 from .config import apply_quality_preset
 from .io import create_output_dir, generate_run_id, save_json, save_yaml
+from .radio_map_grid import radio_map_z_slice_offsets
 from .utils.system import get_gpu_memory_mb
 
 
@@ -25,6 +26,50 @@ def _load_yaml(path: Path) -> Dict[str, Any]:
         return yaml.safe_load(f)
 
 
+def _reconcile_loaded_jobs(jobs: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+    reconciled: Dict[str, Dict[str, Any]] = {}
+    for job_id, job in (jobs or {}).items():
+        if not isinstance(job, dict):
+            continue
+        updated = dict(job)
+        if updated.get("status") == "running":
+            output_dir = Path(str(updated.get("output_dir", "") or ""))
+            progress_path = output_dir / "progress.json"
+            progress_payload: Dict[str, Any] | None = None
+            if progress_path.exists():
+                try:
+                    payload = json.loads(progress_path.read_text(encoding="utf-8"))
+                    if isinstance(payload, dict):
+                        progress_payload = payload
+                except Exception:
+                    progress_payload = None
+
+            if isinstance(progress_payload, dict):
+                progress_status = str(progress_payload.get("status") or "").strip().lower()
+                if progress_status == "completed":
+                    updated["status"] = "completed"
+                    updated.setdefault("ended_at", _now_ts())
+                    updated.setdefault("return_code", 0)
+                elif progress_status == "failed":
+                    updated["status"] = "failed"
+                    updated.setdefault("ended_at", _now_ts())
+                    updated.setdefault("return_code", 1)
+                    if progress_payload.get("error"):
+                        updated["error"] = progress_payload["error"]
+                else:
+                    updated["status"] = "failed"
+                    updated.setdefault("ended_at", _now_ts())
+                    updated.setdefault("return_code", 1)
+                    updated.setdefault("error", "Job was interrupted before completion.")
+            else:
+                updated["status"] = "failed"
+                updated.setdefault("ended_at", _now_ts())
+                updated.setdefault("return_code", 1)
+                updated.setdefault("error", "Job was interrupted before completion.")
+        reconciled[str(job_id)] = updated
+    return reconciled
+
+
 def _estimate_job_cost(cfg: Dict[str, Any]) -> Dict[str, Any]:
     sim = cfg.get("simulation", {})
     radio = cfg.get("radio_map", {})
@@ -35,8 +80,15 @@ def _estimate_job_cost(cfg: Dict[str, Any]) -> Dict[str, Any]:
         size = radio.get("size", [1.0, 1.0])
         cell = radio.get("cell_size", [1.0, 1.0])
         grid = max(1, int(size[0] / cell[0])) * max(1, int(size[1] / cell[1]))
-    score = grid * rays * max_depth
-    return {"score": score, "grid_cells": grid, "rays": rays, "max_depth": max_depth}
+    slice_count = 1 + len(radio_map_z_slice_offsets(radio)) if radio.get("enabled") else 1
+    score = grid * rays * max_depth * slice_count
+    return {
+        "score": score,
+        "grid_cells": grid,
+        "rays": rays,
+        "max_depth": max_depth,
+        "radio_map_slices": slice_count,
+    }
 
 
 def _apply_vram_guard(cfg: Dict[str, Any]) -> Dict[str, Any]:
@@ -87,6 +139,40 @@ def _deep_update(base: Dict[str, Any], updates: Dict[str, Any]) -> Dict[str, Any
     return base
 
 
+_SIM_RUN_SCOPES = {"sim", "indoor"}
+
+
+def normalize_run_scope(scope: Any, profile: Optional[str] = None) -> str:
+    scope_value = str(scope or "").strip().lower()
+    if scope_value in _SIM_RUN_SCOPES:
+        return scope_value
+    return "indoor" if str(profile or "").strip() == "indoor_box_high" else "sim"
+
+
+def infer_run_scope_from_job(job: Optional[Dict[str, Any]]) -> str:
+    if not isinstance(job, dict):
+        return "sim"
+    kind = str(job.get("kind") or "run")
+    if kind != "run":
+        return kind
+    return normalize_run_scope(job.get("scope"), profile=job.get("profile"))
+
+
+def infer_run_scope_from_config(cfg: Optional[Dict[str, Any]]) -> str:
+    if not isinstance(cfg, dict):
+        return "sim"
+    job_cfg = cfg.get("job")
+    if isinstance(job_cfg, dict):
+        kind = str(job_cfg.get("kind") or "run")
+        if kind != "run":
+            return kind
+        return normalize_run_scope(job_cfg.get("scope"), profile=job_cfg.get("profile"))
+    output_cfg = cfg.get("output")
+    if isinstance(output_cfg, dict):
+        return normalize_run_scope(output_cfg.get("scope"))
+    return "sim"
+
+
 @dataclass
 class JobHandle:
     job_id: str
@@ -108,13 +194,26 @@ class JobManager:
         if not self.jobs_path.exists():
             return
         try:
-            self.jobs = json.loads(self.jobs_path.read_text())
+            loaded = json.loads(self.jobs_path.read_text())
+            self.jobs = _reconcile_loaded_jobs(loaded if isinstance(loaded, dict) else {})
         except Exception:
             self.jobs = {}
 
     def _save_jobs(self) -> None:
         self.jobs_path.parent.mkdir(parents=True, exist_ok=True)
         self.jobs_path.write_text(json.dumps(self.jobs, indent=2), encoding="utf-8")
+
+    def _reconcile_orphaned_running_jobs_locked(self) -> None:
+        orphaned = {
+            job_id: job
+            for job_id, job in self.jobs.items()
+            if isinstance(job, dict) and job.get("status") == "running" and job_id not in self.processes
+        }
+        if not orphaned:
+            return
+        reconciled = _reconcile_loaded_jobs(orphaned)
+        self.jobs.update(reconciled)
+        self._save_jobs()
 
     def _start_monitor(self) -> None:
         thread = threading.Thread(target=self._monitor_loop, daemon=True)
@@ -145,11 +244,14 @@ class JobManager:
             self._save_jobs()
             time.sleep(1.0)
 
-    def list_jobs(self, kind: Optional[str] = None) -> Dict[str, Any]:
+    def list_jobs(self, kind: Optional[str] = None, scope: Optional[str] = None) -> Dict[str, Any]:
         with self._lock:
+            self._reconcile_orphaned_running_jobs_locked()
             jobs = list(self.jobs.values())
             if kind:
                 jobs = [job for job in jobs if job.get("kind") == kind]
+            if scope:
+                jobs = [job for job in jobs if infer_run_scope_from_job(job) == scope]
             return {"jobs": jobs}
 
     def get_job(self, job_id: str) -> Optional[Dict[str, Any]]:
@@ -158,6 +260,8 @@ class JobManager:
 
     def create_job(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         kind = payload.get("kind", "run")
+        if kind == "campaign":
+            return self._create_campaign_job(payload)
         if kind == "ris_lab":
             return self._create_ris_lab_job(payload)
         if kind == "channel_charting":
@@ -166,6 +270,7 @@ class JobManager:
             kind = "run"
         preset = payload.get("preset")
         profile = payload.get("profile")
+        scope = normalize_run_scope(payload.get("scope"), profile=profile)
         base_config = payload.get("base_config", "configs/default.yaml")
         config_path = Path(base_config)
         if not config_path.exists():
@@ -208,6 +313,7 @@ class JobManager:
         run_id = generate_run_id()
         output_dir = create_output_dir(cfg.get("output", {}).get("base_dir", "outputs"), run_id=run_id)
         cfg.setdefault("output", {})["run_id"] = run_id
+        cfg["output"]["scope"] = scope
 
         guard_info = _apply_vram_guard(cfg)
         estimate = _estimate_job_cost(cfg)
@@ -215,7 +321,14 @@ class JobManager:
         job_id = f"job-{run_id}"
         cfg.setdefault("job", {})
         cfg["job"].update(
-            {"id": job_id, "kind": kind, "profile": profile, "preset": preset, "estimate": estimate}
+            {
+                "id": job_id,
+                "kind": kind,
+                "scope": scope,
+                "profile": profile,
+                "preset": preset,
+                "estimate": estimate,
+            }
         )
 
         job_config_path = output_dir / "job_config.yaml"
@@ -226,6 +339,7 @@ class JobManager:
             "job_id": job_id,
             "run_id": run_id,
             "kind": kind,
+            "scope": scope,
             "profile": profile,
             "preset": preset,
             "status": "running",
@@ -251,10 +365,93 @@ class JobManager:
         save_json(output_dir / "job.json", job)
         return job
 
+    def _create_campaign_job(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        base_config = payload.get("base_config", "configs/indoor_box_high.yaml")
+        config_path = Path(base_config)
+        if not config_path.exists():
+            raise FileNotFoundError(f"Config not found: {config_path}")
+
+        cfg = _load_yaml(config_path)
+        if not isinstance(cfg, dict):
+            raise ValueError("Campaign config must be a YAML mapping")
+
+        scene_overrides = payload.get("scene", {})
+        if scene_overrides:
+            cfg.setdefault("scene", {})
+            _deep_update(cfg["scene"], scene_overrides)
+
+        runtime_overrides = payload.get("runtime", {})
+        if runtime_overrides:
+            cfg.setdefault("runtime", {})
+            _deep_update(cfg["runtime"], runtime_overrides)
+
+        sim_overrides = payload.get("simulation", {})
+        if sim_overrides:
+            cfg.setdefault("simulation", {})
+            _deep_update(cfg["simulation"], sim_overrides)
+
+        radio_overrides = payload.get("radio_map", {})
+        if radio_overrides:
+            cfg.setdefault("radio_map", {})
+            _deep_update(cfg["radio_map"], radio_overrides)
+
+        ris_overrides = payload.get("ris", {})
+        if ris_overrides:
+            cfg.setdefault("ris", {})
+            _deep_update(cfg["ris"], ris_overrides)
+
+        campaign_overrides = payload.get("campaign", {})
+        if not isinstance(campaign_overrides, dict):
+            raise ValueError("Campaign payload requires a campaign mapping")
+        cfg.setdefault("campaign", {})
+        _deep_update(cfg["campaign"], campaign_overrides)
+
+        output_cfg = cfg.setdefault("output", {})
+        resume_run_id = campaign_overrides.get("resume_run_id")
+        run_id = str(resume_run_id).strip() if resume_run_id else generate_run_id()
+        output_cfg["run_id"] = run_id
+        base_dir = output_cfg.get("base_dir", "outputs")
+        output_dir = create_output_dir(base_dir, run_id=run_id)
+
+        job_id = f"job-{run_id}-{int(time.time() * 1000)}"
+        cfg.setdefault("job", {})
+        cfg["job"].update({"id": job_id, "kind": "campaign", "scope": "indoor"})
+
+        job_config_path = output_dir / "job_config.yaml"
+        save_yaml(job_config_path, cfg)
+        job_log_path = output_dir / "job.log"
+
+        job = {
+            "job_id": job_id,
+            "run_id": run_id,
+            "kind": "campaign",
+            "status": "running",
+            "created_at": _now_ts(),
+            "started_at": _now_ts(),
+            "config_path": str(job_config_path),
+            "output_dir": str(output_dir),
+            "resume_run_id": str(resume_run_id) if resume_run_id else None,
+            "campaign": cfg.get("campaign", {}),
+        }
+
+        process = subprocess.Popen(
+            [sys.executable, "-m", "app", "campaign", "run", "--config", str(job_config_path)],
+            stdout=job_log_path.open("w", encoding="utf-8"),
+            stderr=subprocess.STDOUT,
+        )
+
+        with self._lock:
+            self.jobs[job_id] = job
+            self.processes[job_id] = JobHandle(job_id=job_id, run_id=run_id, process=process)
+            self._save_jobs()
+
+        save_json(output_dir / "job.json", job)
+        return job
+
     def _create_ris_lab_job(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         action = payload.get("action", "run")
-        if action not in {"run", "validate"}:
-            raise ValueError("RIS Lab action must be 'run' or 'validate'")
+        if action not in {"run", "validate", "compare"}:
+            raise ValueError("RIS Lab action must be 'run', 'validate', or 'compare'")
 
         cfg = None
         config_data = payload.get("config_data")
@@ -273,6 +470,10 @@ class JobManager:
             cfg = _load_yaml(config_path)
             if not isinstance(cfg, dict):
                 raise ValueError("RIS Lab config must be a YAML mapping")
+        compare_overrides = payload.get("compare_overrides")
+        if action == "compare" and isinstance(compare_overrides, dict):
+            cfg.setdefault("compare", {})
+            _deep_update(cfg["compare"], compare_overrides)
 
         output_cfg = cfg.setdefault("output", {})
         run_id = generate_run_id()
@@ -296,6 +497,8 @@ class JobManager:
             if job_mode not in {"pattern", "link"}:
                 raise ValueError("RIS Lab run mode must be 'pattern' or 'link'")
             command += ["run", "--config", str(job_config_path), "--mode", job_mode]
+        elif action == "compare":
+            command += ["compare", "--config", str(job_config_path)]
         else:
             ref_path = payload.get("ref") or payload.get("ref_path") or payload.get("reference")
             if not ref_path:
@@ -362,6 +565,12 @@ class JobManager:
         if cc_overrides:
             cfg.setdefault("channel_charting", {})
             _deep_update(cfg["channel_charting"], cc_overrides)
+
+        # Measurement antennas override
+        measurement_antennas = payload.get("measurement_antennas")
+        if measurement_antennas:
+            cfg.setdefault("channel_charting", {})
+            cfg["channel_charting"]["measurement_antennas"] = measurement_antennas
 
         output_cfg = cfg.setdefault("output", {})
         run_id = generate_run_id()

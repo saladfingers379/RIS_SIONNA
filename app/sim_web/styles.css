@@ -203,21 +203,138 @@ button:hover {
 }
 
 .main-tab-panel.is-active {
+  display: flex;
+  flex-direction: column;
+}
+
+.main-tab-panel[data-main-tab="ris"] {
+  overflow-y: auto;
+}
+
+.main-tab-panel[data-main-tab="models"] {
+  overflow-y: auto;
+}
+
+.campaign-only {
+  display: none;
+}
+
+.campaign-only.is-active {
   display: block;
+}
+
+.campaign2-only {
+  display: none;
+}
+
+.campaign2-only.is-active {
+  display: block;
+}
+
+.models-layout {
+  width: 100%;
+  margin: 0;
+  padding: 16px 20px 16px 16px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(340px, 430px);
+  gap: 16px;
+  align-items: start;
+}
+
+.models-main {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.models-card {
+  background: var(--panel);
+  border: 1px solid #1f1f1f;
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  padding: 14px 16px;
+}
+
+.models-card h2,
+.models-card h3 {
+  margin: 0 0 8px;
+}
+
+.models-card p {
+  margin: 0 0 8px;
+}
+
+.math-block {
+  margin: 10px 0;
+  padding: 8px 10px;
+  border: 1px solid #d7d7d1;
+  border-radius: 8px;
+  background: #f8f8f6;
+  overflow-x: auto;
+}
+
+.math-title {
+  margin: 10px 0 4px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #334155;
+}
+
+.math-block mjx-container {
+  margin: 0 !important;
+}
+
+.models-sidebar {
+  position: sticky;
+  top: 12px;
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
+}
+
+.models-symbols {
+  display: grid;
+  gap: 8px;
+}
+
+.models-symbol-row {
+  display: grid;
+  grid-template-columns: 130px minmax(0, 1fr);
+  gap: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.models-symbol-row:last-child {
+  border-bottom: none;
+}
+
+.models-symbol {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+@media (max-width: 1120px) {
+  .models-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .models-sidebar {
+    position: static;
+    max-height: none;
+  }
 }
 
 .ris-layout {
   display: grid;
   grid-template-columns: minmax(320px, 420px) 1fr;
+  grid-template-rows: minmax(0, 1fr);
+  align-items: stretch;
   gap: 16px;
   padding: 16px;
-}
-
-.cc-layout {
-  display: grid;
-  grid-template-columns: minmax(320px, 420px) 1fr;
-  gap: 16px;
-  padding: 16px;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
 }
 
 .code-block {
@@ -282,6 +399,12 @@ button:hover {
   border: 1px solid #1f1f1f;
   overflow: hidden;
   overflow-x: hidden;
+}
+
+.panel.ris-panel {
+  min-height: 0;
+  height: 100%;
+  overflow-y: auto;
 }
 
 .right-tab-strip {
@@ -569,12 +692,18 @@ input {
 
 .layer-toggle {
   display: flex;
-  gap: 10px;
+  flex-wrap: wrap;
+  gap: 8px 10px;
   background: #f6f6f3;
   padding: 8px 12px;
-  border-radius: 999px;
+  border-radius: 16px;
   pointer-events: auto;
   font-size: 12px;
+}
+.layer-toggle label[for^="toggleCc"],
+.layer-toggle label:has(input[id^="toggleCc"]) {
+  color: #059669;
+  font-weight: 500;
 }
 
 .viewer-meta {
@@ -703,18 +832,85 @@ tbody tr:hover {
   background: #e3e3e0;
 }
 
+/* --- Plot lightbox --- */
+.plot-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.plot-lightbox img {
+  max-width: 90vw;
+  max-height: 90vh;
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+}
+
+.plot-lightbox-close {
+  position: absolute;
+  top: 16px;
+  right: 24px;
+  background: none;
+  border: none;
+  color: #fff;
+  font-size: 36px;
+  cursor: pointer;
+  line-height: 1;
+  width: auto;
+  padding: 4px 12px;
+}
+
+.plot-lightbox-close:hover {
+  color: #f87171;
+  transform: none;
+}
+
+/* --- Channel Charting layout overrides --- */
+#ccLayout {
+  grid-template-columns: minmax(260px, 320px) 1fr minmax(340px, 480px);
+}
+
+#ccRightPanel .plot-tab-strip {
+  flex-wrap: wrap;
+}
+
+#ccRightPanel .plot-tab-button {
+  font-size: 11px;
+  padding: 5px 8px;
+}
+
+#ccRightPanel .plot-card.single img {
+  max-height: 500px;
+  object-fit: contain;
+  cursor: pointer;
+}
+
 @media (max-width: 1100px) {
   .layout {
     grid-template-columns: 1fr;
     grid-template-rows: auto auto auto;
+  }
+  #ccLayout {
+    grid-template-columns: 1fr;
   }
   .viewer {
     min-height: 420px;
   }
   .ris-layout {
     grid-template-columns: 1fr;
+    grid-template-rows: none;
+    height: auto;
+    min-height: 0;
+    overflow-y: auto;
   }
-  .cc-layout {
-    grid-template-columns: 1fr;
+  .panel.ris-panel {
+    height: auto;
+    min-height: 0;
   }
 }

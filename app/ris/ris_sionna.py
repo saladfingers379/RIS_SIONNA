@@ -329,6 +329,29 @@ def _ensure_xyz_list(value: Any, name: str) -> List[np.ndarray]:
     raise ValueError(f"{name} must be a 3-element list or list of 3-element lists")
 
 
+def _resolve_profile_endpoints(
+    profile: Dict[str, Any],
+    scene: Any | None = None,
+) -> tuple[list[np.ndarray], list[np.ndarray]]:
+    sources = _ensure_xyz_list(profile.get("sources"), "profile.sources")
+    targets = _ensure_xyz_list(profile.get("targets"), "profile.targets")
+
+    if not profile.get("auto_aim") or scene is None:
+        return sources, targets
+
+    try:
+        tx = next(iter(scene.transmitters.values()))
+        rx = next(iter(scene.receivers.values()))
+    except Exception:
+        return sources, targets
+
+    if not sources:
+        sources = [np.array(tx.position, dtype=float)]
+    if not targets:
+        targets = [np.array(rx.position, dtype=float)]
+    return sources, targets
+
+
 def _load_manual_values(values: Any, name: str) -> np.ndarray:
     if values is None:
         raise ValueError(f"manual {name} values must be provided for manual profile")
@@ -386,6 +409,53 @@ def _unit_vec(vec: np.ndarray) -> np.ndarray:
     if norm <= 0.0:
         return vec
     return vec / norm
+
+
+def _nonlegacy_geometry_to_ris_panel_dims(geometry: Dict[str, Any]) -> tuple[int, int]:
+    # Geometry is tracked as x-count/nx and y-count/ny, while Sionna expects
+    # RIS arrays as (rows=y, cols=x).
+    return int(geometry["ny"]), int(geometry["nx"])
+
+
+def _derive_ris_front_face_look_at(
+    ris_position: Any,
+    sources: Optional[List[np.ndarray]] = None,
+    targets: Optional[List[np.ndarray]] = None,
+) -> Optional[List[float]]:
+    try:
+        ris_pos = np.asarray(ris_position, dtype=float).reshape(3)
+    except Exception:
+        return None
+
+    directions: List[np.ndarray] = []
+    for endpoint in (sources or [])[:1]:
+        try:
+            vec = np.asarray(endpoint, dtype=float).reshape(3) - ris_pos
+            unit = _unit_vec(vec)
+            if np.linalg.norm(unit) > 0.0:
+                directions.append(unit)
+        except Exception:
+            continue
+    for endpoint in (targets or [])[:1]:
+        try:
+            vec = np.asarray(endpoint, dtype=float).reshape(3) - ris_pos
+            unit = _unit_vec(vec)
+            if np.linalg.norm(unit) > 0.0:
+                directions.append(unit)
+        except Exception:
+            continue
+
+    if not directions:
+        return None
+
+    normal = np.sum(np.stack(directions, axis=0), axis=0)
+    if np.linalg.norm(normal) <= 1e-9:
+        normal = directions[0]
+    normal = _unit_vec(normal)
+    if np.linalg.norm(normal) <= 0.0:
+        return None
+    look_at = ris_pos + normal
+    return [float(look_at[0]), float(look_at[1]), float(look_at[2])]
 
 
 def _format_vec(vec: np.ndarray) -> str:
@@ -479,17 +549,7 @@ def _apply_phase_profile(
     if kind not in _PHASE_PROFILE_KINDS:
         raise ValueError(f"Unsupported RIS profile kind '{kind}'")
 
-    sources = _ensure_xyz_list(profile.get("sources"), "profile.sources")
-    targets = _ensure_xyz_list(profile.get("targets"), "profile.targets")
-
-    if profile.get("auto_aim") and scene is not None and not (sources and targets):
-        try:
-            tx = next(iter(scene.transmitters.values()))
-            rx = next(iter(scene.receivers.values()))
-            sources = [np.array(tx.position, dtype=float)]
-            targets = [np.array(rx.position, dtype=float)]
-        except Exception:
-            pass
+    sources, targets = _resolve_profile_endpoints(profile, scene=scene)
 
     amplitude_mask = None
     if kind in {"flat", "uniform"}:
@@ -749,9 +809,27 @@ def add_ris_from_config(scene: Any, cfg: Dict[str, Any]) -> Optional[List[Dict[s
             geometry = build_ris_geometry(ris_cfg, obj_cfg=obj_cfg)
             if geometry.get("mode") != "legacy":
                 obj_cfg = dict(obj_cfg)
-                obj_cfg["num_rows"] = geometry["nx"]
-                obj_cfg["num_cols"] = geometry["ny"]
+                num_rows, num_cols = _nonlegacy_geometry_to_ris_panel_dims(geometry)
+                obj_cfg["num_rows"] = num_rows
+                obj_cfg["num_cols"] = num_cols
             profile_cfg = copy.deepcopy(obj_cfg.get("profile", {}) or {})
+            if obj_cfg.get("look_at") is None and obj_cfg.get("orientation") is None:
+                orient_sources, orient_targets = _resolve_profile_endpoints(
+                    profile_cfg, scene=scene
+                )
+                derived_look_at = _derive_ris_front_face_look_at(
+                    obj_cfg.get("position", [0.0, 0.0, 0.0]),
+                    orient_sources,
+                    orient_targets,
+                )
+                if derived_look_at is not None:
+                    obj_cfg = dict(obj_cfg)
+                    obj_cfg["look_at"] = derived_look_at
+                    logger.info(
+                        "RIS %s: derived front-face look_at=%s from source/target geometry.",
+                        obj_cfg.get("name", "ris"),
+                        _format_vec(np.asarray(derived_look_at, dtype=float)),
+                    )
             if "amplitude" in profile_cfg:
                 logger.info("RIS %s profile amplitude: %s", obj_cfg.get("name", "ris"), profile_cfg.get("amplitude"))
             ris = _build_ris_object(obj_cfg)
@@ -884,8 +962,7 @@ def add_ris_from_config(scene: Any, cfg: Dict[str, Any]) -> Optional[List[Dict[s
         except Exception:
             pass
         if geometry.get("mode") != "legacy":
-            num_rows = int(geometry["nx"])
-            num_cols = int(geometry["ny"])
+            num_rows, num_cols = _nonlegacy_geometry_to_ris_panel_dims(geometry)
         else:
             num_rows = int(base_cfg.get("num_rows", workbench.num_rows))
             num_cols = int(base_cfg.get("num_cols", workbench.num_cols))

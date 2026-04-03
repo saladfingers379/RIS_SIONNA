@@ -42,4 +42,12 @@ requires = ["setuptools>=77.0.0"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-include = ["app"]
+include = ["app", "app.*"]
+
+[tool.setuptools.package-data]
+app = [
+  "sim_web/*.html",
+  "sim_web/*.js",
+  "sim_web/*.css",
+  "sim_web/vendor/*.js",
+]

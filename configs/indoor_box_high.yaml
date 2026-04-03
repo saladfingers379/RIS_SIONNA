@@ -1,6 +1,6 @@
 project:
   name: RIS_SIONNA
-  description: "28 GHz indoor box (high fidelity)"
+  description: "28 GHz indoor anechoic chamber (high fidelity)"
 
 runtime:
   prefer_gpu: true
@@ -33,9 +33,9 @@ simulation:
     max_depth_add: 0
 
 scene:
-  type: builtin  # builtin | file | procedural
-  builtin: box
-  file: null
+  type: file  # builtin | file | procedural
+  builtin: null
+  file: scenes/anechoic_chamber_nofoam/scene.xml
   mesh: null
   proxy_enabled: false
   export_mesh: true
@@ -53,14 +53,14 @@ scene:
     boxes: []
   tx:
     name: tx
-    position: [-3.0, -3.0, 1.5]
+    position: [0.0, -0.98, 1.5]
     look_at: [0.0, 0.0, 1.5]
     power_dbm: 44.0
   rx:
     name: rx
-    position: [3.0, 3.0, 1.5]
+    position: [0.0, 0.98, 1.5]
   camera:
-    position: [0.0, 7.5, 7.5]
+    position: [4.0, 4.0, 3.4]
     orientation: [0.0, 1.5708, -1.5708]
   arrays:
     tx:
@@ -82,11 +82,11 @@ scene:
 radio_map:
   enabled: true
   auto_size: true
-  auto_padding: 0.5
+  auto_padding: 0.2
   center: [0.0, 0.0, 1.5]
   orientation: [0.0, 0.0, 0.0]
-  size: [6.0, 6.0]
-  cell_size: [0.1, 0.1]
+  size: [2.2, 2.2]
+  cell_size: [0.05, 0.05]
   batch_size: 512
   samples_per_tx: 2000000
   max_depth: 5
@@ -104,7 +104,7 @@ render:
 visualization:
   ray_paths:
     enabled: true
-    max_paths: 3000
+    max_paths: 100
 
 quality:
   preset: high

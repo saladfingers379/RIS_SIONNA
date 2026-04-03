@@ -43,16 +43,18 @@ def _path_types(paths) -> Optional[np.ndarray]:
     return types.reshape(-1)
 
 
-def _path_power_by_type(paths) -> Optional[Dict[str, float]]:
-    types = _path_types(paths)
-    if types is None or types.size == 0:
-        return None
+def _per_path_power_and_valid(paths) -> tuple[Optional[np.ndarray], Optional[np.ndarray]]:
     try:
         a = _paths_coefficients(paths)
     except Exception:
-        return None
+        return None, None
     power = np.abs(a) ** 2
-    num_paths = types.shape[-1]
+    types = _path_types(paths)
+    num_paths = int(types.shape[-1]) if types is not None and types.size > 0 else None
+    if num_paths is None and power.ndim >= 1:
+        num_paths = int(power.shape[-1])
+    if not num_paths:
+        return None, None
     path_axis = None
     if power.ndim >= 1 and power.shape[-1] == num_paths:
         path_axis = -1
@@ -62,7 +64,7 @@ def _path_power_by_type(paths) -> Optional[Dict[str, float]]:
                 path_axis = idx
                 break
     if path_axis is None:
-        return None
+        return None, None
     sum_axes = tuple(i for i in range(power.ndim) if i != path_axis)
     per_path = power.sum(axis=sum_axes)
     per_path = np.atleast_1d(per_path)
@@ -78,6 +80,58 @@ def _path_power_by_type(paths) -> Optional[Dict[str, float]]:
             valid = mask.any(axis=0)
     if valid is None or valid.shape[-1] != per_path.shape[-1]:
         valid = np.ones_like(per_path, dtype=bool)
+    return per_path, valid
+
+
+def _path_power_by_ris_objects(
+    paths,
+    *,
+    scene: Optional[Any],
+    per_path: np.ndarray,
+    valid: np.ndarray,
+) -> Optional[Dict[str, float]]:
+    if scene is None or not hasattr(scene, "ris"):
+        return None
+    try:
+        objects = _to_numpy(getattr(paths, "objects", None))
+    except Exception:
+        return None
+    if objects is None or getattr(objects, "size", 0) == 0:
+        return None
+    try:
+        ris_ids = [int(getattr(ris, "object_id")) for ris in scene.ris.values()]
+    except Exception:
+        ris_ids = []
+    ris_ids = [rid for rid in ris_ids if rid is not None]
+    if not ris_ids:
+        return None
+
+    if objects.ndim >= 4:
+        inter = objects[:, 0, 0, :]
+    elif objects.ndim == 2:
+        inter = objects
+    else:
+        return None
+    if inter.shape[-1] != per_path.shape[-1]:
+        return None
+
+    ris_hit = np.any(np.isin(inter, ris_ids), axis=0)
+    ris_mask = ris_hit & valid
+    non_ris_mask = (~ris_hit) & valid
+    return {
+        "ris_power_linear": float(per_path[ris_mask].sum()),
+        "non_ris_power_linear": float(per_path[non_ris_mask].sum()),
+    }
+
+
+def _path_power_by_type(paths, scene: Optional[Any] = None) -> Optional[Dict[str, float]]:
+    per_path, valid = _per_path_power_and_valid(paths)
+    if per_path is None or valid is None:
+        return None
+
+    types = _path_types(paths)
+    if types is None or types.size == 0:
+        return _path_power_by_ris_objects(paths, scene=scene, per_path=per_path, valid=valid)
 
     types = types[: per_path.shape[-1]]
     valid = valid[: per_path.shape[-1]]
@@ -86,14 +140,16 @@ def _path_power_by_type(paths) -> Optional[Dict[str, float]]:
         ris_value = int(getattr(paths, "RIS"))
     except Exception:
         ris_value = None
-    if ris_value is None:
-        return None
-    ris_mask = (types == ris_value) & valid
-    non_ris_mask = (types != ris_value) & valid
-    return {
-        "ris_power_linear": float(per_path[ris_mask].sum()),
-        "non_ris_power_linear": float(per_path[non_ris_mask].sum()),
-    }
+    if ris_value is not None:
+        ris_mask = (types == ris_value) & valid
+        non_ris_mask = (types != ris_value) & valid
+        result = {
+            "ris_power_linear": float(per_path[ris_mask].sum()),
+            "non_ris_power_linear": float(per_path[non_ris_mask].sum()),
+        }
+        if result["ris_power_linear"] > 0.0:
+            return result
+    return _path_power_by_ris_objects(paths, scene=scene, per_path=per_path, valid=valid)
 
 
 def _count_ris_paths(paths, scene: Optional[Any] = None) -> Optional[int]:
@@ -124,7 +180,9 @@ def _count_ris_paths(paths, scene: Optional[Any] = None) -> Optional[int]:
             per_path = mask.reshape(-1, mask.shape[-1]).any(axis=0) & ris_hit
         else:
             per_path = ris_hit
-        return int(np.sum(per_path))
+        count = int(np.sum(per_path))
+        if count > 0:
+            return count
     if scene is not None and objects is not None and hasattr(scene, "ris") and objects is not None:
         try:
             ris_ids = [int(getattr(ris, "object_id")) for ris in scene.ris.values()]
@@ -191,7 +249,7 @@ def compute_path_metrics(paths, tx_power_dbm: float, scene: Optional[Any] = None
         "rx_power_dbm_estimate": tx_power_dbm + total_path_gain_db,
         "num_valid_paths": num_valid_paths,
     }
-    type_power = _path_power_by_type(paths)
+    type_power = _path_power_by_type(paths, scene=scene)
     if type_power:
         ris_power = type_power["ris_power_linear"]
         non_ris_power = type_power["non_ris_power_linear"]

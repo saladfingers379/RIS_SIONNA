@@ -19,11 +19,33 @@ try:
 except Exception:
     pass
 
+_REPO_SIONNA_BASELINE = "0.19.2"
+_REPO_NUMPY_BASELINE = "1.26.4"
+
 def _safe_version(pkg: str) -> Optional[str]:
     try:
         return importlib.metadata.version(pkg)
     except importlib.metadata.PackageNotFoundError:
         return None
+
+
+def _repo_runtime_warnings(
+    *,
+    python_info: Tuple[int, int, int],
+    numpy_version: Optional[str],
+) -> list[str]:
+    warnings: list[str] = []
+    if python_info >= (3, 12, 0):
+        warnings.append(
+            f"Python {python_info[0]}.{python_info[1]} detected. "
+            f"This repo targets Python 3.10-3.11 for Sionna {_REPO_SIONNA_BASELINE}."
+        )
+    if numpy_version and numpy_version.startswith("2."):
+        warnings.append(
+            f"NumPy 2.x detected. This repo pins NumPy {_REPO_NUMPY_BASELINE} "
+            f"for Sionna {_REPO_SIONNA_BASELINE} compatibility."
+        )
+    return warnings
 
 
 def _preferred_cuda_variant(variants: list[str]) -> Optional[str]:
@@ -309,15 +331,10 @@ def collect_environment_info() -> Dict[str, Any]:
 
     info["gpu_memory_mb"] = get_gpu_memory_mb()
 
-    warnings = []
-    if sys.version_info >= (3, 13):
-        warnings.append(
-            "Python 3.13 detected. Sionna 1.2.1 requires numpy<2.0; use Python 3.10–3.12."
-        )
-    if info["versions"].get("numpy") and info["versions"]["numpy"].startswith("2."):
-        warnings.append(
-            "NumPy 2.x detected. Sionna 1.2.1 requires numpy<2.0."
-        )
+    warnings = _repo_runtime_warnings(
+        python_info=(sys.version_info.major, sys.version_info.minor, sys.version_info.micro),
+        numpy_version=info["versions"].get("numpy"),
+    )
     if warnings:
         info["warnings"] = warnings
 

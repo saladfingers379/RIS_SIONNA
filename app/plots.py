@@ -41,6 +41,86 @@ def compute_radio_map_extent(cell_centers: np.ndarray) -> Tuple[float, float, fl
     )
 
 
+def _normalize(vec: np.ndarray) -> np.ndarray | None:
+    norm = float(np.linalg.norm(vec))
+    if norm <= 0.0:
+        return None
+    return vec / norm
+
+
+def _radio_map_plane_projection(
+    cell_centers: np.ndarray,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    if cell_centers.ndim < 3 or cell_centers.shape[-1] < 3:
+        raise ValueError("cell_centers must have shape [y, x, 3]")
+
+    origin = np.asarray(cell_centers[0, 0], dtype=float)
+    u_vec = None
+    v_vec = None
+    if cell_centers.shape[1] > 1:
+        u_vec = np.asarray(cell_centers[0, 1], dtype=float) - origin
+    if cell_centers.shape[0] > 1:
+        v_vec = np.asarray(cell_centers[1, 0], dtype=float) - origin
+
+    u_unit = _normalize(u_vec) if u_vec is not None else None
+    if u_unit is None:
+        u_unit = np.array([1.0, 0.0, 0.0], dtype=float)
+
+    if v_vec is not None:
+        v_vec = v_vec - float(np.dot(v_vec, u_unit)) * u_unit
+    v_unit = _normalize(v_vec) if v_vec is not None else None
+    if v_unit is None:
+        fallback = np.array([0.0, 0.0, 1.0], dtype=float)
+        if abs(float(np.dot(fallback, u_unit))) > 0.9:
+            fallback = np.array([0.0, 1.0, 0.0], dtype=float)
+        v_unit = fallback - float(np.dot(fallback, u_unit)) * u_unit
+        v_unit = _normalize(v_unit)
+    if v_unit is None:
+        v_unit = np.array([0.0, 1.0, 0.0], dtype=float)
+
+    rel = np.asarray(cell_centers, dtype=float) - origin[None, None, :]
+    u_coords = np.tensordot(rel, u_unit, axes=([-1], [0]))
+    v_coords = np.tensordot(rel, v_unit, axes=([-1], [0]))
+    return u_coords, v_coords, origin, u_unit, v_unit
+
+
+def _compute_projected_extent(u_coords: np.ndarray, v_coords: np.ndarray) -> Tuple[float, float, float, float]:
+    u_step = 0.0
+    v_step = 0.0
+    if u_coords.ndim >= 2:
+        u_diffs = np.diff(u_coords, axis=1).ravel()
+        u_nonzero = u_diffs[np.abs(u_diffs) > 0]
+        if u_nonzero.size:
+            u_step = float(np.median(np.abs(u_nonzero)))
+        v_diffs = np.diff(v_coords, axis=0).ravel()
+        v_nonzero = v_diffs[np.abs(v_diffs) > 0]
+        if v_nonzero.size:
+            v_step = float(np.median(np.abs(v_nonzero)))
+    return (
+        float(np.min(u_coords) - 0.5 * u_step),
+        float(np.max(u_coords) + 0.5 * u_step),
+        float(np.min(v_coords) - 0.5 * v_step),
+        float(np.max(v_coords) + 0.5 * v_step),
+    )
+
+
+def _project_point_to_plane_axes(
+    point: np.ndarray,
+    origin: np.ndarray,
+    u_unit: np.ndarray,
+    v_unit: np.ndarray,
+) -> Tuple[float, float]:
+    rel = np.asarray(point, dtype=float) - origin
+    return float(np.dot(rel, u_unit)), float(np.dot(rel, v_unit))
+
+
+def _radio_map_title(metric_label: str, title_suffix: str | None = None) -> str:
+    title = f"Radio Map ({metric_label})"
+    if title_suffix:
+        return f"{title}\n{title_suffix}"
+    return title
+
+
 def plot_radio_map(
     metric_map: np.ndarray,
     cell_centers: np.ndarray,
@@ -50,26 +130,32 @@ def plot_radio_map(
     tx_pos: np.ndarray | None = None,
     rx_pos: np.ndarray | None = None,
     ris_positions: list[np.ndarray] | None = None,
+    axis_labels: Tuple[str, str] = ("x [m]", "y [m]"),
+    title_suffix: str | None = None,
 ) -> Tuple[Path, Path]:
     # metric_map: [num_tx, y, x] or [y, x]
     # cell_centers: [y, x, 3]
 
-    extent = compute_radio_map_extent(cell_centers)
+    u_coords, v_coords, origin, u_unit, v_unit = _radio_map_plane_projection(cell_centers)
+    extent = _compute_projected_extent(u_coords, v_coords)
 
     fig, ax = plt.subplots(figsize=(7, 5))
     data = metric_map[0] if metric_map.ndim == 3 else metric_map
     im = ax.imshow(data, origin="lower", extent=extent, cmap="viridis")
-    ax.set_title(f"Radio Map ({metric_label})")
-    ax.set_xlabel("x [m]")
-    ax.set_ylabel("y [m]")
+    ax.set_title(_radio_map_title(metric_label, title_suffix=title_suffix))
+    ax.set_xlabel(axis_labels[0])
+    ax.set_ylabel(axis_labels[1])
     if tx_pos is not None:
-        ax.scatter([tx_pos[0]], [tx_pos[1]], color="#dc322f", s=30, label="Tx")
+        tx_u, tx_v = _project_point_to_plane_axes(np.asarray(tx_pos, dtype=float), origin, u_unit, v_unit)
+        ax.scatter([tx_u], [tx_v], color="#dc322f", s=30, label="Tx")
     if rx_pos is not None:
-        ax.scatter([rx_pos[0]], [rx_pos[1]], color="#268bd2", s=30, label="Rx")
+        rx_u, rx_v = _project_point_to_plane_axes(np.asarray(rx_pos, dtype=float), origin, u_unit, v_unit)
+        ax.scatter([rx_u], [rx_v], color="#268bd2", s=30, label="Rx")
     if ris_positions:
         for idx, pos in enumerate(ris_positions):
             label = "RIS" if idx == 0 else None
-            ax.scatter([pos[0]], [pos[1]], color="#000000", s=40, marker="*", label=label)
+            ris_u, ris_v = _project_point_to_plane_axes(np.asarray(pos, dtype=float), origin, u_unit, v_unit)
+            ax.scatter([ris_u], [ris_v], color="#000000", s=40, marker="*", label=label)
     if tx_pos is not None or rx_pos is not None or ris_positions:
         ax.legend(loc="upper right")
     fig.colorbar(im, ax=ax, label=metric_label)
@@ -95,6 +181,7 @@ def plot_radio_map_sionna(
     show_tx: bool = True,
     show_rx: bool = False,
     show_ris: bool = False,
+    title_suffix: str | None = None,
 ) -> Tuple[Path, Path]:
     fig = coverage_map.show(
         metric=metric,
@@ -105,6 +192,11 @@ def plot_radio_map_sionna(
         show_rx=show_rx,
         show_ris=show_ris,
     )
+    if title_suffix:
+        axes = fig.axes or []
+        if axes:
+            current = axes[0].get_title() or ""
+            axes[0].set_title(f"{current}\n{title_suffix}" if current else title_suffix)
     png_path = output_dir / f"{filename_prefix}.png"
     svg_path = output_dir / f"{filename_prefix}.svg"
     fig.savefig(png_path, dpi=200)

@@ -6,25 +6,41 @@ import numpy as np
 
 
 def _procrustes_align(x: np.ndarray, y: np.ndarray) -> Tuple[np.ndarray, Dict[str, float]]:
-    # Align x to y with similarity transform.
+    """Align x to y with optimal similarity transform (rotation + uniform scale + translation).
+
+    Standard Procrustes analysis:
+      1. Centre both point sets
+      2. Normalise to unit Frobenius norm
+      3. Find optimal rotation via SVD
+      4. Compute optimal scale using trace of singular values
+      5. Apply transform: x_aligned = (x_centred @ R) * scale + y_mean
+    """
     x_mean = np.mean(x, axis=0)
     y_mean = np.mean(y, axis=0)
     x0 = x - x_mean
     y0 = y - y_mean
 
-    norm_x = np.linalg.norm(x0)
-    norm_y = np.linalg.norm(y0)
+    norm_x = np.linalg.norm(x0, "fro")
+    norm_y = np.linalg.norm(y0, "fro")
     if norm_x == 0 or norm_y == 0:
         return x, {"scale": 1.0}
 
-    x0 /= norm_x
-    y0 /= norm_y
+    # Normalise to unit Frobenius norm
+    x0n = x0 / norm_x
+    y0n = y0 / norm_y
 
-    u, _, vt = np.linalg.svd(x0.T @ y0)
+    # Optimal rotation
+    u, s, vt = np.linalg.svd(x0n.T @ y0n)
     r = u @ vt
-    scale = norm_y / norm_x
+
+    # Optimal scale: trace(S) * norm_y / norm_x
+    # trace(S) ∈ [0, d] measures alignment quality; for perfect fit trace(S) = d
+    trace_s = float(np.sum(s))
+    scale = trace_s * norm_y / norm_x
+
+    # Apply: rotate un-normalised centred points, then scale and translate
     x_aligned = (x0 @ r) * scale + y_mean
-    return x_aligned, {"scale": float(scale)}
+    return x_aligned, {"scale": scale, "trace_s": trace_s}
 
 
 def _affine_align(x: np.ndarray, y: np.ndarray) -> Tuple[np.ndarray, Dict[str, Any]]:

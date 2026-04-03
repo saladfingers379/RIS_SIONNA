@@ -103,6 +103,7 @@ Enable RIS with the simulator UI:
 
 Notes:
 - RIS effects are easiest to see if the radio map plane is near the Rx height.
+- Radio-map grid alignment now defaults to `radio_map.align_grid_to_anchor: true`, anchoring cells to RIS (when active) or Tx to avoid skipping the first meters near the source due to coarse cell spacing.
 - The diff view highlights changes between a baseline and RIS run.
 
 ### RIS Geometry Modes (Size vs Spacing)

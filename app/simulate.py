@@ -13,6 +13,13 @@ import numpy as np
 
 from .config import load_config
 from .sim_tuning import apply_similarity_and_sampling
+from .radio_map_grid import (
+    align_center_to_anchor,
+    assess_ris_plane_visibility,
+    derive_tx_ris_incidence_slice,
+    diagnose_ris_map_sampling_issue,
+    radio_map_z_slice_offsets,
+)
 from .ris.ris_geometry import apply_ris_geometry_overrides
 from .io import create_output_dir, save_json, save_yaml
 from .metrics import build_paths_table, compute_path_metrics, extract_path_data
@@ -133,6 +140,62 @@ def _rt_backend_from_variant(variant: str | None) -> str:
     return "unknown"
 
 
+def _format_radio_map_z_suffix(offset_m: float) -> str:
+    sign = "p" if offset_m > 0.0 else "m"
+    magnitude = f"{abs(float(offset_m)):.3f}".rstrip("0").rstrip(".").replace(".", "p")
+    return f"z{sign}{magnitude}m"
+
+
+def _radio_map_z_slice_specs(radio_map_cfg: Optional[Dict[str, Any]]) -> list[Dict[str, Any]]:
+    specs = []
+    for offset_m in radio_map_z_slice_offsets(radio_map_cfg):
+        specs.append(
+            {
+                "offset_m": float(offset_m),
+                "suffix": _format_radio_map_z_suffix(offset_m),
+                "display_label": f"z={offset_m:+.2f} m",
+            }
+        )
+    return specs
+
+
+def _format_radio_map_plane_z_token(z_m: float) -> str:
+    if z_m < 0.0:
+        return f"zm{abs(float(z_m)):.2f}".replace(".", "p")
+    return f"z{float(z_m):.2f}".replace(".", "p")
+
+
+def _radio_map_plot_filename_prefix(
+    *,
+    write_default: bool,
+    suffix: Optional[str],
+    metric_name: str,
+    kwargs: Dict[str, Any],
+) -> str:
+    center = kwargs.get("cm_center")
+    has_plane_z = isinstance(center, (list, tuple)) and len(center) >= 3
+    if (write_default or (suffix and suffix.startswith("z") and suffix.endswith("m"))) and has_plane_z:
+        try:
+            return f"radio_map_{metric_name}_{_format_radio_map_plane_z_token(float(center[2]))}"
+        except Exception:
+            pass
+    if write_default or not suffix:
+        return f"radio_map_{metric_name}"
+    if suffix.startswith("z") and suffix.endswith("m"):
+        return f"radio_map_{metric_name}_{suffix}"
+    return f"radio_map_{suffix}_{metric_name}"
+
+
+def _radio_map_title_suffix(kwargs: Dict[str, Any]) -> str | None:
+    center = kwargs.get("cm_center")
+    if not isinstance(center, (list, tuple)) or len(center) < 3:
+        return None
+    try:
+        return f"z={float(center[2]):.2f} m"
+    except Exception:
+        return None
+
+
 def _format_tuning_summary(tuning: Dict[str, Any]) -> str:
     scale = tuning.get("scale_similarity", {})
     sampling = tuning.get("sampling_boost", {})
@@ -167,6 +230,56 @@ def _format_tuning_summary(tuning: Dict[str, Any]) -> str:
         )
 
     return f"{scale_part}; {sampling_part}"
+
+
+def _compute_paths_with_current_flags(scene: Any, sim_cfg: Dict[str, Any], *, use_ris: bool) -> Any:
+    if sim_cfg.get("refraction"):
+        logger.warning("Sionna 0.19.2 RT does not support refraction; ignoring refraction=True.")
+    return scene.compute_paths(
+        max_depth=int(sim_cfg.get("max_depth", 3)),
+        method=str(sim_cfg.get("method", "fibonacci")),
+        num_samples=int(sim_cfg.get("samples_per_src", 200000)),
+        los=bool(sim_cfg.get("los", True)),
+        reflection=bool(sim_cfg.get("specular_reflection", True)),
+        diffraction=bool(sim_cfg.get("diffraction", False)),
+        scattering=bool(sim_cfg.get("diffuse_reflection", False)),
+        ris=bool(use_ris),
+    )
+
+
+def _compute_ris_link_probe(
+    scene: Any,
+    sim_cfg: Dict[str, Any],
+    tx_device: Any,
+    metrics_on: Dict[str, Any],
+    *,
+    has_ris: bool,
+    use_ris_paths: bool,
+) -> Optional[Dict[str, Any]]:
+    if not has_ris or not use_ris_paths:
+        return None
+    try:
+        paths_off = _compute_paths_with_current_flags(scene, sim_cfg, use_ris=False)
+        metrics_off = compute_path_metrics(paths_off, tx_power_dbm=tx_device.power_dbm, scene=scene)
+    except Exception as exc:
+        logger.warning("RIS link probe failed: %s", exc)
+        return {"error": str(exc)}
+
+    on_gain = metrics_on.get("total_path_gain_db")
+    off_gain = metrics_off.get("total_path_gain_db")
+    on_rx = metrics_on.get("rx_power_dbm_estimate")
+    off_rx = metrics_off.get("rx_power_dbm_estimate")
+    probe = {
+        "on_total_path_gain_db": float(on_gain) if on_gain is not None else None,
+        "off_total_path_gain_db": float(off_gain) if off_gain is not None else None,
+        "on_rx_power_dbm_estimate": float(on_rx) if on_rx is not None else None,
+        "off_rx_power_dbm_estimate": float(off_rx) if off_rx is not None else None,
+    }
+    if on_gain is not None and off_gain is not None:
+        probe["delta_total_path_gain_db"] = float(on_gain - off_gain)
+    if on_rx is not None and off_rx is not None:
+        probe["delta_rx_power_dbm_estimate"] = float(on_rx - off_rx)
+    return probe
 
 
 def run_simulation(config_path: str, overrides: Optional[Dict[str, Any]] = None) -> Path:
@@ -240,7 +353,15 @@ def run_simulation(config_path: str, overrides: Optional[Dict[str, Any]] = None)
         gpu_monitor.start()
 
     need_export = bool(cfg.scene.get("export_mesh", True))
-    sim_cfg = cfg.simulation
+    sim_cfg = dict(cfg.simulation)
+    ris_isolation = bool(sim_cfg.get("ris_isolation", False))
+    if ris_isolation:
+        if sim_cfg.get("los", True) or sim_cfg.get("specular_reflection", True):
+            logger.info(
+                "RIS-only isolation active: forcing simulation.los=false and simulation.specular_reflection=false"
+            )
+        sim_cfg["los"] = False
+        sim_cfg["specular_reflection"] = False
     compute_paths_enabled = bool(sim_cfg.get("compute_paths", True))
     steps = ["Build scene"]
     if need_export:
@@ -302,6 +423,7 @@ def run_simulation(config_path: str, overrides: Optional[Dict[str, Any]] = None)
                                 output_dir,
                                 scene_id=scene_id,
                                 cache_root=Path(cfg.output.get("base_dir", "outputs")) / "_cache",
+                                scene_file=scene_cfg.get("file"),
                             )
                         except Exception as exc:  # pragma: no cover
                             logger.warning("Mesh export failed: %s", exc)
@@ -333,7 +455,6 @@ def run_simulation(config_path: str, overrides: Optional[Dict[str, Any]] = None)
                     progress.advance(task_id)
                     step_idx += 1
 
-                    sim_cfg = cfg.simulation
                     ris_runtime = getattr(scene, "_ris_runtime", None)
                     ris_objects = {}
                     try:
@@ -361,20 +482,9 @@ def run_simulation(config_path: str, overrides: Optional[Dict[str, Any]] = None)
                         t0 = time.time()
                         progress.update(task_id, description="Ray trace paths")
                         write_progress(step_idx, "running")
-                        if sim_cfg.get("refraction"):
-                            logger.warning("Sionna 0.19.2 RT does not support refraction; ignoring refraction=True.")
                         if ris_runtime:
                             logger.info("RIS enabled in scene (%d objects). compute_paths.ris=%s", len(ris_runtime), use_ris_paths)
-                        paths = scene.compute_paths(
-                            max_depth=int(sim_cfg.get("max_depth", 3)),
-                            method=str(sim_cfg.get("method", "fibonacci")),
-                            num_samples=int(sim_cfg.get("samples_per_src", 200000)),
-                            los=bool(sim_cfg.get("los", True)),
-                            reflection=bool(sim_cfg.get("specular_reflection", True)),
-                            diffraction=bool(sim_cfg.get("diffraction", False)),
-                            scattering=bool(sim_cfg.get("diffuse_reflection", False)),
-                            ris=bool(use_ris_paths),
-                        )
+                        paths = _compute_paths_with_current_flags(scene, sim_cfg, use_ris=use_ris_paths)
                         timings["path_tracing_s"] = time.time() - t0
                         progress.advance(task_id)
                         step_idx += 1
@@ -389,6 +499,22 @@ def run_simulation(config_path: str, overrides: Optional[Dict[str, Any]] = None)
                                 )
                         path_data = extract_path_data(paths)
                         metrics.update(path_data.get("metrics", {}))
+                        probe_t0 = time.time()
+                        ris_link_probe = _compute_ris_link_probe(
+                            scene,
+                            sim_cfg,
+                            tx_device,
+                            metrics,
+                            has_ris=has_ris,
+                            use_ris_paths=use_ris_paths,
+                        )
+                        if ris_link_probe is not None:
+                            timings["ris_link_probe_s"] = time.time() - probe_t0
+                        if ris_link_probe is not None:
+                            metrics["ris_link_probe"] = ris_link_probe
+                            delta_gain = ris_link_probe.get("delta_total_path_gain_db")
+                            if delta_gain is not None:
+                                logger.info("RIS link probe: on-off total path gain delta = %.2f dB", float(delta_gain))
                         path_table = build_paths_table(paths, tx_power_dbm=tx_device.power_dbm)
                         if path_table["rows"]:
                             import csv
@@ -421,10 +547,21 @@ def run_simulation(config_path: str, overrides: Optional[Dict[str, Any]] = None)
                                     ]
                                 )
 
-                    radio_map_cfg = cfg.radio_map
+                    radio_map_cfg = dict(cfg.radio_map)
+                    if ris_isolation:
+                        if radio_map_cfg.get("los", True) or radio_map_cfg.get("specular_reflection", True):
+                            logger.info(
+                                "RIS-only isolation active: forcing radio_map.los=false and radio_map.specular_reflection=false"
+                            )
+                        if radio_map_cfg.get("diff_ris", False):
+                            logger.info("RIS-only isolation active: forcing radio_map.diff_ris=false")
+                        radio_map_cfg["los"] = False
+                        radio_map_cfg["specular_reflection"] = False
+                        radio_map_cfg["diff_ris"] = False
                     radio_map = None
                     radio_map_summaries = []
                     radio_map_default_data = None
+                    radio_map_visibility = None
 
                     def _maybe_autosize(target_cfg: Dict[str, Any]) -> Dict[str, Any]:
                         if not target_cfg.get("auto_size"):
@@ -456,7 +593,49 @@ def run_simulation(config_path: str, overrides: Optional[Dict[str, Any]] = None)
                             pass
                         return target_cfg
 
-                    def _radio_map_kwargs(target_cfg: Dict[str, Any], overrides: Dict[str, Any]) -> Dict[str, Any]:
+                    def _resolve_map_anchor(cfg_local: Dict[str, Any], use_ris_map: bool) -> Optional[list[float]]:
+                        anchor_mode = str(cfg_local.get("cell_anchor", "auto")).strip().lower()
+                        if anchor_mode in {"none", "off", "disabled", "false"}:
+                            return None
+
+                        anchor_xyz = cfg_local.get("cell_anchor_point")
+                        if isinstance(anchor_xyz, (list, tuple)) and len(anchor_xyz) >= 3:
+                            try:
+                                return [float(anchor_xyz[0]), float(anchor_xyz[1]), float(anchor_xyz[2])]
+                            except Exception:
+                                return None
+
+                        if anchor_mode in {"auto", "ris"} and use_ris_map:
+                            try:
+                                ris_values = list((getattr(scene, "ris", {}) or {}).values())
+                            except Exception:
+                                ris_values = []
+                            if ris_values:
+                                try:
+                                    pos = _to_numpy(ris_values[0].position).reshape(-1)
+                                    return [float(pos[0]), float(pos[1]), float(pos[2])]
+                                except Exception:
+                                    pass
+                            if anchor_mode == "ris":
+                                return None
+
+                        if anchor_mode in {"auto", "tx"} and tx_pos is not None:
+                            try:
+                                return [float(tx_pos[0]), float(tx_pos[1]), float(tx_pos[2])]
+                            except Exception:
+                                return None
+
+                        if anchor_mode in {"auto", "rx"} and rx_pos is not None:
+                            try:
+                                return [float(rx_pos[0]), float(rx_pos[1]), float(rx_pos[2])]
+                            except Exception:
+                                return None
+
+                        return None
+
+                    def _radio_map_kwargs(
+                        target_cfg: Dict[str, Any], overrides: Dict[str, Any]
+                    ) -> tuple[Dict[str, Any], Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
                         cfg_local = dict(target_cfg)
                         cfg_local.update(overrides)
                         cfg_local = _maybe_autosize(cfg_local)
@@ -478,6 +657,71 @@ def run_simulation(config_path: str, overrides: Optional[Dict[str, Any]] = None)
                         if use_ris_map and not has_ris:
                             logger.warning("RIS enabled for radio map but no RIS objects are present; disabling RIS.")
                             use_ris_map = False
+
+                        alignment_info = None
+                        visibility_info = None
+                        if bool(cfg_local.get("align_grid_to_anchor", True)):
+                            anchor = _resolve_map_anchor(cfg_local, use_ris_map=use_ris_map)
+                            if anchor is not None:
+                                aligned_center, alignment_info = align_center_to_anchor(
+                                    cfg_local.get("center"),
+                                    cfg_local.get("size"),
+                                    cfg_local.get("cell_size", [2.0, 2.0]),
+                                    anchor,
+                                    inside_only=True,
+                                )
+                                if aligned_center is not None:
+                                    cfg_local = dict(cfg_local)
+                                    cfg_local["center"] = aligned_center
+                                    if alignment_info and alignment_info.get("applied"):
+                                        shift_xy = alignment_info.get("shift_xy_m", [0.0, 0.0])
+                                        logger.info(
+                                            "Aligned radio-map grid to anchor at [%.3f, %.3f, %.3f] with center shift [%.3f, %.3f] m",
+                                            anchor[0],
+                                            anchor[1],
+                                            anchor[2],
+                                            float(shift_xy[0]),
+                                            float(shift_xy[1]),
+                                        )
+                        if use_ris_map:
+                            try:
+                                center_cfg = cfg_local.get("center") or [0.0, 0.0, 0.0]
+                                plane_z = float(center_cfg[2]) if len(center_cfg) > 2 else 0.0
+                            except Exception:
+                                plane_z = None
+                            ris_pos = None
+                            ris_z = None
+                            try:
+                                ris_values = list((getattr(scene, "ris", {}) or {}).values())
+                                if ris_values:
+                                    ris_pos = _to_numpy(ris_values[0].position).reshape(-1)
+                                    ris_z = float(ris_pos[2])
+                            except Exception:
+                                ris_z = None
+                            if plane_z is not None and ris_z is not None:
+                                dz = abs(plane_z - ris_z)
+                                if dz > 0.75:
+                                    logger.warning(
+                                        "Radio-map plane z=%.3f differs from RIS z=%.3f by %.3fm. "
+                                        "RIS reradiation may appear to start meters away because the 2D slice "
+                                        "intersects the beam later. Consider setting center_z_only near Rx/RIS height.",
+                                        plane_z,
+                                        ris_z,
+                                        dz,
+                                    )
+                            if rx_pos is not None and ris_pos is not None:
+                                visibility_info = assess_ris_plane_visibility(
+                                    ris_pos,
+                                    rx_pos,
+                                    cfg_local.get("orientation", [0.0, 0.0, 0.0]),
+                                )
+                                if visibility_info and visibility_info.get("beam_parallel_to_plane"):
+                                    logger.warning(
+                                        "Radio-map plane is %.2f deg from the RIS->Rx beam. "
+                                        "coverage_map() samples intersections with the 2D slice, so a nearly in-plane "
+                                        "RIS beam can miss the actual Tx/Rx boost. Use the RIS link probe or a vertical slice.",
+                                        float(visibility_info.get("ris_to_rx_angle_from_plane_deg", 0.0)),
+                                    )
                         kwargs = dict(
                             cm_center=cfg_local.get("center"),
                             cm_orientation=cfg_local.get("orientation", [0.0, 0.0, 0.0]),
@@ -493,7 +737,7 @@ def run_simulation(config_path: str, overrides: Optional[Dict[str, Any]] = None)
                         )
                         if cfg_local.get("num_runs"):
                             kwargs["num_runs"] = int(cfg_local.get("num_runs"))
-                        return kwargs
+                        return kwargs, alignment_info, visibility_info
 
                     def _compute_radio_map(
                         label: str,
@@ -501,13 +745,15 @@ def run_simulation(config_path: str, overrides: Optional[Dict[str, Any]] = None)
                         suffix: Optional[str],
                         write_default: bool,
                         enabled_ris: Optional[set[str]] = None,
-                    ) -> tuple[Dict[str, Any], Dict[str, Any]]:
+                        cfg_source: Optional[Dict[str, Any]] = None,
+                        axis_labels: tuple[str, str] = ("x [m]", "y [m]"),
+                    ) -> tuple[Dict[str, Any], Dict[str, Any], Optional[Dict[str, Any]]]:
                         nonlocal radio_map
                         t0 = time.time()
                         progress.update(task_id, description=f"Radio map ({label})")
                         write_progress(step_idx, "running")
                         # Allow a Z-only override that doesn't affect X/Y center.
-                        cfg_base = radio_map_cfg
+                        cfg_base = dict(cfg_source if cfg_source is not None else radio_map_cfg)
                         z_override = None
                         if "center_z_only" in cfg_base:
                             try:
@@ -522,7 +768,7 @@ def run_simulation(config_path: str, overrides: Optional[Dict[str, Any]] = None)
                         if z_override is not None:
                             cfg_base = dict(cfg_base)
                             cfg_base["center_z_only"] = z_override
-                        kwargs = _radio_map_kwargs(cfg_base, overrides)
+                        kwargs, alignment_info, visibility_info = _radio_map_kwargs(cfg_base, overrides)
                         snapshots = None
                         if enabled_ris is not None:
                             snapshots = _snapshot_ris_amplitudes(scene)
@@ -566,30 +812,36 @@ def run_simulation(config_path: str, overrides: Optional[Dict[str, Any]] = None)
                                 comments="",
                             )
 
-                        prefix = "radio_map" if write_default else f"radio_map_{suffix}"
-                        plot_style = str(radio_map_cfg.get("plot_style", "heatmap")).lower()
+                        plot_style = str(cfg_base.get("plot_style", "heatmap")).lower()
+                        title_suffix = _radio_map_title_suffix(kwargs)
                         if plot_style == "sionna":
-                            plot_metrics = radio_map_cfg.get("plot_metrics", "path_gain")
+                            plot_metrics = cfg_base.get("plot_metrics", "path_gain")
                             if isinstance(plot_metrics, str):
                                 plot_metrics = [plot_metrics]
-                            show_tx = bool(radio_map_cfg.get("plot_show_tx", True))
-                            show_rx = bool(radio_map_cfg.get("plot_show_rx", False))
-                            show_ris = bool(radio_map_cfg.get("plot_show_ris", False))
-                            vmin = radio_map_cfg.get("plot_vmin")
-                            vmax = radio_map_cfg.get("plot_vmax")
+                            show_tx = bool(cfg_base.get("plot_show_tx", True))
+                            show_rx = bool(cfg_base.get("plot_show_rx", False))
+                            show_ris = bool(cfg_base.get("plot_show_ris", False))
+                            vmin = cfg_base.get("plot_vmin")
+                            vmax = cfg_base.get("plot_vmax")
                             for metric in plot_metrics:
                                 metric_name = str(metric)
                                 plot_radio_map_sionna(
                                     radio_map,
                                     plots_dir,
                                     metric=metric_name,
-                                    filename_prefix=f"{prefix}_{metric_name}",
-                                    tx=radio_map_cfg.get("plot_tx"),
+                                    filename_prefix=_radio_map_plot_filename_prefix(
+                                        write_default=write_default,
+                                        suffix=suffix,
+                                        metric_name=metric_name,
+                                        kwargs=kwargs,
+                                    ),
+                                    tx=cfg_base.get("plot_tx"),
                                     vmin=vmin,
                                     vmax=vmax,
                                     show_tx=show_tx,
                                     show_rx=show_rx,
                                     show_ris=show_ris,
+                                    title_suffix=title_suffix,
                                 )
                         else:
                             ris_positions = []
@@ -602,30 +854,51 @@ def run_simulation(config_path: str, overrides: Optional[Dict[str, Any]] = None)
                                 cell_centers,
                                 plots_dir,
                                 metric_label="Path gain [dB]",
-                                filename_prefix=f"{prefix}_path_gain_db",
+                                filename_prefix=_radio_map_plot_filename_prefix(
+                                    write_default=write_default,
+                                    suffix=suffix,
+                                    metric_name="path_gain_db",
+                                    kwargs=kwargs,
+                                ),
                                 tx_pos=tx_pos,
                                 rx_pos=rx_pos,
                                 ris_positions=ris_positions,
+                                axis_labels=axis_labels,
+                                title_suffix=title_suffix,
                             )
                             plot_radio_map(
                                 rx_power_dbm,
                                 cell_centers,
                                 plots_dir,
                                 metric_label="Rx power [dBm]",
-                                filename_prefix=f"{prefix}_rx_power_dbm",
+                                filename_prefix=_radio_map_plot_filename_prefix(
+                                    write_default=write_default,
+                                    suffix=suffix,
+                                    metric_name="rx_power_dbm",
+                                    kwargs=kwargs,
+                                ),
                                 tx_pos=tx_pos,
                                 rx_pos=rx_pos,
                                 ris_positions=ris_positions,
+                                axis_labels=axis_labels,
+                                title_suffix=title_suffix,
                             )
                             plot_radio_map(
                                 path_loss_db,
                                 cell_centers,
                                 plots_dir,
                                 metric_label="Path loss [dB]",
-                                filename_prefix=f"{prefix}_path_loss_db",
+                                filename_prefix=_radio_map_plot_filename_prefix(
+                                    write_default=write_default,
+                                    suffix=suffix,
+                                    metric_name="path_loss_db",
+                                    kwargs=kwargs,
+                                ),
                                 tx_pos=tx_pos,
                                 rx_pos=rx_pos,
                                 ris_positions=ris_positions,
+                                axis_labels=axis_labels,
+                                title_suffix=title_suffix,
                             )
 
                         stats = {
@@ -646,25 +919,110 @@ def run_simulation(config_path: str, overrides: Optional[Dict[str, Any]] = None)
                             "stats": stats,
                             "parameters": kwargs,
                         }
+                        center_cfg = kwargs.get("cm_center")
+                        if isinstance(center_cfg, (list, tuple)) and len(center_cfg) >= 3:
+                            try:
+                                summary["plane_center_z_m"] = float(center_cfg[2])
+                            except Exception:
+                                pass
+                        if alignment_info is not None:
+                            summary["grid_alignment"] = alignment_info
+                        if visibility_info is not None:
+                            summary["visibility"] = visibility_info
                         data = {
                             "path_gain_db": path_gain_db,
                             "rx_power_dbm": rx_power_dbm,
                             "path_loss_db": path_loss_db,
                             "cell_centers": cell_centers,
                         }
-                        return summary, data
+                        return summary, data, visibility_info
 
                     write_progress(step_idx, "running")
                     if radio_map_cfg.get("enabled", False):
-                        summary, radio_map_default_data = _compute_radio_map(
+                        summary, radio_map_default_data, radio_map_visibility = _compute_radio_map(
                             label="default",
                             overrides={},
                             suffix=None,
                             write_default=True,
                         )
+                        radio_map_issue = diagnose_ris_map_sampling_issue(
+                            summary.get("stats"),
+                            radio_map_visibility,
+                            metrics.get("ris_link_probe"),
+                        )
+                        if radio_map_issue is not None:
+                            metrics["radio_map_issue"] = radio_map_issue
+                            logger.warning("%s %s", radio_map_issue["message"], radio_map_issue["recommended_action"])
                         radio_map_summaries.append(summary)
                         progress.advance(task_id)
                         step_idx += 1
+
+                        base_plane_z_m = 0.0
+                        try:
+                            if "center_z_only" in radio_map_cfg:
+                                base_plane_z_m = float(radio_map_cfg.get("center_z_only"))
+                            else:
+                                center_cfg = radio_map_cfg.get("center") or [0.0, 0.0, 0.0]
+                                if isinstance(center_cfg, (list, tuple)) and len(center_cfg) >= 3:
+                                    base_plane_z_m = float(center_cfg[2])
+                        except Exception:
+                            base_plane_z_m = 0.0
+                        for slice_spec in _radio_map_z_slice_specs(radio_map_cfg):
+                            offset_m = float(slice_spec["offset_m"])
+                            summary_slice, _, _ = _compute_radio_map(
+                                label=str(slice_spec["suffix"]),
+                                overrides={"center_z_only": float(base_plane_z_m + offset_m)},
+                                suffix=str(slice_spec["suffix"]),
+                                write_default=False,
+                            )
+                            summary_slice["z_offset_m"] = offset_m
+                            summary_slice["display_label"] = str(slice_spec["display_label"])
+                            radio_map_summaries.append(summary_slice)
+
+                        tx_ris_slice_cfg = radio_map_cfg.get("tx_ris_incidence", {})
+                        if isinstance(tx_ris_slice_cfg, dict) and tx_ris_slice_cfg.get("enabled", False):
+                            ris_positions = []
+                            try:
+                                ris_positions = [np.asarray(r.position).reshape(-1) for r in scene.ris.values()]
+                            except Exception:
+                                ris_positions = []
+                            if tx_pos is None or not ris_positions:
+                                logger.warning(
+                                    "Tx->RIS incidence radio map requested but Tx or RIS positions are unavailable; skipping."
+                                )
+                            else:
+                                derived_slice = derive_tx_ris_incidence_slice(
+                                    tx_pos,
+                                    ris_positions[0],
+                                    radio_map_cfg=radio_map_cfg,
+                                    slice_cfg=tx_ris_slice_cfg,
+                                )
+                                if derived_slice is None:
+                                    logger.warning("Tx->RIS incidence radio map could not derive a valid slice; skipping.")
+                                else:
+                                    incidence_cfg = dict(radio_map_cfg)
+                                    incidence_cfg.pop("center_z_only", None)
+                                    for key, value in derived_slice.items():
+                                        if key == "plot_axis_labels":
+                                            continue
+                                        incidence_cfg[key] = value
+                                    for key, value in tx_ris_slice_cfg.items():
+                                        if key != "enabled":
+                                            incidence_cfg[key] = value
+                                    axis_labels_local = tuple(derived_slice.get("plot_axis_labels", ["x [m]", "y [m]"]))
+                                    summary_incidence, _, _ = _compute_radio_map(
+                                        label="tx_ris_incidence",
+                                        overrides={},
+                                        suffix="tx_ris_incidence",
+                                        write_default=False,
+                                        cfg_source=incidence_cfg,
+                                        axis_labels=(
+                                            str(axis_labels_local[0]),
+                                            str(axis_labels_local[1]),
+                                        ),
+                                    )
+                                    radio_map_summaries.append(summary_incidence)
+
                     else:
                         progress.update(task_id, description="Radio map (skipped)")
                         progress.advance(task_id)
@@ -674,9 +1032,21 @@ def run_simulation(config_path: str, overrides: Optional[Dict[str, Any]] = None)
                         default_ris = bool(radio_map_cfg.get("ris", False) or ris_runtime)
                         alt_ris = not default_ris
                         alt_label = "ris_on" if alt_ris else "no_ris"
-                        summary_alt, radio_map_alt_data = _compute_radio_map(
+                        diff_overrides: Dict[str, Any] = {"ris": alt_ris}
+                        default_anchor = None
+                        try:
+                            default_anchor = summary.get("grid_alignment", {}).get("anchor")
+                        except Exception:
+                            default_anchor = None
+                        if isinstance(default_anchor, (list, tuple)) and len(default_anchor) >= 3:
+                            diff_overrides["cell_anchor_point"] = [
+                                float(default_anchor[0]),
+                                float(default_anchor[1]),
+                                float(default_anchor[2]),
+                            ]
+                        summary_alt, radio_map_alt_data, _ = _compute_radio_map(
                             label=alt_label,
-                            overrides={"ris": alt_ris},
+                            overrides=diff_overrides,
                             suffix=alt_label,
                             write_default=False,
                         )
@@ -720,6 +1090,7 @@ def run_simulation(config_path: str, overrides: Optional[Dict[str, Any]] = None)
                         progress.update(task_id, description="Plots")
                     else:
                         progress.update(task_id, description="Plots (skipped)")
+                    plot_t0 = time.time()
                     if path_data["delays_s"].size > 0:
                         plot_histogram(
                             path_data["delays_s"],
@@ -747,6 +1118,9 @@ def run_simulation(config_path: str, overrides: Optional[Dict[str, Any]] = None)
                         )
                     if radio_map_summaries:
                         metrics["radio_map"] = radio_map_summaries
+                    if radio_map_visibility is not None:
+                        metrics["radio_map_visibility"] = radio_map_visibility
+                    timings["plots_s"] = time.time() - plot_t0
                     progress.advance(task_id)
                     write_progress(len(steps), "completed")
 
@@ -842,10 +1216,12 @@ def run_simulation(config_path: str, overrides: Optional[Dict[str, Any]] = None)
                     summary["runtime"]["gpu_monitor"] = gpu_monitor.summary()
 
                 save_json(output_dir / "summary.json", summary)
-                try:
-                    generate_viewer(output_dir, cfg.data, scene=scene)
-                except Exception as exc:  # pragma: no cover
-                    logger.warning("Viewer generation failed: %s", exc)
+                viewer_cfg = cfg.data.get("viewer", {}) if isinstance(cfg.data.get("viewer"), dict) else {}
+                if viewer_cfg.get("enabled", True):
+                    try:
+                        generate_viewer(output_dir, cfg.data, scene=scene)
+                    except Exception as exc:  # pragma: no cover
+                        logger.warning("Viewer generation failed: %s", exc)
                 logger.info("Run complete: %s", output_dir)
 
                 return output_dir

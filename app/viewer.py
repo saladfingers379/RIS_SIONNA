@@ -9,7 +9,93 @@ from typing import Any, Dict, List, Optional
 
 import numpy as np
 
+from .scene_file_manifest import load_scene_shape_entries
 from .web_assets import ensure_three_vendor
+
+
+_RADIO_MAP_PLOT_LABELS = {
+    "radio_map_rx_power_dbm.png": "Radio map Rx power [dBm]",
+    "radio_map_path_gain_db.png": "Radio map path gain [dB]",
+    "radio_map_path_gain.png": "Radio map path gain",
+    "radio_map_path_loss_db.png": "Radio map path loss [dB]",
+    "radio_map_path_loss.png": "Radio map path loss",
+    "radio_map_diff_path_gain_db.png": "RIS delta path gain [dB]",
+    "radio_map_ris_on_path_gain_db.png": "Radio map with RIS path gain [dB]",
+    "radio_map_ris_on_rx_power_dbm.png": "Radio map with RIS Rx power [dBm]",
+    "radio_map_ris_on_path_loss_db.png": "Radio map with RIS path loss [dB]",
+    "radio_map_no_ris_path_gain_db.png": "Radio map without RIS path gain [dB]",
+    "radio_map_no_ris_rx_power_dbm.png": "Radio map without RIS Rx power [dBm]",
+    "radio_map_no_ris_path_loss_db.png": "Radio map without RIS path loss [dB]",
+    "radio_map_tx_ris_incidence_path_gain_db.png": "Tx->RIS incidence path gain [dB]",
+    "radio_map_tx_ris_incidence_rx_power_dbm.png": "Tx->RIS incidence Rx power [dBm]",
+    "radio_map_tx_ris_incidence_path_loss_db.png": "Tx->RIS incidence path loss [dB]",
+}
+_RADIO_MAP_Z_RE = re.compile(r"_(?P<ztag>z(?:m)?[0-9]+p[0-9]{2})m\.png$")
+_RADIO_MAP_Z_METRIC_LABELS = {
+    "path_gain_db": "path gain [dB]",
+    "rx_power_dbm": "Rx power [dBm]",
+    "path_loss_db": "path loss [dB]",
+}
+
+
+def _radio_map_plot_priority(name: str) -> tuple[int, str]:
+    if name == "radio_map_rx_power_dbm.png" or name.startswith("radio_map_rx_power_dbm_z"):
+        return (0, name)
+    if name in {"radio_map_path_gain_db.png", "radio_map_path_gain.png"} or name.startswith("radio_map_path_gain_db_z"):
+        return (1, name)
+    if name in {"radio_map_path_loss_db.png", "radio_map_path_loss.png"} or name.startswith("radio_map_path_loss_db_z"):
+        return (2, name)
+    if name.startswith("radio_map_") and "_diff_" not in name and "_ris_on_" not in name and "_no_ris_" not in name:
+        return (3, name)
+    if "_no_ris_" in name or "_ris_on_" in name:
+        return (4, name)
+    if "_diff_" in name:
+        return (5, name)
+    return (6, name)
+
+
+def _radio_map_plot_label(name: str) -> str:
+    label = _RADIO_MAP_PLOT_LABELS.get(name)
+    if label:
+        return label
+    match = _RADIO_MAP_Z_RE.search(name)
+    if match:
+        ztag = match.group("ztag")
+        base_name = f"{name[: match.start()]}.png"
+        base_label = _RADIO_MAP_PLOT_LABELS.get(base_name, Path(base_name).stem.replace("_", " "))
+        z_value = ztag[2:] if ztag.startswith("zm") else ztag[1:]
+        sign = "-" if ztag.startswith("zm") else ""
+        return f"{base_label} @ z={sign}{z_value.replace('p', '.')} m"
+    return Path(name).stem.replace("_", " ")
+
+
+def _format_radio_map_plane_z_token(z_m: float) -> str:
+    if z_m < 0.0:
+        return f"zm{abs(float(z_m)):.2f}".replace(".", "p")
+    return f"z{float(z_m):.2f}".replace(".", "p")
+
+
+def _resolve_primary_radio_map_plot(
+    plot_dir: Path,
+    metric_base_name: str,
+    *,
+    preferred_z_m: float | None = None,
+) -> Optional[str]:
+    direct = plot_dir / metric_base_name
+    if direct.exists():
+        return metric_base_name
+
+    stem = Path(metric_base_name).stem
+    if preferred_z_m is not None:
+        preferred_name = f"{stem}_{_format_radio_map_plane_z_token(preferred_z_m)}.png"
+        preferred_path = plot_dir / preferred_name
+        if preferred_path.exists():
+            return preferred_name
+    matches = sorted(plot_dir.glob(f"{stem}_z*m.png"))
+    if not matches:
+        return None
+    return matches[len(matches) // 2].name
+
 
 def _load_ray_segments(ray_csv: Path) -> List[List[float]]:
     if not ray_csv.exists():
@@ -143,18 +229,30 @@ def generate_viewer(output_dir: Path, config: Dict[str, Any], scene=None) -> Opt
     proxy = scene_cfg.get("proxy") if proxy_enabled else None
 
     plot_dir = output_dir / "plots"
+    radio_cfg = config.get("radio_map", {})
+    preferred_plane_z = None
+    try:
+        if radio_cfg.get("center_z_only") is not None:
+            preferred_plane_z = float(radio_cfg.get("center_z_only"))
+        elif isinstance(radio_cfg.get("center"), list) and len(radio_cfg.get("center", [])) >= 3:
+            preferred_plane_z = float(radio_cfg["center"][2])
+    except Exception:
+        preferred_plane_z = None
     overlays = []
-    for name in [
+    for base_name in [
         "radio_map_path_gain_db.png",
         "radio_map_rx_power_dbm.png",
         "radio_map_path_loss_db.png",
     ]:
-        src = plot_dir / name
+        resolved_name = _resolve_primary_radio_map_plot(plot_dir, base_name, preferred_z_m=preferred_plane_z)
+        if resolved_name is None:
+            continue
+        src = plot_dir / resolved_name
         if src.exists():
-            dst = viewer_dir / name
+            dst = viewer_dir / resolved_name
             if src.resolve() != dst.resolve():
                 shutil.copyfile(src, dst)
-            overlays.append(name)
+            overlays.append(resolved_name)
 
     data = {
         "segments": segments,
@@ -203,33 +301,35 @@ def generate_viewer(output_dir: Path, config: Dict[str, Any], scene=None) -> Opt
     }
     if mesh_manifest:
         source_map = {}
+        transform_map = {}
         scene_file = scene_cfg.get("file")
         if scene_cfg.get("type") == "file" and scene_file:
             try:
-                xml_text = Path(scene_file).read_text(encoding="utf-8")
-                pattern = (
-                    r"<shape\\b[^>]*\\bid=\"(?P<id>[^\"]+)\"[^>]*>\\s*"
-                    r"(?:[\\s\\S]*?)<string\\s+name=\"filename\"\\s+value=\"(?P<file>[^\"]+)\""
-                )
-                for match in re.finditer(pattern, xml_text, flags=re.IGNORECASE):
-                    sid = match.group("id")
-                    src = match.group("file")
-                    source_map[sid] = src
+                for entry in load_scene_shape_entries(Path(scene_file)):
+                    sid = entry.get("shape_id")
+                    src = entry.get("source_file")
+                    if sid and src:
+                        source_map[sid] = src
+                    if sid:
+                        transform_map[sid] = entry.get("transform_ops") or []
             except Exception:
                 source_map = {}
+                transform_map = {}
         enriched = []
         for item in mesh_manifest:
             shape_id = item.get("shape_id")
             src_name = source_map.get(shape_id) if shape_id else None
             display = src_name or shape_id or item.get("file")
-            enriched.append(
-                {
-                    "file": f"meshes/{item.get('file')}",
-                    "shape_id": shape_id,
-                    "source": src_name,
-                    "display": display,
-                }
-            )
+            payload = {
+                "file": f"meshes/{item.get('file')}",
+                "shape_id": shape_id,
+                "source": src_name,
+                "display": display,
+            }
+            # Raw-copied file-scene meshes still need the source XML transform in the browser.
+            if item.get("source_file") and shape_id in transform_map:
+                payload["transform_ops"] = transform_map.get(shape_id) or []
+            enriched.append(payload)
         scene_manifest["mesh_manifest"] = enriched
     materials = []
     objects = []
@@ -328,7 +428,6 @@ def generate_viewer(output_dir: Path, config: Dict[str, Any], scene=None) -> Opt
                 else:
                     values_out = values
                     grid_shape = list(values.shape)
-                radio_cfg = config.get("radio_map", {})
                 heatmap = {
                     "metric": metric_name,
                     "grid_shape": grid_shape,
@@ -348,15 +447,48 @@ def generate_viewer(output_dir: Path, config: Dict[str, Any], scene=None) -> Opt
         except Exception:
             pass
 
+    heatmap_diff_src = output_dir / "data" / "radio_map_diff.npz"
+    if heatmap_diff_src.exists():
+        try:
+            with np.load(heatmap_diff_src) as hm:
+                path_gain_diff_db = hm.get("path_gain_db")
+                cell_centers = hm.get("cell_centers")
+            if path_gain_diff_db is not None and cell_centers is not None:
+                if path_gain_diff_db.ndim == 3:
+                    values_out = path_gain_diff_db[0]
+                    grid_shape = list(path_gain_diff_db.shape[1:])
+                else:
+                    values_out = path_gain_diff_db
+                    grid_shape = list(path_gain_diff_db.shape)
+                radio_cfg = config.get("radio_map", {})
+                heatmap_diff = {
+                    "metric": "diff_path_gain_db",
+                    "grid_shape": grid_shape,
+                    "values": values_out.tolist(),
+                    "cell_centers": cell_centers.tolist(),
+                    "center": radio_cfg.get("center"),
+                    "size": radio_cfg.get("size"),
+                    "cell_size": radio_cfg.get("cell_size"),
+                    "orientation": radio_cfg.get("orientation"),
+                }
+                (viewer_dir / "heatmap_diff.json").write_text(
+                    json.dumps(heatmap_diff, indent=2), encoding="utf-8"
+                )
+                heatmap_diff_dst = viewer_dir / "heatmap_diff.npz"
+                if heatmap_diff_dst.resolve() != heatmap_diff_src.resolve():
+                    shutil.copyfile(heatmap_diff_src, heatmap_diff_dst)
+        except Exception:
+            pass
+
     # Collect radio map plot images for UI preview (heatmap or Sionna plots)
     radio_plots = []
     plots_dir = output_dir / "plots"
     if plots_dir.exists():
-        for img in sorted(plots_dir.glob("radio_map_*.png")):
+        for img in sorted(plots_dir.glob("radio_map_*.png"), key=lambda path: _radio_map_plot_priority(path.name)):
             dst = viewer_dir / img.name
             if dst.resolve() != img.resolve():
                 shutil.copyfile(img, dst)
-            radio_plots.append({"file": img.name, "label": img.stem})
+            radio_plots.append({"file": img.name, "label": _radio_map_plot_label(img.name)})
         for img in sorted(plots_dir.glob("ris_*_phase.png")):
             dst = viewer_dir / img.name
             if dst.resolve() != img.resolve():

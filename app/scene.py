@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import copy
 import hashlib
 import json
 import logging
 import re
 import shutil
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +46,155 @@ ITU_NAME_MAP = {
     "medium_dry_ground": "itu_concrete",
     "wet_ground": "itu_concrete",
 }
+
+# Placeholder chamber absorber proxy.
+# The conductivity is tuned so the simplified normal-incidence reflected-bounce
+# loss at 28 GHz is about 30 dB, which is a more useful chamber baseline than
+# the previous highly reflective placeholder.
+CUSTOM_RADIO_MATERIAL_LIBRARY = {
+    "itu_absorber": {
+        "relative_permittivity": 1.0,
+        "conductivity": 0.2,
+        "scattering_coefficient": 0.0,
+        "xpd_coefficient": 0.0,
+    },
+}
+
+_HORN_PATTERN_LIBRARY = {
+    # Approximate standard-gain horn patterns. The 3 dB widths are inferred
+    # from the nominal gain using the usual beamwidth/directivity relation and
+    # treated as symmetric in azimuth/elevation.
+    "horn_15dbi": {
+        "gain_dbi": 15.0,
+        "theta_3db_deg": 36.0,
+        "phi_3db_deg": 36.0,
+        "sidelobe_attenuation_db": 30.0,
+    },
+    "horn_22dbi": {
+        "gain_dbi": 22.0,
+        "theta_3db_deg": 16.0,
+        "phi_3db_deg": 16.0,
+        "sidelobe_attenuation_db": 30.0,
+    },
+}
+
+
+def _resolve_custom_radio_material_library(cfg: Dict[str, Any]) -> Dict[str, Dict[str, float]]:
+    library = copy.deepcopy(CUSTOM_RADIO_MATERIAL_LIBRARY)
+
+    scene_cfg = cfg.get("scene", {}) if isinstance(cfg, dict) else {}
+    overrides = scene_cfg.get("custom_radio_materials", {}) if isinstance(scene_cfg, dict) else {}
+    if not isinstance(overrides, dict):
+        return library
+
+    for name, params in overrides.items():
+        if not isinstance(name, str) or not isinstance(params, dict):
+            continue
+        merged = dict(library.get(name, {}))
+        for key, value in params.items():
+            try:
+                merged[key] = float(value)
+            except Exception:
+                continue
+        library[name] = merged
+    return library
+
+
+def _make_horn_pattern(
+    *,
+    gain_dbi: float,
+    theta_3db_deg: float,
+    phi_3db_deg: float,
+    sidelobe_attenuation_db: float,
+    front_only: bool = False,
+    backlobe_floor_db: float = -120.0,
+):
+    import tensorflow as tf
+    from sionna.rt.antenna import PI, polarization_model_1, polarization_model_2
+
+    def pattern(
+        theta,
+        phi,
+        slant_angle=0.0,
+        polarization_model=2,
+        dtype=tf.complex64,
+    ):
+        rdtype = dtype.real_dtype
+        theta = tf.cast(theta, rdtype)
+        phi = tf.cast(phi, rdtype)
+        slant_angle = tf.cast(slant_angle, rdtype)
+        if theta.shape != phi.shape:
+            raise ValueError("theta and phi must have the same shape.")
+        if polarization_model not in [1, 2]:
+            raise ValueError("polarization_model must be 1 or 2")
+
+        phi_wrapped = tf.math.floormod(phi + PI, 2 * PI) - PI
+        theta_3db = tf.cast(np.deg2rad(theta_3db_deg), rdtype)
+        phi_3db = tf.cast(np.deg2rad(phi_3db_deg), rdtype)
+        a_max = tf.cast(float(sidelobe_attenuation_db), rdtype)
+        g_max = tf.cast(float(gain_dbi), rdtype)
+
+        a_v = -tf.minimum(12.0 * ((theta - PI / 2.0) / theta_3db) ** 2, a_max)
+        a_h = -tf.minimum(12.0 * (phi_wrapped / phi_3db) ** 2, a_max)
+        a_db = -tf.minimum(-(a_v + a_h), a_max) + g_max
+        if front_only:
+            # In Sionna's local antenna frame, boresight is along +x, i.e.
+            # r_hat(theta=pi/2, phi=0). Suppress the rear hemisphere so the
+            # Tx cannot illuminate the chamber behind the horn.
+            forward_x = tf.sin(theta) * tf.cos(phi_wrapped)
+            floor_db = tf.cast(float(backlobe_floor_db), rdtype)
+            a_db = tf.where(forward_x > 0.0, a_db, floor_db)
+        linear_gain = tf.pow(tf.cast(10.0, rdtype), a_db / 10.0)
+        c = tf.complex(tf.sqrt(linear_gain), tf.zeros_like(linear_gain))
+
+        if polarization_model == 1:
+            return polarization_model_1(c, theta, phi_wrapped, slant_angle)
+        return polarization_model_2(c, slant_angle)
+
+    return pattern
+
+
+def _resolve_horn_pattern(pattern: Any) -> tuple[Optional[Dict[str, Any]], bool]:
+    pattern_name = str(pattern or "iso").strip().lower()
+    front_only = False
+    if pattern_name.endswith("_front"):
+        front_only = True
+        pattern_name = pattern_name[: -len("_front")]
+    horn_spec = _HORN_PATTERN_LIBRARY.get(pattern_name)
+    return (dict(horn_spec) if horn_spec is not None else None), front_only
+
+
+def _resolve_array_pattern(pattern: Any, polarization: Any) -> tuple[Any, Any]:
+    pattern_name = str(pattern or "iso").strip().lower()
+    horn_spec, front_only = _resolve_horn_pattern(pattern_name)
+    if horn_spec is None:
+        return pattern, polarization
+
+    from sionna.rt.antenna import PI
+
+    base_pattern = _make_horn_pattern(**horn_spec, front_only=front_only)
+    polarization_name = str(polarization or "V").strip()
+    slant_angles = {
+        "V": [0.0],
+        "H": [float(PI / 2.0)],
+        "VH": [0.0, float(PI / 2.0)],
+        "cross": [float(-PI / 4.0), float(PI / 4.0)],
+    }.get(polarization_name)
+    if slant_angles is None:
+        raise ValueError(f"Unknown polarization '{polarization_name}' for horn pattern '{pattern_name}'")
+
+    if len(slant_angles) == 1:
+        slant_angle = slant_angles[0]
+        return (
+            lambda theta, phi, sa=slant_angle: base_pattern(theta, phi, sa, 2),
+            None,
+        )
+
+    patterns = [
+        (lambda theta, phi, sa=slant_angle: base_pattern(theta, phi, sa, 2))
+        for slant_angle in slant_angles
+    ]
+    return patterns, None
 
 
 def _hash_scene_config(cfg: Dict[str, Any]) -> str:
@@ -364,6 +517,44 @@ def _apply_default_radio_materials(scene, default_name: str = "concrete") -> Non
         return
 
 
+def _register_custom_radio_materials(scene, cfg: Optional[Dict[str, Any]] = None) -> None:
+    """Replace known placeholder materials with concrete custom RadioMaterial definitions."""
+    try:
+        import sionna.rt as rt
+    except Exception:
+        return
+
+    try:
+        scene_materials = getattr(scene, "radio_materials", {}) or {}
+    except Exception:
+        scene_materials = {}
+
+    material_library = _resolve_custom_radio_material_library(cfg or {})
+
+    for name, params in material_library.items():
+        existing = scene_materials.get(name)
+        if existing is None or not bool(getattr(existing, "is_placeholder", False)):
+            continue
+        try:
+            scene.add(
+                rt.RadioMaterial(
+                    name,
+                    relative_permittivity=float(params.get("relative_permittivity", 1.0)),
+                    conductivity=float(params.get("conductivity", 0.0)),
+                    scattering_coefficient=float(params.get("scattering_coefficient", 0.0)),
+                    xpd_coefficient=float(params.get("xpd_coefficient", 0.0)),
+                )
+            )
+            logger.info(
+                "Registered custom radio material '%s' (eps_r=%s, sigma=%s S/m)",
+                name,
+                params.get("relative_permittivity", 1.0),
+                params.get("conductivity", 0.0),
+            )
+        except Exception as exc:
+            logger.warning("Failed to register custom radio material '%s': %s", name, exc)
+
+
 def _build_procedural_scene(rt, scene_cfg: Dict[str, Any], cfg: Dict[str, Any]):
     spec = _build_procedural_spec(scene_cfg)
     cache_root = Path(cfg.get("output", {}).get("base_dir", "outputs")) / "_cache" / "procedural"
@@ -420,6 +611,7 @@ def build_scene(cfg: Dict[str, Any], mitsuba_variant: Optional[str] = None):
         scene = builder(rt, scene_cfg, cfg)
     # Ensure file scenes always have radio materials to satisfy Sionna RT checks.
     if scene_type == "file":
+        _register_custom_radio_materials(scene, cfg)
         _apply_default_radio_materials(scene)
 
     # Frequency setup
@@ -431,21 +623,29 @@ def build_scene(cfg: Dict[str, Any], mitsuba_variant: Optional[str] = None):
     arrays = scene_cfg.get("arrays", {})
     tx_arr = arrays.get("tx", {})
     rx_arr = arrays.get("rx", {})
+    tx_pattern, tx_polarization = _resolve_array_pattern(
+        tx_arr.get("pattern", "iso"),
+        tx_arr.get("polarization", "V"),
+    )
+    rx_pattern, rx_polarization = _resolve_array_pattern(
+        rx_arr.get("pattern", "iso"),
+        rx_arr.get("polarization", "V"),
+    )
     scene.tx_array = rt.PlanarArray(
         num_rows=int(tx_arr.get("num_rows", 1)),
         num_cols=int(tx_arr.get("num_cols", 1)),
         vertical_spacing=float(tx_arr.get("vertical_spacing", 0.5)),
         horizontal_spacing=float(tx_arr.get("horizontal_spacing", 0.5)),
-        pattern=tx_arr.get("pattern", "iso"),
-        polarization=tx_arr.get("polarization", "V"),
+        pattern=tx_pattern,
+        polarization=tx_polarization,
     )
     scene.rx_array = rt.PlanarArray(
         num_rows=int(rx_arr.get("num_rows", 1)),
         num_cols=int(rx_arr.get("num_cols", 1)),
         vertical_spacing=float(rx_arr.get("vertical_spacing", 0.5)),
         horizontal_spacing=float(rx_arr.get("horizontal_spacing", 0.5)),
-        pattern=rx_arr.get("pattern", "iso"),
-        polarization=rx_arr.get("polarization", "V"),
+        pattern=rx_pattern,
+        polarization=rx_polarization,
     )
 
     # Devices
@@ -454,6 +654,8 @@ def build_scene(cfg: Dict[str, Any], mitsuba_variant: Optional[str] = None):
 
     tx_look_at = tx_cfg.get("look_at")
     tx_orientation = tx_cfg.get("orientation")
+    rx_look_at = rx_cfg.get("look_at")
+    rx_orientation = rx_cfg.get("orientation")
     tx = rt.Transmitter(
         name=tx_cfg.get("name", "tx"),
         position=np.array(tx_cfg.get("position", [0.0, 0.0, 10.0])),
@@ -464,6 +666,8 @@ def build_scene(cfg: Dict[str, Any], mitsuba_variant: Optional[str] = None):
     rx = rt.Receiver(
         name=rx_cfg.get("name", "rx"),
         position=np.array(rx_cfg.get("position", [10.0, 0.0, 1.5])),
+        orientation=np.array(rx_orientation) if rx_orientation is not None else (0.0, 0.0, 0.0),
+        look_at=np.array(rx_look_at) if rx_look_at is not None else None,
     )
     scene.add(tx)
     scene.add(rx)
@@ -492,7 +696,119 @@ def _safe_scene_id(scene_id: str) -> str:
     return re.sub(r"[^A-Za-z0-9_.-]+", "_", scene_id).strip("_") or "scene"
 
 
-def export_scene_meshes(scene, output_dir: Path, scene_id: str, cache_root: Optional[Path] = None) -> None:
+def _shape_has_nontrivial_transform(shape: ET.Element) -> bool:
+    transform = shape.find("transform[@name='to_world']")
+    if transform is None:
+        return False
+    for child in list(transform):
+        tag = (child.tag or "").lower()
+        if tag in {"translate", "rotate", "scale", "matrix", "lookat"}:
+            return True
+    return False
+
+
+def _scene_file_has_nontrivial_mesh_transforms(scene_file: Path) -> bool:
+    try:
+        root = ET.parse(scene_file).getroot()
+    except Exception:
+        return False
+    for shape in root.findall("shape"):
+        string_node = shape.find("string[@name='filename']")
+        if string_node is None:
+            continue
+        if _shape_has_nontrivial_transform(shape):
+            return True
+    return False
+
+
+def _cache_manifest_mode(manifest_path: Path) -> Optional[str]:
+    if not manifest_path.exists():
+        return None
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    if not isinstance(manifest, list) or not manifest:
+        return None
+    return "raw_copy" if any(isinstance(item, dict) and "source_file" in item for item in manifest) else "baked_export"
+
+
+def _copy_file_scene_meshes(scene_file: Path, mesh_dir: Path, cache_dir: Path) -> bool:
+    """Preserve original file-scene meshes for the viewer when they are plain PLY assets.
+
+    Mitsuba's write_ply() can simplify or flatten some imported file-scene meshes. For
+    direct file scenes backed by PLY assets, copying the source meshes preserves the
+    geometry that the user authored.
+    """
+    if _scene_file_has_nontrivial_mesh_transforms(scene_file):
+        return False
+    try:
+        root = ET.parse(scene_file).getroot()
+    except Exception:
+        return False
+
+    entries = []
+    for idx, shape in enumerate(root.findall("shape")):
+        string_node = shape.find("string[@name='filename']")
+        if string_node is None:
+            continue
+        rel_path = (string_node.attrib.get("value") or "").strip()
+        if not rel_path:
+            continue
+        asset_path = Path(rel_path)
+        if not asset_path.is_absolute():
+            asset_path = (scene_file.parent / asset_path).resolve()
+        if not asset_path.exists() or asset_path.suffix.lower() != ".ply":
+            return False
+        entries.append(
+            {
+                "index": idx,
+                "src": asset_path,
+                "file": f"mesh_{idx:03d}{asset_path.suffix.lower()}",
+                "shape_id": shape.attrib.get("id"),
+                "source_file": rel_path,
+            }
+        )
+
+    if not entries:
+        return False
+
+    for stale in cache_dir.glob("mesh_*.*"):
+        stale.unlink()
+
+    manifest = []
+    for item in entries:
+        dst = cache_dir / item["file"]
+        shutil.copyfile(item["src"], dst)
+        manifest.append(
+            {
+                "index": item["index"],
+                "file": item["file"],
+                "shape_id": item["shape_id"],
+                "source_file": item["source_file"],
+            }
+        )
+
+    manifest_path = cache_dir / "mesh_manifest.json"
+    manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+
+    for src in cache_dir.glob("mesh_*.*"):
+        dst = mesh_dir / src.name
+        if src.resolve() != dst.resolve():
+            shutil.copyfile(src, dst)
+    dst_manifest = mesh_dir / manifest_path.name
+    if manifest_path.resolve() != dst_manifest.resolve():
+        shutil.copyfile(manifest_path, dst_manifest)
+    return True
+
+
+def export_scene_meshes(
+    scene,
+    output_dir: Path,
+    scene_id: str,
+    cache_root: Optional[Path] = None,
+    scene_file: Optional[str | Path] = None,
+) -> None:
     """Export Mitsuba meshes to PLY files, with caching for faster re-runs."""
     mesh_dir = output_dir / "scene_mesh"
     mesh_dir.mkdir(parents=True, exist_ok=True)
@@ -500,9 +816,20 @@ def export_scene_meshes(scene, output_dir: Path, scene_id: str, cache_root: Opti
     cache_root = cache_root or output_dir.parent / "_cache"
     cache_dir = cache_root / _safe_scene_id(scene_id)
     cache_dir.mkdir(parents=True, exist_ok=True)
+    manifest_path = cache_dir / "mesh_manifest.json"
+
+    if scene_file:
+        scene_file_path = Path(scene_file)
+        if scene_file_path.exists():
+            if _copy_file_scene_meshes(scene_file_path, mesh_dir, cache_dir):
+                return
+            if _scene_file_has_nontrivial_mesh_transforms(scene_file_path) and _cache_manifest_mode(manifest_path) == "raw_copy":
+                for stale in cache_dir.glob("mesh_*.*"):
+                    stale.unlink()
+                if manifest_path.exists():
+                    manifest_path.unlink()
 
     cached_meshes = list(cache_dir.glob("*.ply"))
-    manifest_path = cache_dir / "mesh_manifest.json"
     if cached_meshes:
         if not manifest_path.exists():
             manifest = []

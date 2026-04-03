@@ -8,7 +8,7 @@ import numpy as np
 
 
 def generate_run_id() -> str:
-    return datetime.now().strftime("%Y%m%d_%H%M%S")
+    return datetime.now().strftime("%Y%m%d_%H%M%S_%f")
 
 
 def create_output_dir(base_dir: str, run_id: Optional[str] = None) -> Path:

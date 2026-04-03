@@ -10,6 +10,7 @@ from typing import Any, Dict
 from .io import find_latest_output_dir
 from .plots import plot_radio_map_from_npz
 from .simulate import run_simulation
+from .campaign import run_campaign, run_absorber_sweep
 from .utils.logging import setup_logging
 from .utils.system import print_diagnose_info
 
@@ -111,11 +112,31 @@ def _parse_args() -> argparse.Namespace:
     ris_validate.add_argument(
         "--ref", required=True, help="Path to reference CSV, NPZ, or MAT file"
     )
+    ris_compare = ris_subparsers.add_parser("compare", help="Compare RIS models")
+    ris_compare.add_argument("--config", required=True, help="Path to RIS Lab YAML config")
 
     cc_p = subparsers.add_parser("cc", help="Channel charting tools")
     cc_subparsers = cc_p.add_subparsers(dest="cc_command", required=True)
     cc_run = cc_subparsers.add_parser("run", help="Run channel charting pipeline")
     cc_run.add_argument("--config", required=True, help="Path to channel charting YAML config")
+
+    campaign_p = subparsers.add_parser("campaign", help="Indoor chamber campaign tools")
+    campaign_subparsers = campaign_p.add_subparsers(dest="campaign_command", required=True)
+    campaign_run = campaign_subparsers.add_parser("run", help="Run chamber campaign")
+    campaign_run.add_argument("--config", required=True, help="Path to chamber campaign YAML config")
+    campaign_absorber = campaign_subparsers.add_parser(
+        "absorber-sweep",
+        help="Run RIS-off chamber baseline sweeps for several absorber conductivities",
+    )
+    campaign_absorber.add_argument("--config", required=True, help="Path to chamber campaign YAML config")
+    campaign_absorber.add_argument(
+        "--conductivity",
+        dest="conductivities",
+        type=float,
+        nargs="+",
+        required=True,
+        help="One or more conductivity values in S/m for the itu_absorber material",
+    )
 
     return parser.parse_args()
 
@@ -220,6 +241,16 @@ def main() -> None:
         print_diagnose_info(json_only=bool(getattr(args, "json", False)))
         return
 
+    if args.command == "campaign":
+        if args.campaign_command == "run":
+            output_dir = run_campaign(args.config)
+            logger.info("Campaign outputs saved to %s", output_dir)
+            return
+        if args.campaign_command == "absorber-sweep":
+            output_dir = run_absorber_sweep(args.config, args.conductivities)
+            logger.info("Absorber sweep outputs saved to %s", output_dir)
+            return
+
     if args.command == "dashboard":
         try:
             import streamlit  # noqa: F401
@@ -262,6 +293,7 @@ def main() -> None:
         return
 
     if args.command == "ris":
+        from .ris.model_compare import run_ris_model_compare
         from .ris.ris_lab import run_ris_lab, validate_ris_lab
 
         if args.ris_command == "run":
@@ -269,6 +301,9 @@ def main() -> None:
             return
         if args.ris_command == "validate":
             validate_ris_lab(args.config, args.ref)
+            return
+        if args.ris_command == "compare":
+            run_ris_model_compare(args.config)
             return
 
     if args.command == "cc":

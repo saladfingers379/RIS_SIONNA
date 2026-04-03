@@ -107,6 +107,39 @@ def _load_json_with_retry(path: Path, attempts: int = 3, delay_s: float = 0.2):
     return None
 
 
+def _format_radio_map_plane_z_token(z_m: float) -> str:
+    if z_m < 0.0:
+        return f"zm{abs(float(z_m)):.2f}".replace(".", "p")
+    return f"z{float(z_m):.2f}".replace(".", "p")
+
+
+def _resolve_primary_metric_plot(plots_dir: Path, config: dict | None, metric_base_name: str) -> Path:
+    direct = plots_dir / metric_base_name
+    if direct.exists():
+        return direct
+
+    preferred_z = None
+    radio = (config or {}).get("radio_map", {}) if isinstance(config, dict) else {}
+    try:
+        if radio.get("center_z_only") is not None:
+            preferred_z = float(radio.get("center_z_only"))
+        elif isinstance(radio.get("center"), list) and len(radio.get("center", [])) >= 3:
+            preferred_z = float(radio["center"][2])
+    except Exception:
+        preferred_z = None
+
+    stem = Path(metric_base_name).stem
+    if preferred_z is not None:
+        preferred = plots_dir / f"{stem}_{_format_radio_map_plane_z_token(preferred_z)}.png"
+        if preferred.exists():
+            return preferred
+
+    matches = sorted(plots_dir.glob(f"{stem}_z*m.png"))
+    if matches:
+        return matches[len(matches) // 2]
+    return direct
+
+
 metric_options = {
     "Path gain [dB]": "radio_map_path_gain_db.png",
     "Rx power [dBm]": "radio_map_rx_power_dbm.png",
@@ -115,7 +148,14 @@ metric_options = {
 with st.sidebar:
     st.header("Metrics")
     metric_label = st.selectbox("Coverage metric", list(metric_options.keys()), index=0)
-plot_png = plots_dir / metric_options[metric_label]
+config_data = _load_json_with_retry(config_path) if config_path.suffix == ".json" else None
+if config_data is None and config_path.exists():
+    try:
+        import yaml
+        config_data = yaml.safe_load(config_path.read_text())
+    except Exception:
+        config_data = None
+plot_png = _resolve_primary_metric_plot(plots_dir, config_data, metric_options[metric_label])
 legacy_png = plots_dir / "radio_map.png"
 
 tabs = st.tabs(["Summary", "Config", "Metrics", "Maps", "3D View", "Scene", "Downloads"])
@@ -186,7 +226,7 @@ with tabs[5]:
 with tabs[6]:
     download_files = [
         plot_png,
-        plots_dir / metric_options[metric_label].replace(".png", ".svg"),
+        plot_png.with_suffix(".svg"),
         plots_dir / "scene.png",
         plots_dir / "path_delay_hist.png",
         plots_dir / "aoa_azimuth_hist.png",

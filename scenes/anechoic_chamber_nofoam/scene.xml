@@ -1,0 +1,79 @@
+<scene version="3.0.0">
+  <integrator type="path">
+    <integer name="max_depth" value="8"/>
+  </integrator>
+
+  <emitter type="constant">
+    <rgb name="radiance" value="1.0"/>
+  </emitter>
+
+  <!-- Placeholder visual BSDFs.
+       If your repo expects specific radio-material names, keep the mat-itu_* pattern
+       and rename these ids to match whatever your loader/material mapping expects. -->
+
+  <bsdf type="twosided" id="mat-itu_absorber">
+    <bsdf type="diffuse">
+      <rgb name="reflectance" value="0.08"/>
+    </bsdf>
+  </bsdf>
+
+  <bsdf type="twosided" id="mat-itu_metal">
+    <bsdf type="diffuse">
+      <rgb name="reflectance" value="0.65"/>
+    </bsdf>
+  </bsdf>
+
+  <bsdf type="twosided" id="mat-itu_wood">
+    <bsdf type="diffuse">
+      <rgb name="reflectance" value="0.45"/>
+    </bsdf>
+  </bsdf>
+
+  <!-- Absorber surfaces -->
+  <shape type="ply" id="absorber_back">
+    <string name="filename" value="meshes/absorber_back.ply"/>
+    <ref id="mat-itu_absorber" name="bsdf"/>
+  </shape>
+
+  <shape type="ply" id="absorber_floorbar">
+    <string name="filename" value="meshes/absorber_floorbar.ply"/>
+    <ref id="mat-itu_absorber" name="bsdf"/>
+  </shape>
+
+  <shape type="ply" id="absorber_frontwall">
+    <string name="filename" value="meshes/absorber_frontwall.ply"/>
+    <ref id="mat-itu_absorber" name="bsdf"/>
+  </shape>
+
+  <shape type="ply" id="absorber_leftwall">
+    <string name="filename" value="meshes/absorber_leftwall.ply"/>
+    <ref id="mat-itu_absorber" name="bsdf"/>
+  </shape>
+
+  <shape type="ply" id="absorber_pillar">
+    <string name="filename" value="meshes/absorber_pillar.ply"/>
+    <ref id="mat-itu_absorber" name="bsdf"/>
+  </shape>
+
+  <shape type="ply" id="absorber_rightwall">
+    <string name="filename" value="meshes/absorber_rightwall.ply"/>
+    <ref id="mat-itu_absorber" name="bsdf"/>
+  </shape>
+
+  <!-- Metal floor -->
+  <shape type="ply" id="metal_floor">
+    <string name="filename" value="meshes/metal_floor.ply"/>
+    <ref id="mat-itu_metal" name="bsdf"/>
+  </shape>
+
+  <!-- Stools -->
+  <shape type="ply" id="wooden_stool">
+    <string name="filename" value="meshes/wooden_stool.ply"/>
+    <ref id="mat-itu_wood" name="bsdf"/>
+  </shape>
+
+  <shape type="ply" id="wooden_stool001">
+    <string name="filename" value="meshes/wooden_stool001.ply"/>
+    <ref id="mat-itu_wood" name="bsdf"/>
+  </shape>
+</scene>

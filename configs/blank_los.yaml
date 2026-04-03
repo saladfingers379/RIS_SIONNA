@@ -1,0 +1,118 @@
+project:
+  name: RIS_SIONNA
+  description: "Blank LOS + RIS test scene with reflections disabled"
+
+runtime:
+  prefer_gpu: true
+  force_cpu: false
+  tensorflow_import: auto
+  disable_pythreejs: true
+  mitsuba_variant: auto
+
+simulation:
+  frequency_hz: 28.0e9
+  max_depth: 1
+  max_num_paths_per_src: 200000
+  samples_per_src: 200000
+  los: true
+  specular_reflection: false
+  diffuse_reflection: false
+  refraction: false
+  diffraction: false
+  ris: false
+  scale_similarity:
+    enabled: false
+    factor: 1.0
+  sampling_boost:
+    enabled: false
+    map_resolution_multiplier: 1
+    ray_samples_multiplier: 1
+    max_depth_add: 0
+
+scene:
+  type: file
+  builtin: null
+  file: scenes/blank/scene.xml
+  mesh: null
+  proxy_enabled: false
+  export_mesh: false
+  tx:
+    name: tx
+    position: [1.0, -0.5, 1.5]
+    look_at: [0.0, 0.0, 1.5]
+    power_dbm: 28.0
+  rx:
+    name: rx
+    position: [1.0, 0.5, 1.5]
+    look_at: [0.0, 0.0, 1.5]
+  camera:
+    position: [0.0, 0.0, 12.0]
+    orientation: [0.0, 1.5708, -1.5708]
+  arrays:
+    tx:
+      num_rows: 1
+      num_cols: 1
+      vertical_spacing: 0.5
+      horizontal_spacing: 0.5
+      pattern: horn_15dbi
+      polarization: V
+    rx:
+      num_rows: 1
+      num_cols: 1
+      vertical_spacing: 0.5
+      horizontal_spacing: 0.5
+      pattern: horn_15dbi
+      polarization: V
+  objects: []
+
+radio_map:
+  enabled: true
+  auto_size: false
+  center: [0.0, 0.0, 1.5]
+  orientation: [0.0, 0.0, 0.0]
+  size: [2.2, 2.2]
+  cell_size: [0.05, 0.05]
+  batch_size: 512
+  samples_per_tx: 2000000
+  max_depth: 1
+  los: true
+  specular_reflection: false
+  diffuse_reflection: false
+  refraction: false
+  diffraction: false
+  ris: true
+
+render:
+  enabled: false
+  samples: 32
+  resolution: [800, 600]
+
+visualization:
+  ray_paths:
+    enabled: true
+    max_paths: 100
+
+quality:
+  preset: preview
+
+ris:
+  enabled: true
+  geometry_mode: size_driven
+  size:
+    width_m: 0.0926
+    height_m: 0.0926
+    target_dx_m: 0.0049
+    target_dy_m: 0.0049
+  objects:
+    - name: ris1
+      enabled: true
+      position: [0.0, 0.0, 1.5]
+      look_at: [1.0, 0.0, 1.5]
+      num_modes: 1
+      profile:
+        kind: phase_gradient_reflector
+        auto_aim: true
+        amplitude: 0.84
+
+output:
+  base_dir: outputs

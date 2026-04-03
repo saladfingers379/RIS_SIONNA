@@ -135,8 +135,8 @@ def run_channel_charting(config_path: str) -> Path:
         model_type = str(model_cfg.get("type", "autoencoder"))
         model_out = {}
         if model_type == "dissimilarity_mds":
-            dis_cfg = cfg.get("channel_charting", {}).get("dissimilarity", {})
-            embeddings, dis_meta = dissimilarity_charting(csi, dis_cfg)
+            cc_cfg_for_dis = cfg.get("channel_charting", {})
+            embeddings, dis_meta = dissimilarity_charting(csi, cc_cfg_for_dis)
             model_out["dissimilarity"] = dis_meta
         else:
             model_out = train_autoencoder(features, model_cfg)
@@ -204,6 +204,17 @@ def run_channel_charting(config_path: str) -> Path:
         aligned=aligned,
     )
 
+    # Save trajectory data for 3D viewer overlay
+    traj_json = {
+        "ground_truth": positions.tolist(),
+        "prediction": aligned.tolist(),
+    }
+    save_json(data_dir / "trajectories.json", traj_json)
+
+    # Measurement antenna info for manifest
+    cc_cfg = cfg.get("channel_charting", {})
+    meas_antennas = cc_cfg.get("measurement_antennas", [])
+
     manifest = {
         "run_id": output_dir.name,
         "created_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
@@ -213,11 +224,13 @@ def run_channel_charting(config_path: str) -> Path:
         "chart_coords_aligned": aligned.tolist(),
         "ground_truth_coords": positions.tolist(),
         "timestamps_s": times.tolist(),
+        "measurement_antennas": meas_antennas,
         "files": {
             "csi": "data/csi.npz",
             "features": "data/features.npz",
             "chart": "data/chart_full.npz",
             "trajectory": "data/trajectory.csv",
+            "trajectories_json": "data/trajectories.json",
         },
         "metrics": metrics,
         "plots": {
