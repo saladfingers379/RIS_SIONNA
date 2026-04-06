@@ -264,8 +264,6 @@ class JobManager:
             return self._create_campaign_job(payload)
         if kind == "ris_lab":
             return self._create_ris_lab_job(payload)
-        if kind == "channel_charting":
-            return self._create_channel_charting_job(payload)
         if kind != "run":
             kind = "run"
         preset = payload.get("preset")
@@ -521,84 +519,6 @@ class JobManager:
 
         process = subprocess.Popen(
             command,
-            stdout=job_log_path.open("w", encoding="utf-8"),
-            stderr=subprocess.STDOUT,
-        )
-
-        with self._lock:
-            self.jobs[job_id] = job
-            self.processes[job_id] = JobHandle(job_id=job_id, run_id=run_id, process=process)
-            self._save_jobs()
-
-        save_json(output_dir / "job.json", job)
-        return job
-
-    def _create_channel_charting_job(self, payload: Dict[str, Any]) -> Dict[str, Any]:
-        cfg = None
-        config_data = payload.get("config_data")
-        if isinstance(config_data, dict):
-            cfg = config_data
-        elif isinstance(payload.get("config"), dict):
-            cfg = payload.get("config")
-        else:
-            config_value = payload.get("config_path") or payload.get("config") or payload.get("base_config")
-            if not config_value:
-                raise ValueError("Channel charting job requires config_path or config_data")
-            config_path = Path(config_value)
-            if not config_path.exists():
-                raise FileNotFoundError(f"Channel charting config not found: {config_path}")
-            cfg = _load_yaml(config_path)
-            if not isinstance(cfg, dict):
-                raise ValueError("Channel charting config must be a YAML mapping")
-
-        runtime_overrides = payload.get("runtime", {})
-        if runtime_overrides:
-            cfg.setdefault("runtime", {})
-            _deep_update(cfg["runtime"], runtime_overrides)
-
-        scene_overrides = payload.get("scene", {})
-        if scene_overrides:
-            cfg.setdefault("scene", {})
-            _deep_update(cfg["scene"], scene_overrides)
-
-        cc_overrides = payload.get("channel_charting", {})
-        if cc_overrides:
-            cfg.setdefault("channel_charting", {})
-            _deep_update(cfg["channel_charting"], cc_overrides)
-
-        # Measurement antennas override
-        measurement_antennas = payload.get("measurement_antennas")
-        if measurement_antennas:
-            cfg.setdefault("channel_charting", {})
-            cfg["channel_charting"]["measurement_antennas"] = measurement_antennas
-
-        output_cfg = cfg.setdefault("output", {})
-        run_id = generate_run_id()
-        output_cfg["run_id"] = run_id
-        base_dir = output_cfg.get("base_dir", "outputs")
-        output_dir = create_output_dir(base_dir, run_id=run_id)
-
-        job_id = f"job-{run_id}"
-        cfg.setdefault("job", {})
-        cfg["job"].update({"id": job_id, "kind": "channel_charting"})
-
-        job_config_path = output_dir / "job_config.yaml"
-        save_yaml(job_config_path, cfg)
-        job_log_path = output_dir / "job.log"
-
-        job = {
-            "job_id": job_id,
-            "run_id": run_id,
-            "kind": "channel_charting",
-            "status": "running",
-            "created_at": _now_ts(),
-            "started_at": _now_ts(),
-            "config_path": str(job_config_path),
-            "output_dir": str(output_dir),
-        }
-
-        process = subprocess.Popen(
-            [sys.executable, "-m", "app", "cc", "run", "--config", str(job_config_path)],
             stdout=job_log_path.open("w", encoding="utf-8"),
             stderr=subprocess.STDOUT,
         )

@@ -115,11 +115,6 @@ def _parse_args() -> argparse.Namespace:
     ris_compare = ris_subparsers.add_parser("compare", help="Compare RIS models")
     ris_compare.add_argument("--config", required=True, help="Path to RIS Lab YAML config")
 
-    cc_p = subparsers.add_parser("cc", help="Channel charting tools")
-    cc_subparsers = cc_p.add_subparsers(dest="cc_command", required=True)
-    cc_run = cc_subparsers.add_parser("run", help="Run channel charting pipeline")
-    cc_run.add_argument("--config", required=True, help="Path to channel charting YAML config")
-
     campaign_p = subparsers.add_parser("campaign", help="Indoor chamber campaign tools")
     campaign_subparsers = campaign_p.add_subparsers(dest="campaign_command", required=True)
     campaign_run = campaign_subparsers.add_parser("run", help="Run chamber campaign")
@@ -304,13 +299,6 @@ def main() -> None:
             return
         if args.ris_command == "compare":
             run_ris_model_compare(args.config)
-            return
-
-    if args.command == "cc":
-        from .cc.runner import run_channel_charting
-
-        if args.cc_command == "run":
-            run_channel_charting(args.config)
             return
 
 

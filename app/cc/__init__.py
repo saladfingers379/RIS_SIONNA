@@ -1,1 +1,0 @@
-"""Channel charting pipeline modules."""

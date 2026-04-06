@@ -76,17 +76,6 @@ const state = {
     activeJobId: null,
     selectedPlot: null,
   },
-  cc: {
-    jobs: [],
-    runs: [],
-    activeRunId: null,
-    activeJobId: null,
-    selectedPlot: null,
-    route: [],
-    antennas: [],       // [{x, y, z, arraySize}]
-    prediction: null,   // aligned trajectory coords [[x,y,z],...]
-    groundTruth: null,  // GT trajectory coords
-  },
 };
 
 const ui = {
@@ -189,76 +178,6 @@ const ui = {
   risPreviewTxRay: document.getElementById("risPreviewTxRay"),
   risPreviewRxRay: document.getElementById("risPreviewRxRay"),
   risPreviewMeta: document.getElementById("risPreviewMeta"),
-  ccConfigSource: document.getElementById("ccConfigSource"),
-  ccPreset: document.getElementById("ccPreset"),
-  ccConfigPath: document.getElementById("ccConfigPath"),
-  ccUseScene: document.getElementById("ccUseScene"),
-  ccUseMarkers: document.getElementById("ccUseMarkers"),
-  ccSceneSelect: document.getElementById("ccSceneSelect"),
-  ccRole: document.getElementById("ccRole"),
-  ccStart: document.getElementById("ccStart"),
-  ccRefresh: document.getElementById("ccRefresh"),
-  ccTrajectoryType: document.getElementById("ccTrajectoryType"),
-  ccTrajectorySteps: document.getElementById("ccTrajectorySteps"),
-  ccTrajectoryDt: document.getElementById("ccTrajectoryDt"),
-  ccStartX: document.getElementById("ccStartX"),
-  ccStartY: document.getElementById("ccStartY"),
-  ccStartZ: document.getElementById("ccStartZ"),
-  ccEndX: document.getElementById("ccEndX"),
-  ccEndY: document.getElementById("ccEndY"),
-  ccEndZ: document.getElementById("ccEndZ"),
-  ccWaypoints: document.getElementById("ccWaypoints"),
-  ccRouteDraw: document.getElementById("ccRouteDraw"),
-  ccRouteSnapFloor: document.getElementById("ccRouteSnapFloor"),
-  ccRouteZ: document.getElementById("ccRouteZ"),
-  ccRouteUndo: document.getElementById("ccRouteUndo"),
-  ccRouteClear: document.getElementById("ccRouteClear"),
-  ccRouteStatus: document.getElementById("ccRouteStatus"),
-  ccAntennaPlace: document.getElementById("ccAntennaPlace"),
-  ccAntennaZ: document.getElementById("ccAntennaZ"),
-  ccAntennaArray: document.getElementById("ccAntennaArray"),
-  ccAntennaUndoBtn: document.getElementById("ccAntennaUndoBtn"),
-  ccAntennaClearBtn: document.getElementById("ccAntennaClearBtn"),
-  ccAntennaStatus: document.getElementById("ccAntennaStatus"),
-  ccAntennaList: document.getElementById("ccAntennaList"),
-  toggleCcRoute: document.getElementById("toggleCcRoute"),
-  toggleCcAntennas: document.getElementById("toggleCcAntennas"),
-  toggleCcPrediction: document.getElementById("toggleCcPrediction"),
-  ccRwStepStd: document.getElementById("ccRwStepStd"),
-  ccRwSmooth: document.getElementById("ccRwSmooth"),
-  ccSpiralR0: document.getElementById("ccSpiralR0"),
-  ccSpiralR1: document.getElementById("ccSpiralR1"),
-  ccSpiralTurns: document.getElementById("ccSpiralTurns"),
-  ccCsiType: document.getElementById("ccCsiType"),
-  ccSubcarriers: document.getElementById("ccSubcarriers"),
-  ccSubcarrierSpacing: document.getElementById("ccSubcarrierSpacing"),
-  ccCirSampling: document.getElementById("ccCirSampling"),
-  ccCirSteps: document.getElementById("ccCirSteps"),
-  ccTapsBw: document.getElementById("ccTapsBw"),
-  ccTapsLmin: document.getElementById("ccTapsLmin"),
-  ccTapsLmax: document.getElementById("ccTapsLmax"),
-  ccFeatureType: document.getElementById("ccFeatureType"),
-  ccFeatureWindow: document.getElementById("ccFeatureWindow"),
-  ccFeatureBeamspace: document.getElementById("ccFeatureBeamspace"),
-  ccEmbedDim: document.getElementById("ccEmbedDim"),
-  ccEpochs: document.getElementById("ccEpochs"),
-  ccLr: document.getElementById("ccLr"),
-  ccAdjWeight: document.getElementById("ccAdjWeight"),
-  ccOverrideModel: document.getElementById("ccOverrideModel"),
-  ccTrackingEnabled: document.getElementById("ccTrackingEnabled"),
-  ccTrackingAlpha: document.getElementById("ccTrackingAlpha"),
-  ccEvalDims: document.getElementById("ccEvalDims"),
-  ccJobStatus: document.getElementById("ccJobStatus"),
-  ccProgress: document.getElementById("ccProgress"),
-  ccLog: document.getElementById("ccLog"),
-  ccJobList: document.getElementById("ccJobList"),
-  ccRunSelect: document.getElementById("ccRunSelect"),
-  ccLoadResults: document.getElementById("ccLoadResults"),
-  ccResultStatus: document.getElementById("ccResultStatus"),
-  ccMetrics: document.getElementById("ccMetrics"),
-  ccPlotTabs: document.getElementById("ccPlotTabs"),
-  ccPlotImage: document.getElementById("ccPlotImage"),
-  ccPlotCaption: document.getElementById("ccPlotCaption"),
   plotLightbox: document.getElementById("plotLightbox"),
   plotLightboxImg: document.getElementById("plotLightboxImg"),
   plotLightboxClose: document.getElementById("plotLightboxClose"),
@@ -499,16 +418,6 @@ const RIS_PLOT_FILES = [
 ];
 const RIS_PLOT_LABELS = Object.fromEntries(RIS_PLOT_FILES.map((p) => [p.file, p.label]));
 
-const CC_PLOT_FILES = [
-  { file: "chart_raw.png", label: "Chart (raw)" },
-  { file: "chart_smoothed.png", label: "Chart (smoothed)" },
-  { file: "chart_aligned.png", label: "Chart (aligned)" },
-  { file: "trajectory_compare.png", label: "Trajectory vs estimate" },
-  { file: "features.png", label: "Features" },
-  { file: "training_losses.png", label: "Training losses" },
-];
-const CC_PLOT_LABELS = Object.fromEntries(CC_PLOT_FILES.map((p) => [p.file, p.label]));
-
 const CAMPAIGN_PLOT_FILES = [
   { file: "campaign_rx_power_dbm.png", label: "Campaign Rx power" },
   { file: "campaign_path_gain_db.png", label: "Campaign path gain" },
@@ -582,9 +491,6 @@ let rayGroup;
 let heatmapGroup;
 let alignmentGroup;
 let campaignPreviewGroup;
-let ccRouteGroup;
-let ccAntennaGroup;
-let ccPredictionGroup;
 let highlightLine;
 let dragging = null;
 let dragMode = null;
@@ -1639,22 +1545,13 @@ function initViewer() {
   alignmentGroup.visible = false;
   campaignPreviewGroup = new THREE.Group();
   campaignPreviewGroup.visible = false;
-  ccRouteGroup = new THREE.Group();
-  ccRouteGroup.visible = false;
-  ccAntennaGroup = new THREE.Group();
-  ccAntennaGroup.visible = false;
-  ccPredictionGroup = new THREE.Group();
-  ccPredictionGroup.visible = false;
   scene.add(
     geometryGroup,
     markerGroup,
     rayGroup,
     heatmapGroup,
     alignmentGroup,
-    campaignPreviewGroup,
-    ccRouteGroup,
-    ccAntennaGroup,
-    ccPredictionGroup
+    campaignPreviewGroup
   );
 
   ui.toggleGeometry.checked = true;
@@ -1764,20 +1661,6 @@ function setMeta(text) {
   ui.viewerMeta.textContent = text;
 }
 
-function updateCcRouteVisibility() {
-  const onCcTab = state.activeTab === "cc";
-  if (ccRouteGroup) {
-    const drawEnabled = ui.ccRouteDraw ? ui.ccRouteDraw.checked : false;
-    ccRouteGroup.visible = (onCcTab || drawEnabled) && (ui.toggleCcRoute ? ui.toggleCcRoute.checked : true);
-  }
-  if (ccAntennaGroup) {
-    ccAntennaGroup.visible = onCcTab && (ui.toggleCcAntennas ? ui.toggleCcAntennas.checked : true);
-  }
-  if (ccPredictionGroup) {
-    ccPredictionGroup.visible = onCcTab && (ui.toggleCcPrediction ? ui.toggleCcPrediction.checked : true);
-  }
-}
-
 function updateCampaignPreviewVisibility() {
   if (!campaignPreviewGroup) return;
   campaignPreviewGroup.visible = state.activeTab === "campaign" || state.activeTab === "campaign2";
@@ -1863,7 +1746,6 @@ function setMainTab(tabName) {
   state.activeTab = tabName;
   setCampaignUiVisible(tabName === "campaign");
   updateCampaignPreviewVisibility();
-  updateCcRouteVisibility();
   const indoorLayout = document.getElementById("indoorLayout");
   const campaignLayout = document.getElementById("campaignLayout");
   const campaign2Layout = document.getElementById("campaign2Layout");
@@ -1922,23 +1804,6 @@ function setMainTab(tabName) {
     if (isCampaign) {
       void refreshCampaignJobs();
     }
-  } else if (tabName === "cc") {
-    // Move only the viewer panel into the CC layout (between ccLeftPanel and ccRightPanel)
-    const ccLayout = document.getElementById("ccLayout");
-    const viewerPanel = document.getElementById("viewerPanel");
-    const ccRightPanel = document.getElementById("ccRightPanel");
-    if (ccLayout && viewerPanel && ccRightPanel) {
-      ccLayout.insertBefore(viewerPanel, ccRightPanel);
-    }
-    if (indoorSection) indoorSection.style.display = "none";
-    setSimilarityScalingLocked(false);
-    state.viewerScale.enabled = false;
-    requestAnimationFrame(() => {
-      refreshViewerSize();
-      fitCamera();
-    });
-    // Auto-load scene geometry for the CC tab
-    loadCcSceneGeometry();
   } else if (tabName === "models") {
     if (indoorSection) indoorSection.style.display = "none";
     setSimilarityScalingLocked(false);
@@ -2003,32 +1868,6 @@ function updateRisControlVisibility() {
   focusFields.forEach((el) => {
     el.style.display = mode === "focus" ? "" : "none";
   });
-}
-
-function updateCcConfigSourceVisibility() {
-  const source = ui.ccConfigSource ? ui.ccConfigSource.value : "preset";
-  const fileFields = document.querySelectorAll(".cc-config-file");
-  const presetFields = document.querySelectorAll(".cc-config-preset");
-  fileFields.forEach((el) => {
-    el.style.display = source === "file" ? "" : "none";
-  });
-  presetFields.forEach((el) => {
-    el.style.display = source === "preset" ? "" : "none";
-  });
-}
-
-function updateCcCsiVisibility() {
-  const csiType = ui.ccCsiType ? ui.ccCsiType.value : "cfr";
-  const isCfr = csiType === "cfr";
-  const isCir = csiType === "cir";
-  if (ui.ccSubcarriers) ui.ccSubcarriers.disabled = !isCfr;
-  if (ui.ccSubcarrierSpacing) ui.ccSubcarrierSpacing.disabled = !isCfr;
-  if (ui.ccCirSampling) ui.ccCirSampling.disabled = !isCir;
-  if (ui.ccCirSteps) ui.ccCirSteps.disabled = !isCir;
-  const tapsEnabled = csiType === "taps";
-  if (ui.ccTapsBw) ui.ccTapsBw.disabled = !tapsEnabled;
-  if (ui.ccTapsLmin) ui.ccTapsLmin.disabled = !tapsEnabled;
-  if (ui.ccTapsLmax) ui.ccTapsLmax.disabled = !tapsEnabled;
 }
 
 function readOptionalNumber(input, fallback) {
@@ -2247,31 +2086,6 @@ function renderRisPlotSingle(runId, file) {
   ui.risPlotImage.alt = label;
 }
 
-function renderCcMetrics(metrics) {
-  ui.ccMetrics.innerHTML = "";
-  if (!metrics) {
-    ui.ccMetrics.textContent = "No metrics found for this run.";
-    return;
-  }
-  Object.entries(metrics).forEach(([key, value]) => {
-    const row = document.createElement("div");
-    const label = document.createElement("strong");
-    label.textContent = `${key}: `;
-    const val = document.createElement("span");
-    val.textContent = formatMetricValue(value);
-    row.append(label, val);
-    ui.ccMetrics.appendChild(row);
-  });
-}
-
-function renderCcPlotSingle(runId, file) {
-  if (!ui.ccPlotImage || !ui.ccPlotCaption) return;
-  const label = CC_PLOT_LABELS[file] || file;
-  ui.ccPlotCaption.textContent = label;
-  ui.ccPlotImage.src = `/runs/${runId}/${file.startsWith("plots/") ? file : `plots/${file}`}`;
-  ui.ccPlotImage.alt = label;
-}
-
 function renderCampaignMetrics(summary) {
   ui.campaignMetrics.innerHTML = "";
   if (!summary || !summary.metrics) {
@@ -2369,14 +2183,6 @@ function renderCampaign2PlotTabs(plots, activeFile) {
     button.textContent = plot.label || plot.file;
     ui.campaign2PlotTabs.appendChild(button);
   });
-}
-
-function setCcStatus(text) {
-  ui.ccJobStatus.textContent = text;
-}
-
-function setCcResultStatus(text) {
-  ui.ccResultStatus.textContent = text;
 }
 
 function setRisStatus(text) {
@@ -2904,7 +2710,6 @@ async function fetchBuiltinScenes() {
   const res = await fetch("/api/scenes");
   if (!res.ok) {
     if (ui.sceneSelect) ui.sceneSelect.innerHTML = "<option value=\"\">(no scenes)</option>";
-    if (ui.ccSceneSelect) ui.ccSceneSelect.innerHTML = "<option value=\"\">(no scenes)</option>";
     return;
   }
   const data = await res.json();
@@ -2923,9 +2728,7 @@ async function fetchBuiltinScenes() {
   state.fileScenes = fileScenes;
   const selectedValue = _sceneSelectValue(state.sceneOverride);
   populateSceneSelect(ui.sceneSelect, builtinScenes, fileScenes, selectedValue);
-  populateSceneSelect(ui.ccSceneSelect, builtinScenes, fileScenes, selectedValue);
   if (ui.sceneSelect && !ui.sceneSelect.value) ui.sceneSelect.value = "builtin:etoile";
-  if (ui.ccSceneSelect && !ui.ccSceneSelect.value) ui.ccSceneSelect.value = "builtin:etoile";
 }
 
 async function fetchRunDetails(runId) {
@@ -3302,97 +3105,6 @@ async function loadRisResults(runId) {
     setRisResultStatus(`Run status: ${progress.status}`);
   } else {
     setRisResultStatus("Results loaded.");
-  }
-}
-
-async function fetchCcJobs() {
-  const data = await fetchJsonMaybe("/api/cc/jobs");
-  return data || { jobs: [] };
-}
-
-function renderCcJobList(jobs) {
-  ui.ccJobList.innerHTML = "";
-  const sorted = [...jobs].sort((a, b) => (a.created_at || "").localeCompare(b.created_at || ""));
-  const recent = sorted.slice(-5).reverse();
-  recent.forEach((job) => {
-    const item = document.createElement("div");
-    const status = job.status || "unknown";
-    const error = job.error ? ` · ERROR: ${job.error}` : "";
-    item.textContent = `${job.run_id} · ${status}${error}`;
-    ui.ccJobList.appendChild(item);
-  });
-}
-
-async function refreshCcRunSelect() {
-  const data = await fetchJsonMaybe("/api/runs");
-  const runIds = [];
-  for (const run of (data && data.runs ? data.runs : [])) {
-    runIds.push(run.run_id);
-  }
-  const sorted = runIds.sort((a, b) => b.localeCompare(a));
-  const previous = ui.ccRunSelect.value;
-  ui.ccRunSelect.innerHTML = "";
-  sorted.forEach((runId) => {
-    const opt = document.createElement("option");
-    opt.value = runId;
-    opt.textContent = runId;
-    ui.ccRunSelect.appendChild(opt);
-  });
-  if (sorted.length > 0) {
-    ui.ccRunSelect.value = sorted.includes(previous) ? previous : sorted[0];
-  }
-  state.cc.runs = sorted;
-}
-
-async function refreshCcProgressAndLog() {
-  const runId = state.cc.activeRunId;
-  if (!runId) {
-    ui.ccProgress.textContent = "";
-    ui.ccLog.textContent = "";
-    return;
-  }
-  const progress = await fetchProgress(runId);
-  if (progress) {
-    const step = progress.step_name || "Running";
-    const total = progress.total_steps || 0;
-    const idx = progress.step_index != null ? progress.step_index + 1 : null;
-    const pct = progress.progress != null ? Math.round(progress.progress * 100) : null;
-    const pctLabel = pct !== null ? `${pct}%` : "";
-    const stepLabel = total && idx ? `${step} (${idx}/${total})` : step;
-    const error = progress.error ? ` · ERROR: ${progress.error}` : "";
-    ui.ccProgress.textContent = `${progress.status || "running"} · ${stepLabel} ${pctLabel}${error}`.trim();
-  } else {
-    ui.ccProgress.textContent = "Progress unavailable.";
-  }
-  const logText = await fetchTextMaybe(`/runs/${runId}/job.log`);
-  ui.ccLog.textContent = logText ? tailLines(logText, 120) : "No log available.";
-}
-
-async function refreshCcJobs() {
-  const data = await fetchCcJobs();
-  state.cc.jobs = data.jobs || [];
-  renderCcJobList(state.cc.jobs);
-  const sorted = [...state.cc.jobs].sort((a, b) => (a.created_at || "").localeCompare(b.created_at || ""));
-  const running = sorted.find((job) => job.status === "running");
-  const latest = sorted[sorted.length - 1];
-  const active = state.cc.activeJobId
-    ? sorted.find((job) => job.job_id === state.cc.activeJobId)
-    : null;
-  await refreshCcRunSelect();
-  const runExists = (job) => job && job.run_id && state.cc.runs.includes(job.run_id);
-  const current = [active, running, latest].find((job) => job && (job.status === "running" || runExists(job)));
-  if (current) {
-    state.cc.activeJobId = current.job_id;
-    state.cc.activeRunId = current.run_id;
-    setCcStatus(`${current.run_id} · ${current.status || "running"}`);
-  } else {
-    setCcStatus("Idle.");
-    state.cc.activeJobId = null;
-    state.cc.activeRunId = null;
-  }
-  await refreshCcProgressAndLog();
-  if (state.cc.activeRunId) {
-    ui.ccRunSelect.value = state.cc.activeRunId;
   }
 }
 
@@ -3945,397 +3657,6 @@ async function loadCampaign2Results(runId) {
   setCampaign2ResultStatus("Campaign results loaded.");
 }
 
-function parseWaypoints(text) {
-  if (!text) return [];
-  return text
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0)
-    .map((line) => line.split(",").map((v) => parseFloat(v.trim())))
-    .filter((vals) => vals.length === 3 && vals.every((v) => Number.isFinite(v)));
-}
-
-function _formatWaypoint(point) {
-  return point.map((v) => (Number.isFinite(v) ? v.toFixed(3) : "0")).join(",");
-}
-
-function renderCcRoute() {
-  if (!ccRouteGroup) return;
-  ccRouteGroup.clear();
-  const route = state.cc && Array.isArray(state.cc.route) ? state.cc.route : [];
-  if (!route.length) return;
-  const lineMat = new THREE.LineBasicMaterial({ color: 0x22c55e });
-  const linePts = route.map((p) => new THREE.Vector3(p[0], p[1], p[2]));
-  const lineGeo = new THREE.BufferGeometry().setFromPoints(linePts);
-  ccRouteGroup.add(new THREE.Line(lineGeo, lineMat));
-
-  const markerRadius = Math.max(getMarkerRadius() * 0.7, 0.12);
-  const pointGeo = new THREE.SphereGeometry(markerRadius, 12, 12);
-  const midMat = new THREE.MeshStandardMaterial({ color: 0x22c55e, emissive: 0x22c55e, emissiveIntensity: 0.35 });
-  const startMat = new THREE.MeshStandardMaterial({ color: 0x16a34a, emissive: 0x16a34a, emissiveIntensity: 0.45 });
-  const endMat = new THREE.MeshStandardMaterial({ color: 0xef4444, emissive: 0xef4444, emissiveIntensity: 0.45 });
-  route.forEach((pt, idx) => {
-    const mat = idx === 0 ? startMat : (idx === route.length - 1 ? endMat : midMat);
-    const marker = new THREE.Mesh(pointGeo, mat);
-    marker.position.set(pt[0], pt[1], pt[2]);
-    ccRouteGroup.add(marker);
-  });
-}
-
-function updateCcRouteStatus(syncWaypoints = false) {
-  const route = state.cc && Array.isArray(state.cc.route) ? state.cc.route : [];
-  if (ui.ccRouteStatus) ui.ccRouteStatus.textContent = `${route.length} waypoint${route.length === 1 ? "" : "s"}`;
-  if (syncWaypoints && ui.ccWaypoints) {
-    ui.ccWaypoints.value = route.map(_formatWaypoint).join("\n");
-    if (ui.ccTrajectoryType) ui.ccTrajectoryType.value = "waypoints";
-  }
-  renderCcRoute();
-}
-
-function resolveCcRouteZ() {
-  if (ui.ccRouteSnapFloor && ui.ccRouteSnapFloor.checked) {
-    return getFloorElevation();
-  }
-  const z = readNumber(ui.ccRouteZ);
-  if (z !== null) return z;
-  return getFloorElevation();
-}
-
-function handleCcRouteClick(event) {
-  if (state.activeTab !== "cc") return false;
-  if (!ui.ccRouteDraw || !ui.ccRouteDraw.checked) return false;
-  if (event.button !== 0) return false;
-  const mouse = getMouse(event);
-  const raycaster = new THREE.Raycaster();
-  raycaster.setFromCamera(mouse, camera);
-  const plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -getFloorElevation());
-  const point = new THREE.Vector3();
-  raycaster.ray.intersectPlane(plane, point);
-  if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) return false;
-  point.z = resolveCcRouteZ();
-  if (!state.cc.route) state.cc.route = [];
-  if (event.shiftKey) {
-    state.cc.route.pop();
-  } else {
-    state.cc.route.push([point.x, point.y, point.z]);
-  }
-  updateCcRouteStatus(true);
-  return true;
-}
-
-/* ---- Measurement antenna placement (viewer click) ---- */
-function handleCcAntennaClick(event) {
-  if (state.activeTab !== "cc") return false;
-  if (!ui.ccAntennaPlace || !ui.ccAntennaPlace.checked) return false;
-  if (event.button !== 0) return false;
-  const mouse = getMouse(event);
-  const raycaster = new THREE.Raycaster();
-  raycaster.setFromCamera(mouse, camera);
-  const plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -getFloorElevation());
-  const point = new THREE.Vector3();
-  raycaster.ray.intersectPlane(plane, point);
-  if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) return false;
-  const z = parseFloat(ui.ccAntennaZ ? ui.ccAntennaZ.value : 10);
-  const arraySize = parseInt(ui.ccAntennaArray ? ui.ccAntennaArray.value : 4, 10) || 4;
-  if (event.shiftKey) {
-    state.cc.antennas.pop();
-  } else {
-    state.cc.antennas.push({ x: point.x, y: point.y, z, arraySize });
-  }
-  renderCcAntennas();
-  return true;
-}
-
-/* ---- Render measurement antenna markers in 3D ---- */
-function renderCcAntennas() {
-  if (!ccAntennaGroup) return;
-  ccAntennaGroup.clear();
-  const antennas = state.cc.antennas || [];
-  if (ui.ccAntennaStatus) ui.ccAntennaStatus.textContent = `${antennas.length} antenna${antennas.length !== 1 ? "s" : ""}`;
-  if (ui.ccAntennaList) {
-    ui.ccAntennaList.innerHTML = antennas.map((a, i) =>
-      `<div>#${i + 1}: (${a.x.toFixed(1)}, ${a.y.toFixed(1)}, ${a.z.toFixed(1)}) ${a.arraySize}x${a.arraySize}</div>`
-    ).join("");
-  }
-  const markerR = getMarkerRadius() * 1.2;
-  const geo = new THREE.OctahedronGeometry(markerR, 0);
-  const mat = new THREE.MeshStandardMaterial({ color: 0x10b981, emissive: 0x10b981, emissiveIntensity: 0.5 });
-  antennas.forEach((a, i) => {
-    const mesh = new THREE.Mesh(geo, mat);
-    mesh.position.set(a.x, a.y, a.z);
-    mesh.name = `cc_antenna_${i}`;
-    ccAntennaGroup.add(mesh);
-    /* Add a thin vertical pole from ground to antenna */
-    const poleGeo = new THREE.CylinderGeometry(markerR * 0.15, markerR * 0.15, a.z, 6);
-    const poleMat = new THREE.MeshStandardMaterial({ color: 0x059669 });
-    const pole = new THREE.Mesh(poleGeo, poleMat);
-    pole.position.set(a.x, a.y, a.z / 2);
-    pole.rotation.x = Math.PI / 2;
-    ccAntennaGroup.add(pole);
-  });
-  ccAntennaGroup.visible = ui.toggleCcAntennas ? ui.toggleCcAntennas.checked : true;
-}
-
-/* ---- Render CC prediction trajectory + GT in 3D ---- */
-function renderCcPrediction() {
-  if (!ccPredictionGroup) return;
-  ccPredictionGroup.clear();
-  /* Ground truth trajectory */
-  const gt = state.cc.groundTruth;
-  if (gt && gt.length > 1) {
-    const gtPoints = gt.map(p => new THREE.Vector3(p[0], p[1], p[2] || 0));
-    const gtCurve = new THREE.BufferGeometry().setFromPoints(gtPoints);
-    const gtMat = new THREE.LineBasicMaterial({ color: 0x3b82f6, linewidth: 2 });
-    const gtLine = new THREE.Line(gtCurve, gtMat);
-    gtLine.name = "cc_gt_trajectory";
-    ccPredictionGroup.add(gtLine);
-    /* GT start/end spheres */
-    const sphereGeo = new THREE.SphereGeometry(getMarkerRadius() * 0.6, 12, 12);
-    const gtStartMat = new THREE.MeshStandardMaterial({ color: 0x22d3ee, emissive: 0x22d3ee, emissiveIntensity: 0.4 });
-    const gtStart = new THREE.Mesh(sphereGeo, gtStartMat);
-    gtStart.position.copy(gtPoints[0]);
-    gtStart.name = "cc_gt_start";
-    ccPredictionGroup.add(gtStart);
-    const gtEndMat = new THREE.MeshStandardMaterial({ color: 0x1e40af, emissive: 0x1e40af, emissiveIntensity: 0.4 });
-    const gtEnd = new THREE.Mesh(sphereGeo, gtEndMat);
-    gtEnd.position.copy(gtPoints[gtPoints.length - 1]);
-    gtEnd.name = "cc_gt_end";
-    ccPredictionGroup.add(gtEnd);
-  }
-  /* Predicted/aligned trajectory */
-  const pred = state.cc.prediction;
-  if (pred && pred.length > 1) {
-    const predPoints = pred.map(p => new THREE.Vector3(p[0], p[1], p[2] || 0));
-    const predCurve = new THREE.BufferGeometry().setFromPoints(predPoints);
-    const predMat = new THREE.LineDashedMaterial({ color: 0xf97316, dashSize: 0.6, gapSize: 0.3, linewidth: 2 });
-    const predLine = new THREE.Line(predCurve, predMat);
-    predLine.computeLineDistances();
-    predLine.name = "cc_pred_trajectory";
-    ccPredictionGroup.add(predLine);
-    /* Pred start/end */
-    const sphereGeo = new THREE.SphereGeometry(getMarkerRadius() * 0.5, 12, 12);
-    const predStartMat = new THREE.MeshStandardMaterial({ color: 0xfbbf24, emissive: 0xfbbf24, emissiveIntensity: 0.4 });
-    const predStart = new THREE.Mesh(sphereGeo, predStartMat);
-    predStart.position.copy(predPoints[0]);
-    predStart.name = "cc_pred_start";
-    ccPredictionGroup.add(predStart);
-    const predEndMat = new THREE.MeshStandardMaterial({ color: 0xc2410c, emissive: 0xc2410c, emissiveIntensity: 0.4 });
-    const predEnd = new THREE.Mesh(sphereGeo, predEndMat);
-    predEnd.position.copy(predPoints[predPoints.length - 1]);
-    predEnd.name = "cc_pred_end";
-    ccPredictionGroup.add(predEnd);
-  }
-  ccPredictionGroup.visible = ui.toggleCcPrediction ? ui.toggleCcPrediction.checked : true;
-}
-
-async function submitCcJob() {
-  const source = ui.ccConfigSource ? ui.ccConfigSource.value : "preset";
-  const payload = { kind: "channel_charting" };
-  if (source === "file") {
-    let configPath = ui.ccConfigPath.value.trim();
-    if (!configPath && ui.ccConfigPath.placeholder) {
-      configPath = ui.ccConfigPath.placeholder;
-    }
-    if (!configPath) {
-      setCcStatus("Config path required.");
-      return;
-    }
-    payload.base_config = configPath;
-  } else {
-    payload.base_config = ui.ccPreset.value;
-  }
-
-  if (ui.ccUseScene && ui.ccUseScene.checked) {
-    const sceneValue = ui.ccSceneSelect && ui.ccSceneSelect.value ? ui.ccSceneSelect.value : null;
-    const override = sceneValue ? parseSceneSelectValue(sceneValue) : null;
-    if (override) {
-      payload.scene = JSON.parse(JSON.stringify(override));
-      applySceneSourceOverride(override);
-    } else if (state.sceneOverride) {
-      payload.scene = JSON.parse(JSON.stringify(state.sceneOverride));
-    }
-  }
-  if (ui.ccUseMarkers && ui.ccUseMarkers.checked) {
-    payload.scene = payload.scene || {};
-    payload.scene.tx = Object.assign(payload.scene.tx || {}, { position: state.markers.tx });
-    payload.scene.rx = Object.assign(payload.scene.rx || {}, { position: state.markers.rx });
-  }
-
-  /* Include measurement antennas if any */
-  if (state.cc.antennas && state.cc.antennas.length > 0) {
-    payload.measurement_antennas = state.cc.antennas.map(a => ({
-      position: [a.x, a.y, a.z],
-      array_size: a.arraySize,
-    }));
-  }
-
-  const cc = {};
-  if (ui.ccRole && ui.ccRole.value) {
-    cc.role = ui.ccRole.value;
-  }
-  const traj = {};
-  const trajType = ui.ccTrajectoryType ? ui.ccTrajectoryType.value : "straight";
-  traj.type = trajType;
-  const steps = readNumber(ui.ccTrajectorySteps);
-  const dt = readNumber(ui.ccTrajectoryDt);
-  if (steps !== null) traj.num_steps = Math.max(1, Math.round(steps));
-  if (dt !== null) traj.dt_s = dt;
-  const start = [readNumber(ui.ccStartX), readNumber(ui.ccStartY), readNumber(ui.ccStartZ)];
-  if (start.every((v) => v !== null)) traj.start = start;
-  const end = [readNumber(ui.ccEndX), readNumber(ui.ccEndY), readNumber(ui.ccEndZ)];
-  if (end.every((v) => v !== null)) traj.end = end;
-  if (trajType === "waypoints") {
-    const wp = parseWaypoints(ui.ccWaypoints ? ui.ccWaypoints.value : "");
-    if (wp.length) {
-      traj.waypoints = wp;
-    } else if (state.cc && Array.isArray(state.cc.route) && state.cc.route.length) {
-      traj.waypoints = state.cc.route;
-    }
-  } else if (trajType === "random_walk") {
-    const stepStd = readNumber(ui.ccRwStepStd);
-    const smoothAlpha = readNumber(ui.ccRwSmooth);
-    traj.random_walk = {};
-    if (stepStd !== null) traj.random_walk.step_std = stepStd;
-    if (smoothAlpha !== null) traj.random_walk.smooth_alpha = smoothAlpha;
-  } else if (trajType === "spiral") {
-    const r0 = readNumber(ui.ccSpiralR0);
-    const r1 = readNumber(ui.ccSpiralR1);
-    const turns = readNumber(ui.ccSpiralTurns);
-    traj.spiral = {};
-    if (r0 !== null) traj.spiral.radius_start = r0;
-    if (r1 !== null) traj.spiral.radius_end = r1;
-    if (turns !== null) traj.spiral.turns = turns;
-  }
-  cc.trajectory = traj;
-
-  const csi = { type: ui.ccCsiType ? ui.ccCsiType.value : "cfr" };
-  if (csi.type === "cfr") {
-    const sc = readNumber(ui.ccSubcarriers);
-    const spacing = readNumber(ui.ccSubcarrierSpacing);
-    csi.ofdm = {};
-    if (sc !== null) csi.ofdm.num_subcarriers = Math.round(sc);
-    if (spacing !== null) csi.ofdm.subcarrier_spacing_hz = spacing;
-  }
-  if (csi.type === "cir") {
-    const sampling = readNumber(ui.ccCirSampling);
-    const stepsCir = readNumber(ui.ccCirSteps);
-    csi.cir = {};
-    if (sampling !== null) csi.cir.sampling_frequency_hz = sampling;
-    if (stepsCir !== null) csi.cir.num_time_steps = Math.round(stepsCir);
-  }
-  if (csi.type === "taps") {
-    const bw = readNumber(ui.ccTapsBw);
-    const lmin = readNumber(ui.ccTapsLmin);
-    const lmax = readNumber(ui.ccTapsLmax);
-    csi.taps = {};
-    if (bw !== null) csi.taps.bandwidth_hz = bw;
-    if (lmin !== null) csi.taps.l_min = Math.round(lmin);
-    if (lmax !== null) csi.taps.l_max = Math.round(lmax);
-  }
-  cc.csi = csi;
-
-  const features = { type: ui.ccFeatureType ? ui.ccFeatureType.value : "r2m" };
-  const window = readNumber(ui.ccFeatureWindow);
-  if (window !== null) features.window = Math.max(1, Math.round(window));
-  const beamspace = ui.ccFeatureBeamspace ? ui.ccFeatureBeamspace.checked : true;
-  if (features.type === "beamspace_mag") {
-    features.beamspace_mag = { beamspace };
-  } else {
-    features.r2m = { beamspace };
-  }
-  cc.features = features;
-
-  if (ui.ccOverrideModel && ui.ccOverrideModel.checked) {
-    const model = {};
-    const embedDim = readNumber(ui.ccEmbedDim);
-    const epochs = readNumber(ui.ccEpochs);
-    const lr = readNumber(ui.ccLr);
-    const adj = readNumber(ui.ccAdjWeight);
-    if (embedDim !== null) model.embedding_dim = Math.round(embedDim);
-    if (epochs !== null) model.epochs = Math.round(epochs);
-    if (lr !== null) model.learning_rate = lr;
-    if (adj !== null) model.adjacency_weight = adj;
-    cc.model = model;
-  }
-
-  const tracking = {};
-  if (ui.ccTrackingEnabled) tracking.enabled = ui.ccTrackingEnabled.checked;
-  const alpha = readNumber(ui.ccTrackingAlpha);
-  if (alpha !== null) tracking.alpha = alpha;
-  cc.tracking = tracking;
-
-  const evaluation = {};
-  const dims = readNumber(ui.ccEvalDims);
-  if (dims !== null) evaluation.dims = Math.round(dims);
-  cc.evaluation = evaluation;
-
-  payload.channel_charting = cc;
-
-  setCcStatus("Submitting channel charting job...");
-  try {
-    const res = await fetch("/api/cc/jobs", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    const data = await res.json();
-    if (!res.ok || data.error) {
-      setCcStatus(`CC job error: ${data.error || res.status}`);
-    } else {
-      state.cc.activeRunId = data.run_id;
-      state.cc.activeJobId = data.job_id;
-      setCcStatus(`CC job submitted: ${data.run_id}`);
-    }
-    await refreshCcJobs();
-    await refreshCcProgressAndLog();
-  } catch (err) {
-    setCcStatus("CC job error: network failure");
-  }
-}
-
-async function loadCcResults(runId) {
-  if (!runId) {
-    setCcResultStatus("Select a run to load results.");
-    renderCcMetrics(null);
-    if (ui.ccPlotImage) ui.ccPlotImage.src = "";
-    return;
-  }
-  state.cc.activeRunId = runId;
-  setCcResultStatus(`Loading ${runId}...`);
-  const manifest = await fetchJsonMaybe(`/runs/${runId}/manifest.json`);
-  renderCcMetrics(manifest ? manifest.metrics : null);
-  const defaultPlot = state.cc.selectedPlot || "chart_raw.png";
-  renderCcPlotSingle(runId, defaultPlot);
-  if (ui.ccPlotTabs) {
-    ui.ccPlotTabs.querySelectorAll(".plot-tab-button").forEach((btn) => {
-      btn.classList.toggle("is-active", btn.dataset.plot === defaultPlot);
-    });
-  }
-  if (!manifest) {
-    setCcResultStatus("manifest.json not found for this run.");
-    return;
-  }
-  /* Load trajectory data for 3D overlay */
-  const trajData = await fetchJsonMaybe(`/runs/${runId}/data/trajectories.json`);
-  if (trajData) {
-    state.cc.groundTruth = trajData.ground_truth || null;
-    state.cc.prediction = trajData.prediction || trajData.aligned || null;
-  } else {
-    state.cc.groundTruth = null;
-    state.cc.prediction = null;
-  }
-  renderCcPrediction();
-  /* Also reload antennas from manifest if present */
-  if (manifest.measurement_antennas && manifest.measurement_antennas.length) {
-    state.cc.antennas = manifest.measurement_antennas.map(a => ({
-      x: a.position[0], y: a.position[1], z: a.position[2],
-      arraySize: a.array_size || 4,
-    }));
-    renderCcAntennas();
-  }
-  setCcResultStatus("Results loaded.");
-}
-
 async function loadRun(runId, scope = getRunScopeForTab(), options = {}) {
   const { force = false } = options;
   if (!runId || state.loadingRun) return;
@@ -4420,7 +3741,7 @@ function updateInputs() {
   ui.rxZ.value = state.markers.rx[2];
   const sceneCfg = state.sceneOverride || (state.runInfo && state.runInfo.config && state.runInfo.config.scene) || {};
   const selectedValue = _sceneSelectValue(sceneCfg);
-  [ui.sceneSelect, ui.ccSceneSelect].filter(Boolean).forEach((selectEl) => {
+  [ui.sceneSelect].filter(Boolean).forEach((selectEl) => {
     const hasOption = Array.from(selectEl.options).some((opt) => opt.value === selectedValue);
     if (hasOption) {
       selectEl.value = selectedValue;
@@ -5190,7 +4511,6 @@ function rebuildDynamicScene({ refit = false } = {}) {
   heatmapGroup.clear();
   alignmentGroup.clear();
   if (campaignPreviewGroup) campaignPreviewGroup.clear();
-  if (ccRouteGroup) ccRouteGroup.clear();
   highlightLine = null;
 
   if (ui.simRisEnabled && ui.simRisEnabled.checked) {
@@ -5207,14 +4527,12 @@ function rebuildDynamicScene({ refit = false } = {}) {
   } else {
     renderCampaignPreview();
   }
-  renderCcRoute();
   addRays();
   addHeatmap();
   markerGroup.visible = ui.toggleMarkers.checked;
   rayGroup.visible = ui.toggleRays.checked;
   heatmapGroup.visible = ui.toggleHeatmap.checked;
   alignmentGroup.visible = ui.toggleGuides.checked;
-  updateCcRouteVisibility();
   updateHeatmapScaleVisibility();
   if (refit) fitCamera();
 }
@@ -5434,103 +4752,6 @@ async function loadSceneFileMeshes(scenePath, assetKey = getSceneFileAssetKey(sc
       }
     );
   });
-}
-
-/* ---- Load scene geometry for CC tab from latest run with viewer data ---- */
-async function loadCcSceneGeometry() {
-  // If we already have a manifest with mesh data, just rebuild from it
-  if (state.manifest && (state.manifest.mesh || (state.manifest.mesh_files && state.manifest.mesh_files.length))) {
-    state.geometryAssetKey = getGeometryAssetKey();
-    geometryGroup.clear();
-    addProxyGeometry();
-    if (ui.toggleGeometry.checked) await loadMeshes(state.geometryAssetKey);
-    addMarkers();
-    geometryGroup.visible = ui.toggleGeometry.checked;
-    markerGroup.visible = ui.toggleMarkers.checked;
-    renderCcRoute();
-    renderCcAntennas();
-    updateCcRouteVisibility();
-    fitCamera();
-    return;
-  }
-
-  try {
-    // Strategy 1: find the latest run with viewer data
-    const runsRes = await fetch("/api/runs");
-    if (runsRes.ok) {
-      const runsData = await runsRes.json();
-      const runs = runsData.runs || runsData || [];
-      const viewerRun = runs.find((r) => r.has_viewer);
-      if (viewerRun) {
-        const manifest = await fetchJsonMaybe(`/runs/${viewerRun.run_id}/viewer/scene_manifest.json`);
-        if (manifest) {
-          state.runId = viewerRun.run_id;
-          state.manifest = manifest;
-          state.geometryAssetKey = getGeometryAssetKey(viewerRun.run_id, manifest);
-          geometryGroup.clear();
-          addProxyGeometry();
-          if (ui.toggleGeometry.checked) await loadMeshes(state.geometryAssetKey);
-          geometryGroup.visible = ui.toggleGeometry.checked;
-          const sceneMarkers = await fetchJsonMaybe(`/runs/${viewerRun.run_id}/viewer/markers.json`);
-          markerGroup.clear();
-          if (sceneMarkers) {
-            const savedMarkers = state.markers;
-            try {
-              state.markers = sceneMarkers;
-              addMarkers();
-            } finally {
-              state.markers = savedMarkers;
-            }
-          } else {
-            addMarkers();
-          }
-          markerGroup.visible = ui.toggleMarkers.checked;
-          renderCcRoute();
-          renderCcAntennas();
-          updateCcRouteVisibility();
-          fitCamera();
-          setMeta(`Scene loaded from run ${viewerRun.run_id}`);
-          return;
-        }
-      }
-    }
-
-    // Strategy 2: load from scene cache (PLY files exported by previous runs)
-    const cacheRes = await fetch("/api/scene-cache");
-    if (!cacheRes.ok) return;
-    const cacheData = await cacheRes.json();
-    const caches = cacheData.caches || [];
-    if (!caches.length) return;
-    // Prefer Ashby cache, otherwise use first available
-    const ashbyCache = caches.find((c) => c.key.includes("ashby"));
-    const cache = ashbyCache || caches[0];
-    if (!cache.mesh_files || !cache.mesh_files.length) return;
-    geometryGroup.clear();
-    const loader = new PLYLoader();
-    const palette = [0x9aa8b1, 0xa8b89a, 0xb1a89a, 0x9ab1a8];
-    cache.mesh_files.forEach((file, idx) => {
-      loader.load(`/cache/${cache.key}/${file}`, (geom) => {
-        geom.computeVertexNormals();
-        const mat = new THREE.MeshStandardMaterial({
-          color: palette[idx % palette.length],
-          opacity: 0.7,
-          transparent: true,
-        });
-        const mesh = new THREE.Mesh(geom, mat);
-        geometryGroup.add(mesh);
-        if (idx === 0) fitCamera();
-      });
-    });
-    geometryGroup.visible = ui.toggleGeometry.checked;
-    addMarkers();
-    markerGroup.visible = ui.toggleMarkers.checked;
-    renderCcRoute();
-    renderCcAntennas();
-    updateCcRouteVisibility();
-    setMeta(`Scene loaded from cache: ${cache.key}`);
-  } catch (err) {
-    console.warn("Failed to load CC scene geometry:", err);
-  }
 }
 
 function addMarkers() {
@@ -6225,8 +5446,6 @@ function highlightPath(path) {
 }
 
 function onMouseDown(event) {
-  if (handleCcRouteClick(event)) return;
-  if (handleCcAntennaClick(event)) return;
   if (!ui.dragMarkers.checked) return;
   const mouse = getMouse(event);
   const raycaster = new THREE.Raycaster();
@@ -6662,8 +5881,6 @@ function bindUI() {
       if (entry) applyIndoorFileSceneDefaults(entry, override);
     }
     rebuildScene({ reloadGeometry: true, refit: false });
-    // Keep CC scene select in sync
-    if (ui.ccSceneSelect) ui.ccSceneSelect.value = ui.sceneSelect.value;
   });
 
   if (!ui.runProfile) console.error("ui.runProfile is missing");
@@ -7063,86 +6280,6 @@ function bindUI() {
     updateRisControlVisibility();
     updateRisConfigPreview();
   });
-
-  if (!ui.ccConfigSource) console.error("ui.ccConfigSource is missing");
-  if (ui.ccConfigSource) {
-    ui.ccConfigSource.addEventListener("change", updateCcConfigSourceVisibility);
-  }
-  if (!ui.ccCsiType) console.error("ui.ccCsiType is missing");
-  if (ui.ccCsiType) {
-    ui.ccCsiType.addEventListener("change", updateCcCsiVisibility);
-  }
-  if (!ui.ccStart) console.error("ui.ccStart is missing");
-  if (ui.ccStart) ui.ccStart.addEventListener("click", submitCcJob);
-  if (!ui.ccRefresh) console.error("ui.ccRefresh is missing");
-  if (ui.ccRefresh) ui.ccRefresh.addEventListener("click", refreshCcJobs);
-  if (!ui.ccLoadResults) console.error("ui.ccLoadResults is missing");
-  if (ui.ccLoadResults) ui.ccLoadResults.addEventListener("click", () => loadCcResults(ui.ccRunSelect.value));
-  if (!ui.ccRunSelect) console.error("ui.ccRunSelect is missing");
-  if (ui.ccRunSelect) ui.ccRunSelect.addEventListener("change", () => loadCcResults(ui.ccRunSelect.value));
-  if (!ui.ccPlotTabs) console.error("ui.ccPlotTabs is missing");
-  if (ui.ccPlotTabs) {
-    ui.ccPlotTabs.addEventListener("click", (event) => {
-      const target = event.target;
-      if (!(target instanceof HTMLButtonElement)) return;
-      const file = target.dataset.plot;
-      if (!file) return;
-      state.cc.selectedPlot = file;
-      ui.ccPlotTabs.querySelectorAll(".plot-tab-button").forEach((btn) => {
-        btn.classList.toggle("is-active", btn === target);
-      });
-      renderCcPlotSingle(state.cc.activeRunId || ui.ccRunSelect.value, file);
-    });
-  }
-
-  if (ui.ccSceneSelect) {
-    ui.ccSceneSelect.addEventListener("change", () => {
-      const value = ui.ccSceneSelect.value || "";
-      const override = parseSceneSelectValue(value) || (value ? { type: "builtin", builtin: value } : null);
-      if (override) {
-        applySceneSourceOverride(override);
-        // Keep the main scene select in sync
-        if (ui.sceneSelect) ui.sceneSelect.value = value;
-      }
-      // Reload geometry for the CC tab
-      if (state.activeTab === "cc") loadCcSceneGeometry();
-    });
-  }
-  if (ui.ccRouteDraw) {
-    ui.ccRouteDraw.addEventListener("change", () => {
-      if (ui.ccRouteDraw.checked && ui.ccAntennaPlace) ui.ccAntennaPlace.checked = false;
-      updateCcRouteVisibility();
-    });
-  }
-  if (ui.ccAntennaPlace) {
-    ui.ccAntennaPlace.addEventListener("change", () => {
-      if (ui.ccAntennaPlace.checked && ui.ccRouteDraw) ui.ccRouteDraw.checked = false;
-    });
-  }
-  if (ui.ccRouteUndo) {
-    ui.ccRouteUndo.addEventListener("click", () => {
-      if (state.cc && Array.isArray(state.cc.route) && state.cc.route.length) {
-        state.cc.route.pop();
-        updateCcRouteStatus(true);
-      }
-    });
-  }
-  if (ui.ccRouteClear) {
-    ui.ccRouteClear.addEventListener("click", () => {
-      if (state.cc) state.cc.route = [];
-      updateCcRouteStatus(true);
-    });
-  }
-
-  // Lightbox: click plot image to enlarge
-  if (ui.ccPlotImage && ui.plotLightbox && ui.plotLightboxImg) {
-    ui.ccPlotImage.addEventListener("click", () => {
-      if (!ui.ccPlotImage.src || ui.ccPlotImage.src === window.location.href) return;
-      ui.plotLightboxImg.src = ui.ccPlotImage.src;
-      ui.plotLightboxImg.alt = ui.ccPlotImage.alt || "Chart";
-      ui.plotLightbox.style.display = "flex";
-    });
-  }
   // Also support lightbox for sim-tab plot images
   document.querySelectorAll(".plot-card img").forEach((img) => {
     img.style.cursor = "pointer";
@@ -7296,37 +6433,6 @@ function bindUI() {
   if (!ui.toggleRisFront) console.error("ui.toggleRisFront is missing");
   ui.toggleRisFront.addEventListener("change", rebuildScene);
 
-  /* --- CC overlay toggles --- */
-  if (ui.toggleCcRoute) {
-    ui.toggleCcRoute.addEventListener("change", () => {
-      ccRouteGroup.visible = ui.toggleCcRoute.checked;
-    });
-  }
-  if (ui.toggleCcAntennas) {
-    ui.toggleCcAntennas.addEventListener("change", () => {
-      ccAntennaGroup.visible = ui.toggleCcAntennas.checked;
-    });
-  }
-  if (ui.toggleCcPrediction) {
-    ui.toggleCcPrediction.addEventListener("change", () => {
-      ccPredictionGroup.visible = ui.toggleCcPrediction.checked;
-    });
-  }
-
-  /* --- Measurement antenna placement --- */
-  if (ui.ccAntennaUndoBtn) {
-    ui.ccAntennaUndoBtn.addEventListener("click", () => {
-      state.cc.antennas.pop();
-      renderCcAntennas();
-    });
-  }
-  if (ui.ccAntennaClearBtn) {
-    ui.ccAntennaClearBtn.addEventListener("click", () => {
-      state.cc.antennas = [];
-      renderCcAntennas();
-    });
-  }
-
   if (!ui.heatmapRotation) console.error("ui.heatmapRotation is missing");
   ui.heatmapRotation.addEventListener("input", () => {
     ui.heatmapRotationLabel.textContent = `${ui.heatmapRotation.value}`;
@@ -7399,13 +6505,10 @@ updateRisConfigSourceVisibility();
 updateRisControlVisibility();
 updateRisConfigPreview();
 updateRisPreview();
-updateCcConfigSourceVisibility();
-updateCcCsiVisibility();
-updateCcRouteStatus(false);
 setCampaignRunControlsState();
 setCampaign2RunControlsState();
 setMainTab("sim");
-fetchConfigs().then(fetchRuns).then(fetchBuiltinScenes).then(() => Promise.all([refreshCampaignJobs(), refreshCampaign2Jobs(), refreshRisJobs(), refreshCcJobs()]));
+fetchConfigs().then(fetchRuns).then(fetchBuiltinScenes).then(() => Promise.all([refreshCampaignJobs(), refreshCampaign2Jobs(), refreshRisJobs()]));
 setInterval(() => {
   if (isSimScopeTab(state.activeTab)) {
     refreshJobs(getRunScopeForTab());
@@ -7418,8 +6521,5 @@ setInterval(() => {
   }
   if (state.activeTab === "ris") {
     refreshRisJobs();
-  }
-  if (state.activeTab === "cc") {
-    refreshCcJobs();
   }
 }, 3000);

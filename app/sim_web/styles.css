@@ -700,12 +700,6 @@ input {
   pointer-events: auto;
   font-size: 12px;
 }
-.layer-toggle label[for^="toggleCc"],
-.layer-toggle label:has(input[id^="toggleCc"]) {
-  color: #059669;
-  font-weight: 500;
-}
-
 .viewer-meta {
   font-family: "IBM Plex Mono", monospace;
   font-size: 12px;
@@ -871,33 +865,10 @@ tbody tr:hover {
   transform: none;
 }
 
-/* --- Channel Charting layout overrides --- */
-#ccLayout {
-  grid-template-columns: minmax(260px, 320px) 1fr minmax(340px, 480px);
-}
-
-#ccRightPanel .plot-tab-strip {
-  flex-wrap: wrap;
-}
-
-#ccRightPanel .plot-tab-button {
-  font-size: 11px;
-  padding: 5px 8px;
-}
-
-#ccRightPanel .plot-card.single img {
-  max-height: 500px;
-  object-fit: contain;
-  cursor: pointer;
-}
-
 @media (max-width: 1100px) {
   .layout {
     grid-template-columns: 1fr;
     grid-template-rows: auto auto auto;
-  }
-  #ccLayout {
-    grid-template-columns: 1fr;
   }
   .viewer {
     min-height: 420px;
