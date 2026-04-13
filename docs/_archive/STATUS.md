@@ -1,7 +1,7 @@
 # Simulator Status (Handoff)
 
 ## What’s implemented
-- Omniverse-lite simulator: stdlib HTTP server + static frontend (`app/sim_server.py`, `app/sim_web/*`).
+- SIONNA Viewer simulator: stdlib HTTP server + static frontend (`app/sim_server.py`, `app/sim_web/*`).
 - Background job runner: submits `python -m app run --config <generated>` as a subprocess (`app/sim_jobs.py`).
 - Viewer artifacts exported per run (`app/viewer.py`):
   - `viewer/scene_manifest.json`, `viewer/markers.json`, `viewer/paths.json`, `viewer/heatmap.json`.

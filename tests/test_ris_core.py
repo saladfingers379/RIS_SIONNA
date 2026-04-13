@@ -39,7 +39,7 @@ class TestRisGeometry(unittest.TestCase):
 class TestRisQuantization(unittest.TestCase):
     def test_quantize_invalid_bits(self) -> None:
         with self.assertRaises(ValueError) as ctx:
-            quantize_phase(np.array([0.1]), bits=3)
+            quantize_phase(np.array([0.1]), bits=-1)
         self.assertIn("quantization_bits", str(ctx.exception))
 
     def test_quantize_1bit(self) -> None:
@@ -52,6 +52,18 @@ class TestRisQuantization(unittest.TestCase):
         quantized = quantize_phase(phases, bits=2)
         expected = np.array([0.0, np.pi / 2, np.pi, 3 * np.pi / 2])
         self.assertTrue(np.allclose(quantized, expected))
+
+    def test_quantize_3bit(self) -> None:
+        phases = np.array([0.1, 1.2, 2.5, 3.7, 5.6])
+        quantized = quantize_phase(phases, bits=3)
+        step = 2.0 * np.pi / 8.0
+        expected = np.array([0.0, step * 2, step * 3, step * 5, step * 7])
+        self.assertTrue(np.allclose(quantized, expected))
+
+    def test_quantize_rejects_non_finite_phase(self) -> None:
+        with self.assertRaises(ValueError) as ctx:
+            quantize_phase(np.array([0.0, np.nan]), bits=1)
+        self.assertIn("finite", str(ctx.exception))
 
 
 if __name__ == "__main__":

@@ -11,6 +11,7 @@ from .io import find_latest_output_dir
 from .plots import plot_radio_map_from_npz
 from .simulate import run_simulation
 from .campaign import run_campaign, run_absorber_sweep
+from .link_level import run_link_level_eval
 from .utils.logging import setup_logging
 from .utils.system import print_diagnose_info
 
@@ -96,6 +97,15 @@ def _parse_args() -> argparse.Namespace:
     sim_p.add_argument("--host", default="127.0.0.1", help="Host to bind the simulator")
     sim_p.add_argument("--port", type=int, default=8765, help="Port for the simulator UI")
     sim_p.add_argument("--no-browser", action="store_true", help="Do not open the browser automatically")
+    sim_p.add_argument(
+        "--auth-password-env",
+        default="SIM_PASSWORD",
+        help="Environment variable name containing the simulator access password",
+    )
+    sim_p.add_argument(
+        "--auth-password-file",
+        help="Path to a local file containing the simulator access password",
+    )
 
     ris_p = subparsers.add_parser("ris", help="RIS Lab tools")
     ris_subparsers = ris_p.add_subparsers(dest="ris_command", required=True)
@@ -114,6 +124,18 @@ def _parse_args() -> argparse.Namespace:
     )
     ris_compare = ris_subparsers.add_parser("compare", help="Compare RIS models")
     ris_compare.add_argument("--config", required=True, help="Path to RIS Lab YAML config")
+
+    link_p = subparsers.add_parser("link", help="Link-level tools")
+    link_subparsers = link_p.add_subparsers(dest="link_command", required=True)
+    link_eval = link_subparsers.add_parser("eval", help="Run link-level RIS evaluation")
+    link_eval.add_argument("--config", required=True, help="Path to link-level YAML config")
+
+    ris_synth_p = subparsers.add_parser("ris-synth", help="RT-side RIS synthesis tools")
+    ris_synth_subparsers = ris_synth_p.add_subparsers(dest="ris_synth_command", required=True)
+    ris_synth_run = ris_synth_subparsers.add_parser("run", help="Run RIS synthesis")
+    ris_synth_run.add_argument("--config", required=True, help="Path to RIS synthesis YAML config")
+    ris_synth_quantize = ris_synth_subparsers.add_parser("quantize", help="Quantize a saved RIS synthesis run")
+    ris_synth_quantize.add_argument("--config", required=True, help="Path to RIS synthesis quantization YAML config")
 
     campaign_p = subparsers.add_parser("campaign", help="Indoor chamber campaign tools")
     campaign_subparsers = campaign_p.add_subparsers(dest="campaign_command", required=True)
@@ -279,12 +301,48 @@ def main() -> None:
         )
         return
 
+    if args.command == "link":
+        if args.link_command == "eval":
+            output_dir = run_link_level_eval(args.config)
+            logger.info("Link-level outputs saved to %s", output_dir)
+            return
+
+    if args.command == "ris-synth":
+        from .ris.rt_synthesis import run_ris_synthesis, run_ris_synthesis_quantization
+
+        if args.ris_synth_command == "run":
+            output_dir = run_ris_synthesis(args.config)
+            logger.info("RIS synthesis outputs saved to %s", output_dir)
+            return
+        if args.ris_synth_command == "quantize":
+            output_dir = run_ris_synthesis_quantization(args.config)
+            logger.info("RIS synthesis quantization outputs saved to %s", output_dir)
+            return
+
     if args.command == "sim":
         from .sim_server import serve_simulator
+
+        auth_password = None
+        auth_password_file = getattr(args, "auth_password_file", None)
+        if auth_password_file:
+            auth_password = Path(auth_password_file).read_text(encoding="utf-8").strip()
+            if not auth_password:
+                raise SystemExit(f"Simulator auth password file is empty: {auth_password_file}")
+        else:
+            auth_password_env = str(getattr(args, "auth_password_env", "") or "").strip()
+            if auth_password_env:
+                auth_password = str(os.environ.get(auth_password_env, "") or "").strip()
+        if not auth_password:
+            auth_hint = str(getattr(args, "auth_password_env", "") or "").strip() or "SIM_PASSWORD"
+            print(
+                f"Simulator access password is disabled. Set {auth_hint} before startup "
+                "or pass --auth-password-file to enable it."
+            )
+
         if not args.no_browser:
             import webbrowser
             webbrowser.open(f"http://{args.host}:{args.port}")
-        serve_simulator(host=args.host, port=int(args.port))
+        serve_simulator(host=args.host, port=int(args.port), auth_password=auth_password or None)
         return
 
     if args.command == "ris":

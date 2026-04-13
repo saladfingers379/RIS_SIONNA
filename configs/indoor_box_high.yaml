@@ -35,8 +35,14 @@ simulation:
 scene:
   type: file  # builtin | file | procedural
   builtin: null
-  file: scenes/anechoic_chamber_nofoam/scene.xml
+  file: scenes/anechoic_chamber_foam_ideal/scene.xml
   mesh: null
+  custom_radio_materials:
+    itu_absorber:
+      relative_permittivity: 1.0
+      conductivity: 0.0
+      scattering_coefficient: 0.0
+      xpd_coefficient: 0.0
   proxy_enabled: false
   export_mesh: true
   procedural:

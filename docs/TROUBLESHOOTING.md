@@ -62,6 +62,10 @@ If you need a directional transmitter:
 - Aim it with `scene.tx.look_at` or `scene.tx.orientation` (radians).
 - In the UI, use **Tx Look-at**, **Tx Pattern**, and **Tx Polarization** before running.
 
+For horn antennas:
+- `horn_15dbi` and `horn_22dbi` keep the approximate horn pattern but may still allow rear-hemisphere paths.
+- `horn_15dbi_front` and `horn_22dbi_front` are front-only variants for showcase use when you do not want rays launching behind the horn aperture.
+
 ## OptiX Initialization Failed (Driver Version)
 If `diagnose` reports `Could not initialize OptiX` or Dr.Jit warns about the driver,
 upgrade/downgrade the NVIDIA driver to a supported range. Example warning:
@@ -74,3 +78,88 @@ Recommended fix:
 TensorFlow is only imported if enabled in `runtime.tensorflow_import`.
 If you need TF visibility, set `tensorflow_import: force` in your config
 and re-run `python -m app diagnose`.
+
+## Cloudflare Tunnel for Remote Demos
+Recommended pattern:
+1. Start the simulator locally with a password:
+   ```bash
+   export SIM_PASSWORD='choose-a-strong-password'
+   python -m app sim --host 127.0.0.1 --port 8765 --no-browser
+   ```
+2. Confirm startup includes:
+   - `RIS_SIONNA simulator running at http://127.0.0.1:8765`
+   - `Simulator access password is enabled.`
+3. Start the tunnel in a second terminal:
+   ```bash
+   cloudflared tunnel --url http://localhost:8765
+   ```
+4. Open the printed `https://...trycloudflare.com` URL on the remote device.
+
+Rules:
+- Keep the simulator bound to `127.0.0.1`.
+- Keep the simulator and `cloudflared` running in separate terminals.
+- Do not expose the raw simulator port directly to the internet.
+
+## `cloudflared: command not found`
+Install `cloudflared` first.
+
+With `sudo` on Ubuntu:
+```bash
+curl -L --output /tmp/cloudflared.deb \
+  "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-$(dpkg --print-architecture).deb"
+sudo dpkg -i /tmp/cloudflared.deb
+cloudflared --version
+```
+
+Without `sudo`, use a user-local binary:
+```bash
+mkdir -p ~/.local/bin
+curl -L --output ~/.local/bin/cloudflared \
+  "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64"
+chmod +x ~/.local/bin/cloudflared
+export PATH="$HOME/.local/bin:$PATH"
+cloudflared --version
+```
+
+## Cloudflare Tunnel URL Loads but Shows Origin Error / Connection Refused
+If `cloudflared` logs:
+`dial tcp 127.0.0.1:8765: connect: connection refused`
+
+Then the simulator is not listening on that port anymore.
+
+Fix:
+1. Restart the simulator:
+   ```bash
+   export SIM_PASSWORD='choose-a-strong-password'
+   python -m app sim --host 127.0.0.1 --port 8765 --no-browser
+   ```
+2. Verify it is listening:
+   ```bash
+   ss -ltnp | rg 8765
+   ```
+3. Keep that terminal open.
+4. Re-run:
+   ```bash
+   cloudflared tunnel --url http://localhost:8765
+   ```
+
+## Tunnel Works but the Password Page Does Not Appear
+If the UI opens directly without a login page, auth was not enabled at simulator startup.
+
+Fix:
+1. Stop the simulator.
+2. Export the password before starting it:
+   ```bash
+   export SIM_PASSWORD='choose-a-strong-password'
+   python -m app sim --host 127.0.0.1 --port 8765 --no-browser
+   ```
+3. Confirm startup prints:
+   `Simulator access password is enabled.`
+4. Open the local URL in a fresh private/incognito window to verify the login page appears before retrying the public tunnel URL.
+
+## Cloudflare Tunnel Logs ICMP or UDP Buffer Warnings
+Warnings such as:
+- `ICMP proxy feature is disabled`
+- `failed to sufficiently increase receive buffer size`
+
+are usually non-fatal for a demo tunnel. If the tunnel also logs a successful registration line and the remote URL loads, these warnings can generally be ignored for simulator access.

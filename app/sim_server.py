@@ -1,10 +1,16 @@
 from __future__ import annotations
 
+import html
+import hmac
 import json
 import mimetypes
 import os
+import secrets
 import struct
+import threading
+import time
 import xml.etree.ElementTree as ET
+from http import cookies
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -21,7 +27,23 @@ def _json_response(handler: BaseHTTPRequestHandler, payload: Dict[str, Any], sta
     handler.send_header("Content-Type", "application/json")
     handler.send_header("Content-Length", str(len(data)))
     handler.end_headers()
-    handler.wfile.write(data)
+    try:
+        handler.wfile.write(data)
+    except (BrokenPipeError, ConnectionResetError):
+        return
+
+
+def _html_response(handler: BaseHTTPRequestHandler, body: str, status: int = 200) -> None:
+    data = body.encode("utf-8")
+    handler.send_response(status)
+    handler.send_header("Content-Type", "text/html; charset=utf-8")
+    handler.send_header("Cache-Control", "no-store")
+    handler.send_header("Content-Length", str(len(data)))
+    handler.end_headers()
+    try:
+        handler.wfile.write(data)
+    except (BrokenPipeError, ConnectionResetError):
+        return
 
 
 def _safe_join(root: Path, path: str) -> Optional[Path]:
@@ -55,6 +77,15 @@ def _query_value(parsed, name: str) -> Optional[str]:
         return None
     value = values[0].strip()
     return value or None
+
+
+def _normalize_redirect_target(target: Optional[str]) -> str:
+    value = str(target or "").strip()
+    if not value.startswith("/"):
+        return "/"
+    if value.startswith("//"):
+        return "/"
+    return value or "/"
 
 
 def _parse_ply_bbox(path: Path) -> Optional[Dict[str, Any]]:
@@ -262,8 +293,307 @@ def _infer_job_kind(run_dir: Path) -> str:
 
 
 
+def _coerce_float(value: Any) -> Optional[float]:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not (number == number):
+        return None
+    return number
+
+
+def _humanize_name(value: Any) -> Optional[str]:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    text = Path(text).stem.replace("_", " ").replace("-", " ")
+    return " ".join(part for part in text.split() if part)
+
+
+def _extract_scene_label(config: Optional[Dict[str, Any]]) -> Optional[str]:
+    if not isinstance(config, dict):
+        return None
+    scene = config.get("scene")
+    if not isinstance(scene, dict):
+        return None
+    for key in ("label", "name", "title"):
+        label = _humanize_name(scene.get(key))
+        if label:
+            return label
+    if str(scene.get("type") or "").strip() == "builtin":
+        return _humanize_name(scene.get("builtin"))
+    return _humanize_name(scene.get("file"))
+
+
+def _pick_run_thumbnail(run_dir: Path) -> tuple[Optional[str], Optional[str]]:
+    explorer_thumb = run_dir / "viewer" / "thumbnail.png"
+    if explorer_thumb.exists():
+        return f"/runs/{run_dir.name}/viewer/thumbnail.png", "Explorer thumbnail"
+    return None, None
+
+
+def _build_run_listing(
+    run_dir: Path,
+    summary: Optional[Dict[str, Any]],
+    config: Optional[Dict[str, Any]],
+    *,
+    has_viewer: Optional[bool] = None,
+) -> Dict[str, Any]:
+    cfg = config if isinstance(config, dict) else {}
+    summary_data = summary if isinstance(summary, dict) else None
+    simulation = cfg.get("simulation") if isinstance(cfg.get("simulation"), dict) else {}
+    runtime = summary_data.get("runtime") if summary_data else {}
+    runtime = runtime if isinstance(runtime, dict) else {}
+    metrics = summary_data.get("metrics") if summary_data else {}
+    metrics = metrics if isinstance(metrics, dict) else {}
+    timings = runtime.get("timings_s")
+
+    viewer_manifest = run_dir / "viewer" / "scene_manifest.json"
+    thumbnail_path, thumbnail_label = _pick_run_thumbnail(run_dir)
+    frequency_hz = _coerce_float(simulation.get("frequency_hz"))
+    total_seconds = _coerce_float(timings.get("total_s")) if isinstance(timings, dict) else None
+    config_path = run_dir / "config.yaml"
+
+    return {
+        "run_id": run_dir.name,
+        "summary": summary_data,
+        "config_path": str(config_path) if config_path.exists() else None,
+        "has_viewer": viewer_manifest.exists() if has_viewer is None else bool(has_viewer),
+        "kind": _infer_job_kind(run_dir),
+        "scope": infer_run_scope_from_config(cfg) if cfg else "sim",
+        "scene_label": _extract_scene_label(cfg),
+        "backend": str(runtime.get("rt_backend") or runtime.get("mitsuba_variant") or "").strip() or None,
+        "frequency_ghz": (frequency_hz / 1e9) if frequency_hz is not None else None,
+        "max_depth": simulation.get("max_depth"),
+        "path_count": metrics.get("num_valid_paths"),
+        "total_path_gain_db": metrics.get("total_path_gain_db"),
+        "rx_power_dbm": metrics.get("rx_power_dbm_estimate"),
+        "duration_s": total_seconds,
+        "thumbnail_path": thumbnail_path,
+        "thumbnail_label": thumbnail_label,
+        "quality_preset": cfg.get("quality", {}).get("preset") if isinstance(cfg.get("quality"), dict) else None,
+    }
+
+
 class SimRequestHandler(BaseHTTPRequestHandler):
     server_version = "RIS_SIONNA_Sim/0.1"
+
+    def _is_api_request(self, path: str) -> bool:
+        return path.startswith("/api/")
+
+    def _request_target(self) -> str:
+        parsed = urlparse(self.path)
+        target = parsed.path or "/"
+        if parsed.query:
+            target = f"{target}?{parsed.query}"
+        return _normalize_redirect_target(target)
+
+    def _read_body(self) -> bytes:
+        length = int(self.headers.get("Content-Length", "0") or "0")
+        return self.rfile.read(length) if length else b""
+
+    def _session_cookie_name(self) -> str:
+        return self.server.auth_cookie_name
+
+    def _current_session_token(self) -> Optional[str]:
+        raw = self.headers.get("Cookie", "")
+        if not raw:
+            return None
+        jar = cookies.SimpleCookie()
+        try:
+            jar.load(raw)
+        except cookies.CookieError:
+            return None
+        morsel = jar.get(self._session_cookie_name())
+        if morsel is None:
+            return None
+        token = morsel.value.strip()
+        return token or None
+
+    def _is_authenticated(self) -> bool:
+        if not self.server.auth_enabled:
+            return True
+        token = self._current_session_token()
+        if not token:
+            return False
+        return self.server.validate_session(token)
+
+    def _set_session_cookie(self, token: str) -> None:
+        cookie = cookies.SimpleCookie()
+        cookie[self._session_cookie_name()] = token
+        cookie[self._session_cookie_name()]["path"] = "/"
+        cookie[self._session_cookie_name()]["httponly"] = True
+        cookie[self._session_cookie_name()]["samesite"] = "Lax"
+        self.send_header("Set-Cookie", cookie.output(header="").strip())
+
+    def _clear_session_cookie(self) -> None:
+        cookie = cookies.SimpleCookie()
+        cookie[self._session_cookie_name()] = ""
+        cookie[self._session_cookie_name()]["path"] = "/"
+        cookie[self._session_cookie_name()]["expires"] = "Thu, 01 Jan 1970 00:00:00 GMT"
+        cookie[self._session_cookie_name()]["max-age"] = "0"
+        cookie[self._session_cookie_name()]["httponly"] = True
+        cookie[self._session_cookie_name()]["samesite"] = "Lax"
+        self.send_header("Set-Cookie", cookie.output(header="").strip())
+
+    def _redirect(self, location: str, set_cookie_token: Optional[str] = None, clear_cookie: bool = False) -> None:
+        self.send_response(303)
+        self.send_header("Location", _normalize_redirect_target(location))
+        self.send_header("Cache-Control", "no-store")
+        if set_cookie_token:
+            self._set_session_cookie(set_cookie_token)
+        if clear_cookie:
+            self._clear_session_cookie()
+        self.end_headers()
+
+    def _render_login_page(self, error: Optional[str] = None, next_target: Optional[str] = None) -> str:
+        message = ""
+        if error:
+            message = f'<p class="error">{html.escape(error)}</p>'
+        target = html.escape(_normalize_redirect_target(next_target), quote=True)
+        return f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RIS_SIONNA Login</title>
+  <style>
+    :root {{
+      color-scheme: light;
+      --bg-a: #eef6ff;
+      --bg-b: #d8f0df;
+      --panel: rgba(255, 255, 255, 0.92);
+      --text: #122033;
+      --muted: #576579;
+      --accent: #0d6a87;
+      --accent-strong: #084c61;
+      --danger: #9f1d35;
+      --border: rgba(18, 32, 51, 0.12);
+    }}
+    * {{ box-sizing: border-box; }}
+    body {{
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      font-family: "Segoe UI", "Helvetica Neue", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(13, 106, 135, 0.18), transparent 35%),
+        radial-gradient(circle at bottom right, rgba(16, 125, 87, 0.16), transparent 30%),
+        linear-gradient(135deg, var(--bg-a), var(--bg-b));
+    }}
+    .panel {{
+      width: min(420px, 100%);
+      padding: 32px 28px;
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      background: var(--panel);
+      backdrop-filter: blur(8px);
+      box-shadow: 0 28px 60px rgba(18, 32, 51, 0.16);
+    }}
+    h1 {{
+      margin: 0 0 10px;
+      font-size: 1.9rem;
+      line-height: 1.1;
+    }}
+    p {{
+      margin: 0 0 18px;
+      color: var(--muted);
+      line-height: 1.5;
+    }}
+    label {{
+      display: block;
+      margin-bottom: 8px;
+      font-size: 0.95rem;
+      font-weight: 600;
+    }}
+    input {{
+      width: 100%;
+      padding: 14px 16px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      font: inherit;
+      background: #fff;
+    }}
+    button {{
+      width: 100%;
+      margin-top: 16px;
+      padding: 14px 16px;
+      border: 0;
+      border-radius: 12px;
+      font: inherit;
+      font-weight: 700;
+      color: #fff;
+      background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+      cursor: pointer;
+    }}
+    .error {{
+      margin-bottom: 14px;
+      color: var(--danger);
+      font-weight: 600;
+    }}
+    .hint {{
+      margin-top: 14px;
+      font-size: 0.88rem;
+    }}
+  </style>
+</head>
+<body>
+  <main class="panel">
+    <h1>RIS_SIONNA</h1>
+    <p>Enter the local showcase password to access the simulator and run controls.</p>
+    {message}
+    <form method="post" action="/auth/login">
+      <input type="hidden" name="next" value="{target}">
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" autofocus required>
+      <button type="submit">Sign In</button>
+    </form>
+    <p class="hint">Authentication is enabled on this simulator instance.</p>
+  </main>
+</body>
+</html>
+"""
+
+    def _serve_login_page(self, status: int = 200, error: Optional[str] = None) -> None:
+        _html_response(self, self._render_login_page(error=error, next_target=self._request_target()), status=status)
+
+    def _auth_gate(self) -> bool:
+        parsed = urlparse(self.path)
+        path = parsed.path
+        if not self.server.auth_enabled:
+            return True
+        if path in {"/auth/login", "/auth/logout"}:
+            return True
+        if path == "/api/ping":
+            return True
+        if self._is_authenticated():
+            return True
+        if self._is_api_request(path):
+            _json_response(self, {"error": "authentication required"}, status=401)
+            return False
+        self._serve_login_page()
+        return False
+
+    def _handle_login(self) -> None:
+        body = self._read_body()
+        form = parse_qs(body.decode("utf-8", errors="ignore"))
+        password = str((form.get("password") or [""])[0] or "")
+        next_target = _normalize_redirect_target((form.get("next") or ["/"])[0])
+        if not self.server.auth_enabled:
+            return self._redirect(next_target)
+        if not password or not hmac.compare_digest(password, self.server.auth_password):
+            _html_response(
+                self,
+                self._render_login_page(error="Incorrect password.", next_target=next_target),
+                status=401,
+            )
+            return
+        token = self.server.create_session()
+        self._redirect(next_target, set_cookie_token=token)
 
     def _serve_file(self, path: Path) -> None:
         if not path.exists() or not path.is_file():
@@ -273,14 +603,17 @@ class SimRequestHandler(BaseHTTPRequestHandler):
         data = path.read_bytes()
         self.send_response(200)
         self.send_header("Content-Type", ctype)
-        if path.suffix in {".js", ".css", ".png", ".jpg", ".jpeg", ".svg", ".glb"}:
+        if path.suffix in {".js", ".css", ".png", ".jpg", ".jpeg", ".svg", ".glb", ".ply"}:
             if "vendor" in path.parts:
                 self.send_header("Cache-Control", "public, max-age=86400")
             else:
-                self.send_header("Cache-Control", "no-store")
+                self.send_header("Cache-Control", "public, max-age=3600")
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
-        self.wfile.write(data)
+        try:
+            self.wfile.write(data)
+        except (BrokenPipeError, ConnectionResetError):
+            return
 
     def _serve_static(self, rel_path: str) -> None:
         static_root: Path = self.server.static_root
@@ -378,14 +711,7 @@ class SimRequestHandler(BaseHTTPRequestHandler):
                         config = None
                 if scope and infer_run_scope_from_config(config) != scope:
                     continue
-                runs.append(
-                    {
-                        "run_id": run_dir.name,
-                        "summary": summary,
-                        "config_path": str(config_path) if config_path.exists() else None,
-                        "has_viewer": viewer_path.exists(),
-                    }
-                )
+                runs.append(_build_run_listing(run_dir, summary, config, has_viewer=viewer_path.exists()))
         return {"runs": runs}
 
     def _list_configs(self) -> Dict[str, Any]:
@@ -451,7 +777,22 @@ class SimRequestHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
+        if parsed.path == "/auth/logout":
+            token = self._current_session_token()
+            if token:
+                self.server.drop_session(token)
+            self._redirect("/", clear_cookie=True)
+            return
+        if parsed.path == "/auth/login":
+            if self._is_authenticated():
+                self._redirect("/")
+                return
+            self._serve_login_page()
+            return
+        if not self._auth_gate():
+            return
         scope = _query_value(parsed, "scope")
+        kind = _query_value(parsed, "kind")
         if parsed.path.startswith("/api/configs"):
             return _json_response(self, self._list_configs())
         if parsed.path.startswith("/api/scenes"):
@@ -485,9 +826,11 @@ class SimRequestHandler(BaseHTTPRequestHandler):
         if parsed.path.startswith("/api/latest-viewer"):
             return _json_response(self, self._find_latest_viewer_run(scope=scope))
         if parsed.path.startswith("/api/runs"):
-            return _json_response(self, self._list_runs(scope=scope))
+            return _json_response(self, self._list_runs(scope=scope, kind=kind))
         if parsed.path.startswith("/api/campaign/runs"):
             return _json_response(self, self._list_runs(kind="campaign"))
+        if parsed.path.startswith("/api/link/runs"):
+            return _json_response(self, self._list_runs(kind="link_level"))
         if parsed.path.startswith("/api/run/"):
             run_id = parsed.path.split("/", 3)[3]
             run_dir = self.server.output_root / run_id
@@ -521,6 +864,24 @@ class SimRequestHandler(BaseHTTPRequestHandler):
             return _json_response(self, job)
         if parsed.path.startswith("/api/ris/jobs"):
             jobs = self.server.job_manager.list_jobs(kind="ris_lab")
+            return _json_response(self, jobs)
+        if parsed.path.startswith("/api/ris-synth/jobs/"):
+            job_id = parsed.path.split("/", 4)[4]
+            job = self.server.job_manager.get_job(job_id)
+            if not job or job.get("kind") != "ris_synthesis":
+                return _json_response(self, {"error": "job not found"}, status=404)
+            return _json_response(self, job)
+        if parsed.path.startswith("/api/ris-synth/jobs"):
+            jobs = self.server.job_manager.list_jobs(kind="ris_synthesis")
+            return _json_response(self, jobs)
+        if parsed.path.startswith("/api/link/jobs/"):
+            job_id = parsed.path.split("/", 4)[4]
+            job = self.server.job_manager.get_job(job_id)
+            if not job or job.get("kind") != "link_level":
+                return _json_response(self, {"error": "job not found"}, status=404)
+            return _json_response(self, job)
+        if parsed.path.startswith("/api/link/jobs"):
+            jobs = self.server.job_manager.list_jobs(kind="link_level")
             return _json_response(self, jobs)
         if parsed.path.startswith("/api/campaign/jobs/"):
             job_id = parsed.path.split("/", 4)[4]
@@ -558,17 +919,25 @@ class SimRequestHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         parsed = urlparse(self.path)
-        if parsed.path not in {"/api/jobs", "/api/ris/jobs", "/api/campaign/jobs"}:
+        if parsed.path == "/auth/login":
+            self._handle_login()
+            return
+        if not self._auth_gate():
+            return
+        if parsed.path not in {"/api/jobs", "/api/ris/jobs", "/api/ris-synth/jobs", "/api/campaign/jobs", "/api/link/jobs"}:
             self.send_error(404, "Not found")
             return
-        length = int(self.headers.get("Content-Length", "0") or "0")
-        body = self.rfile.read(length) if length else b"{}"
+        body = self._read_body() or b"{}"
         try:
             payload = json.loads(body.decode("utf-8"))
         except Exception:
             payload = {}
         if parsed.path == "/api/ris/jobs":
             payload["kind"] = "ris_lab"
+        if parsed.path == "/api/ris-synth/jobs":
+            payload["kind"] = "ris_synthesis"
+        if parsed.path == "/api/link/jobs":
+            payload["kind"] = "link_level"
         if parsed.path == "/api/campaign/jobs":
             payload["kind"] = "campaign"
         try:
@@ -585,16 +954,60 @@ class SimRequestHandler(BaseHTTPRequestHandler):
 
 class SimServer(ThreadingHTTPServer):
     def __init__(
-        self, host: str, port: int, static_root: Path, output_root: Path, config_root: Path
+        self,
+        host: str,
+        port: int,
+        static_root: Path,
+        output_root: Path,
+        config_root: Path,
+        auth_password: Optional[str] = None,
     ) -> None:
         self.static_root = static_root
         self.output_root = output_root
         self.config_root = config_root
         self.job_manager = JobManager(output_root)
+        self.auth_password = str(auth_password or "")
+        self.auth_enabled = bool(self.auth_password)
+        self.auth_cookie_name = "ris_sim_session"
+        self.auth_session_ttl_s = 12 * 60 * 60
+        self._auth_sessions: Dict[str, float] = {}
+        self._auth_lock = threading.Lock()
         super().__init__((host, port), SimRequestHandler)
 
+    def _prune_sessions_locked(self, now: Optional[float] = None) -> None:
+        timestamp = now if now is not None else time.time()
+        expired = [
+            token
+            for token, created_at in self._auth_sessions.items()
+            if (timestamp - created_at) > self.auth_session_ttl_s
+        ]
+        for token in expired:
+            self._auth_sessions.pop(token, None)
 
-def serve_simulator(host: str = "127.0.0.1", port: int = 8765) -> None:
+    def create_session(self) -> str:
+        token = secrets.token_urlsafe(32)
+        with self._auth_lock:
+            self._prune_sessions_locked()
+            self._auth_sessions[token] = time.time()
+        return token
+
+    def validate_session(self, token: str) -> bool:
+        with self._auth_lock:
+            self._prune_sessions_locked()
+            created_at = self._auth_sessions.get(token)
+            if created_at is None:
+                return False
+            self._auth_sessions[token] = time.time()
+            return True
+
+    def drop_session(self, token: str) -> None:
+        with self._auth_lock:
+            self._auth_sessions.pop(token, None)
+
+
+def serve_simulator(
+    host: str = "127.0.0.1", port: int = 8765, auth_password: Optional[str] = None
+) -> None:
     static_root = Path(__file__).parent / "sim_web"
     ensure_three_vendor(static_root)
     output_root = Path("outputs")
@@ -605,8 +1018,11 @@ def serve_simulator(host: str = "127.0.0.1", port: int = 8765) -> None:
         static_root=static_root,
         output_root=output_root,
         config_root=config_root,
+        auth_password=auth_password,
     )
     print(f"RIS_SIONNA simulator running at http://{host}:{port}")
+    if auth_password:
+        print("Simulator access password is enabled.")
     try:
         server.serve_forever()
     finally:

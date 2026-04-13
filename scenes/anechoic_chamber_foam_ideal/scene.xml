@@ -1,0 +1,89 @@
+<scene version="3.0.0">
+  <integrator type="path">
+    <integer name="max_depth" value="8"/>
+  </integrator>
+
+  <emitter type="constant">
+    <rgb name="radiance" value="1.0"/>
+  </emitter>
+
+  <!-- Ideal chamber test scene: foam chamber assets, absorber floor, no stools. -->
+  <bsdf type="twosided" id="mat-itu_absorber">
+    <bsdf type="diffuse">
+      <rgb name="reflectance" value="0.08"/>
+    </bsdf>
+  </bsdf>
+
+  <!-- Absorber surfaces -->
+  <shape type="ply" id="absorber_back">
+    <string name="filename" value="../anechoic_chamber_foam/meshes/absorber_back.ply"/>
+    <ref id="mat-itu_absorber" name="bsdf"/>
+  </shape>
+
+  <shape type="ply" id="absorber_floorbar">
+    <string name="filename" value="../anechoic_chamber_foam/meshes/absorber_floorbar.ply"/>
+    <ref id="mat-itu_absorber" name="bsdf"/>
+  </shape>
+
+  <shape type="ply" id="absorber_frontwall">
+    <string name="filename" value="../anechoic_chamber_foam/meshes/absorber_frontwall.ply"/>
+    <ref id="mat-itu_absorber" name="bsdf"/>
+  </shape>
+
+  <shape type="ply" id="absorber_leftwall">
+    <string name="filename" value="../anechoic_chamber_foam/meshes/absorber_leftwall.ply"/>
+    <ref id="mat-itu_absorber" name="bsdf"/>
+  </shape>
+
+  <shape type="ply" id="absorber_pillar">
+    <string name="filename" value="../anechoic_chamber_foam/meshes/absorber_pillar.ply"/>
+    <ref id="mat-itu_absorber" name="bsdf"/>
+  </shape>
+
+  <shape type="ply" id="absorber_rightwall">
+    <string name="filename" value="../anechoic_chamber_foam/meshes/absorber_rightwall.ply"/>
+    <ref id="mat-itu_absorber" name="bsdf"/>
+  </shape>
+
+  <!-- Foam surfaces -->
+  <shape type="ply" id="foam_backwall">
+    <string name="filename" value="../anechoic_chamber_foam/meshes/foam_backwall.ply"/>
+    <ref id="mat-itu_absorber" name="bsdf"/>
+  </shape>
+
+  <shape type="ply" id="foam_barcover">
+    <string name="filename" value="../anechoic_chamber_foam/meshes/foam_barcover.ply"/>
+    <ref id="mat-itu_absorber" name="bsdf"/>
+  </shape>
+
+  <shape type="ply" id="foam_frontwall">
+    <string name="filename" value="../anechoic_chamber_foam/meshes/foam_frontwall.ply"/>
+    <ref id="mat-itu_absorber" name="bsdf"/>
+  </shape>
+
+  <shape type="ply" id="foam_leftwall">
+    <string name="filename" value="../anechoic_chamber_foam/meshes/foam_leftwall.ply"/>
+    <ref id="mat-itu_absorber" name="bsdf"/>
+  </shape>
+
+  <shape type="ply" id="foam_pillarcover">
+    <string name="filename" value="../anechoic_chamber_foam/meshes/foam_pillarcover.ply"/>
+    <ref id="mat-itu_absorber" name="bsdf"/>
+  </shape>
+
+  <shape type="ply" id="foam_rightwall">
+    <string name="filename" value="../anechoic_chamber_foam/meshes/foam_rightwall.ply"/>
+    <ref id="mat-itu_absorber" name="bsdf"/>
+  </shape>
+
+  <shape type="ply" id="foam_roof">
+    <string name="filename" value="../anechoic_chamber_foam/meshes/foam_roof.ply"/>
+    <ref id="mat-itu_absorber" name="bsdf"/>
+  </shape>
+
+  <!-- Floor treated as absorber for ideal chamber isolation tests. -->
+  <shape type="ply" id="metal_floor">
+    <string name="filename" value="../anechoic_chamber_foam/meshes/metal_floor.ply"/>
+    <ref id="mat-itu_absorber" name="bsdf"/>
+  </shape>
+</scene>

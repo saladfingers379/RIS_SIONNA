@@ -1,0 +1,149 @@
+project:
+  name: RIS_SIONNA
+  description: "Ashby outdoor RIS link seed with strong RIS-on/off separation"
+
+runtime:
+  prefer_gpu: true
+  force_cpu: false
+  require_cuda: true
+  tensorflow_import: auto
+  disable_pythreejs: true
+  mitsuba_variant: auto
+  vram_guard:
+    threshold_mb: 9000
+    scale: 0.5
+
+simulation:
+  frequency_hz: 28.0e9
+  max_depth: 6
+  max_num_paths_per_src: 2000000
+  samples_per_src: 2000000
+  los: true
+  specular_reflection: true
+  diffuse_reflection: true
+  refraction: false
+  diffraction: false
+  ris: true
+  scale_similarity:
+    enabled: false
+    factor: 1.0
+  sampling_boost:
+    enabled: false
+    map_resolution_multiplier: 1.0
+    ray_samples_multiplier: 1.0
+    max_depth_add: 0
+
+scene:
+  type: file
+  builtin: etoile
+  file: scenes/ashby/scene.xml
+  mesh: null
+  proxy_enabled: false
+  export_mesh: true
+  procedural:
+    preset: null
+    ground:
+      size: [10, 10]
+      elevation: 0.1
+      material: concrete
+    boxes: []
+  proxy:
+    ground:
+      size: [12, 12]
+      elevation: 0
+    boxes: []
+  tx:
+    name: tx
+    position: [101.36440485535678, -23.07388753120466, 2.0]
+    look_at: [66.694, -43.203, 2.0]
+    look_at_ris: true
+    power_dbm: 28
+  rx:
+    name: rx
+    position: [48.15698874163702, -25.268006964297015, 2.0]
+  camera:
+    position: [4, 4, 3.4]
+    orientation: [0, 1.5708, -1.5708]
+  arrays:
+    tx:
+      num_rows: 1
+      num_cols: 1
+      vertical_spacing: 0.5
+      horizontal_spacing: 0.5
+      pattern: tr38901
+      polarization: V
+    rx:
+      num_rows: 1
+      num_cols: 1
+      vertical_spacing: 0.5
+      horizontal_spacing: 0.5
+      pattern: horn_15dbi
+      polarization: V
+  objects: []
+  floor_elevation: 0.1
+
+radio_map:
+  enabled: true
+  auto_size: true
+  auto_padding: 10.0
+  center: [30.0, 30.0, 1.5]
+  orientation: [0.0, 0.0, 0.0]
+  size: [80.0, 80.0]
+  cell_size: [2.0, 2.0]
+  batch_size: 512
+  samples_per_tx: 2000000
+  max_depth: 5
+  los: true
+  specular_reflection: true
+  diffuse_reflection: true
+  refraction: true
+  diffraction: false
+  center_z_only: 1.5
+  z_stack:
+    enabled: false
+  plot_style: heatmap
+  plot_metrics:
+    - path_gain
+  plot_show_tx: true
+  plot_show_rx: false
+  plot_show_ris: false
+  diff_ris: false
+  ris: true
+
+render:
+  enabled: true
+  samples: 128
+  resolution: [1200, 900]
+
+visualization:
+  ray_paths:
+    enabled: true
+    max_paths: 3000
+
+quality:
+  preset: high
+
+ris:
+  enabled: true
+  notes: "Derived from output 20260409_144016_900175; uses the indoor campaign/RIS Lab small-panel benchmark geometry and amplitude convention"
+  geometry_mode: spacing_driven
+  spacing:
+    dx_m: 0.0049
+    dy_m: 0.0049
+    num_cells_x: 20
+    num_cells_y: 20
+  objects:
+    - name: ris1
+      enabled: true
+      position: [66.694, -43.203, 2.0]
+      orientation: [1.2217304763960306, 0.0, 0.0]
+      num_modes: 1
+      profile:
+        kind: phase_gradient_reflector
+        auto_aim: true
+        sources: [101.36440485535678, -23.07388753120466, 2.0]
+        targets: [48.15698874163702, -25.268006964297015, 2.0]
+        amplitude: 0.84
+
+output:
+  base_dir: outputs

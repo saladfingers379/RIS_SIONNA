@@ -188,12 +188,14 @@ def quantize_phase(phase_rad: np.ndarray, bits: Optional[int]) -> np.ndarray:
     """Quantize phase in radians using uniform B-bit levels over [0, 2π)."""
 
     phase = np.array(phase_rad, dtype=float)
+    if not np.all(np.isfinite(phase)):
+        raise ValueError("phase_rad must contain only finite values")
     phase_wrapped = np.mod(phase, 2.0 * np.pi)
 
     if bits in (None, 0):
         return phase_wrapped
-    if not isinstance(bits, int) or bits not in (1, 2):
-        raise ValueError("quantization_bits must be 1, 2, 0, or None")
+    if not isinstance(bits, int) or bits < 1:
+        raise ValueError("quantization_bits must be a positive integer, 0, or None")
 
     levels = 2**int(bits)
     step = 2.0 * np.pi / levels

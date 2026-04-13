@@ -130,6 +130,7 @@ def plot_radio_map(
     tx_pos: np.ndarray | None = None,
     rx_pos: np.ndarray | None = None,
     ris_positions: list[np.ndarray] | None = None,
+    guide_paths: list[Dict[str, Any]] | None = None,
     axis_labels: Tuple[str, str] = ("x [m]", "y [m]"),
     title_suffix: str | None = None,
 ) -> Tuple[Path, Path]:
@@ -145,6 +146,33 @@ def plot_radio_map(
     ax.set_title(_radio_map_title(metric_label, title_suffix=title_suffix))
     ax.set_xlabel(axis_labels[0])
     ax.set_ylabel(axis_labels[1])
+    if guide_paths:
+        for guide in guide_paths:
+            if not isinstance(guide, dict) or guide.get("enabled", True) is False:
+                continue
+            points = guide.get("points")
+            if not isinstance(points, (list, tuple)) or len(points) < 2:
+                continue
+            projected = []
+            for point in points:
+                arr = np.asarray(point, dtype=float).reshape(-1)
+                if arr.size < 3 or not np.isfinite(arr[:3]).all():
+                    projected = []
+                    break
+                projected.append(_project_point_to_plane_axes(arr[:3], origin, u_unit, v_unit))
+            if len(projected) < 2:
+                continue
+            u_vals = [point[0] for point in projected]
+            v_vals = [point[1] for point in projected]
+            ax.plot(
+                u_vals,
+                v_vals,
+                color=str(guide.get("color", "#f59e0b")),
+                linestyle=str(guide.get("linestyle", "--")),
+                linewidth=float(guide.get("linewidth", 2.0)),
+                alpha=float(guide.get("alpha", 0.9)),
+                label=str(guide.get("label", "Guide")),
+            )
     if tx_pos is not None:
         tx_u, tx_v = _project_point_to_plane_axes(np.asarray(tx_pos, dtype=float), origin, u_unit, v_unit)
         ax.scatter([tx_u], [tx_v], color="#dc322f", s=30, label="Tx")
@@ -156,7 +184,7 @@ def plot_radio_map(
             label = "RIS" if idx == 0 else None
             ris_u, ris_v = _project_point_to_plane_axes(np.asarray(pos, dtype=float), origin, u_unit, v_unit)
             ax.scatter([ris_u], [ris_v], color="#000000", s=40, marker="*", label=label)
-    if tx_pos is not None or rx_pos is not None or ris_positions:
+    if tx_pos is not None or rx_pos is not None or ris_positions or guide_paths:
         ax.legend(loc="upper right")
     fig.colorbar(im, ax=ax, label=metric_label)
     fig.tight_layout()

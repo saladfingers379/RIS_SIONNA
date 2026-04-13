@@ -26,6 +26,19 @@ def _load_yaml(path: Path) -> Dict[str, Any]:
         return yaml.safe_load(f)
 
 
+def _load_run_config(output_root: Path, run_id: str) -> Dict[str, Any]:
+    run_dir = output_root / str(run_id)
+    if not run_dir.exists():
+        raise FileNotFoundError(f"Run not found: {run_id}")
+    for name in ("job_config.yaml", "config.yaml"):
+        candidate = run_dir / name
+        if candidate.exists():
+            cfg = _load_yaml(candidate)
+            if isinstance(cfg, dict):
+                return cfg
+    raise FileNotFoundError(f"No config found for run: {run_id}")
+
+
 def _reconcile_loaded_jobs(jobs: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
     reconciled: Dict[str, Dict[str, Any]] = {}
     for job_id, job in (jobs or {}).items():
@@ -70,6 +83,13 @@ def _reconcile_loaded_jobs(jobs: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[st
     return reconciled
 
 
+def _job_output_exists(job: Dict[str, Any]) -> bool:
+    output_dir = str(job.get("output_dir") or "").strip()
+    if not output_dir:
+        return False
+    return Path(output_dir).exists()
+
+
 def _estimate_job_cost(cfg: Dict[str, Any]) -> Dict[str, Any]:
     sim = cfg.get("simulation", {})
     radio = cfg.get("radio_map", {})
@@ -80,7 +100,12 @@ def _estimate_job_cost(cfg: Dict[str, Any]) -> Dict[str, Any]:
         size = radio.get("size", [1.0, 1.0])
         cell = radio.get("cell_size", [1.0, 1.0])
         grid = max(1, int(size[0] / cell[0])) * max(1, int(size[1] / cell[1]))
-    slice_count = 1 + len(radio_map_z_slice_offsets(radio)) if radio.get("enabled") else 1
+    if radio.get("enabled"):
+        slice_count = 1 + len(radio_map_z_slice_offsets(radio))
+        if radio.get("ris_off_map"):
+            slice_count *= 2
+    else:
+        slice_count = 1
     score = grid * rays * max_depth * slice_count
     return {
         "score": score,
@@ -247,7 +272,7 @@ class JobManager:
     def list_jobs(self, kind: Optional[str] = None, scope: Optional[str] = None) -> Dict[str, Any]:
         with self._lock:
             self._reconcile_orphaned_running_jobs_locked()
-            jobs = list(self.jobs.values())
+            jobs = [job for job in self.jobs.values() if isinstance(job, dict) and _job_output_exists(job)]
             if kind:
                 jobs = [job for job in jobs if job.get("kind") == kind]
             if scope:
@@ -264,6 +289,10 @@ class JobManager:
             return self._create_campaign_job(payload)
         if kind == "ris_lab":
             return self._create_ris_lab_job(payload)
+        if kind == "link_level":
+            return self._create_link_level_job(payload)
+        if kind == "ris_synthesis":
+            return self._create_ris_synthesis_job(payload)
         if kind != "run":
             kind = "run"
         preset = payload.get("preset")
@@ -351,6 +380,103 @@ class JobManager:
 
         process = subprocess.Popen(
             [sys.executable, "-m", "app", "run", "--config", str(job_config_path)],
+            stdout=job_log_path.open("w", encoding="utf-8"),
+            stderr=subprocess.STDOUT,
+        )
+
+        with self._lock:
+            self.jobs[job_id] = job
+            self.processes[job_id] = JobHandle(job_id=job_id, run_id=run_id, process=process)
+            self._save_jobs()
+
+        save_json(output_dir / "job.json", job)
+        return job
+
+    def _create_link_level_job(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        seed_type = str(payload.get("seed_type") or "run").strip().lower()
+        seed_cfg: Dict[str, Any] | None = None
+        seed_run_id = None
+        seed_config_path = None
+
+        if isinstance(payload.get("seed_config"), dict):
+            seed_cfg = payload["seed_config"]
+            seed_type = "inline"
+        elif seed_type == "run":
+            seed_run_id = str(payload.get("seed_run_id") or payload.get("run_id") or "").strip()
+            if not seed_run_id:
+                raise ValueError("Link-level job requires seed_run_id when seed_type=run")
+            seed_cfg = _load_run_config(self.output_root, seed_run_id)
+        else:
+            seed_config_path = str(payload.get("seed_config_path") or payload.get("config_path") or "").strip()
+            if not seed_config_path:
+                raise ValueError("Link-level job requires seed_config_path when seed_type=config")
+            config_path = Path(seed_config_path)
+            if not config_path.exists():
+                raise FileNotFoundError(f"Link seed config not found: {config_path}")
+            seed_cfg = _load_yaml(config_path)
+            if not isinstance(seed_cfg, dict):
+                raise ValueError("Link seed config must be a YAML mapping")
+
+        runtime = dict((seed_cfg.get("runtime") or {}))
+        runtime_overrides = payload.get("runtime")
+        if isinstance(runtime_overrides, dict):
+            _deep_update(runtime, runtime_overrides)
+
+        evaluation = payload.get("evaluation") if isinstance(payload.get("evaluation"), dict) else {}
+        ris_variants = payload.get("ris_variants")
+        if isinstance(ris_variants, list):
+            evaluation["ris_variants"] = ris_variants
+
+        estimators = payload.get("estimators")
+        if isinstance(estimators, list):
+            evaluation["estimators"] = estimators
+
+        run_id = generate_run_id()
+        base_dir = str(payload.get("base_dir") or "outputs")
+        output_dir = create_output_dir(base_dir, run_id=run_id)
+        job_id = f"job-{run_id}"
+
+        job_cfg = {
+            "schema_version": 1,
+            "job": {
+                "id": job_id,
+                "kind": "link_level",
+            },
+            "seed": {
+                "type": seed_type,
+                "run_id": seed_run_id,
+                "config_path": seed_config_path,
+                "config": seed_cfg,
+                "prepare_seed_run": bool(seed_type == "config" and payload.get("prepare_seed_run", True)),
+            },
+            "runtime": runtime,
+            "evaluation": evaluation,
+            "output": {
+                "base_dir": base_dir,
+                "run_id": run_id,
+            },
+        }
+
+        job_config_path = output_dir / "job_config.yaml"
+        save_yaml(job_config_path, job_cfg)
+        job_log_path = output_dir / "job.log"
+
+        job = {
+            "job_id": job_id,
+            "run_id": run_id,
+            "kind": "link_level",
+            "status": "running",
+            "created_at": _now_ts(),
+            "started_at": _now_ts(),
+            "config_path": str(job_config_path),
+            "output_dir": str(output_dir),
+            "seed_type": seed_type,
+            "seed_run_id": seed_run_id,
+            "seed_config_path": seed_config_path,
+        }
+
+        process = subprocess.Popen(
+            [sys.executable, "-m", "app", "link", "eval", "--config", str(job_config_path)],
             stdout=job_log_path.open("w", encoding="utf-8"),
             stderr=subprocess.STDOUT,
         )
@@ -519,6 +645,133 @@ class JobManager:
 
         process = subprocess.Popen(
             command,
+            stdout=job_log_path.open("w", encoding="utf-8"),
+            stderr=subprocess.STDOUT,
+        )
+
+        with self._lock:
+            self.jobs[job_id] = job
+            self.processes[job_id] = JobHandle(job_id=job_id, run_id=run_id, process=process)
+            self._save_jobs()
+
+        save_json(output_dir / "job.json", job)
+        return job
+
+    def _create_ris_synthesis_job(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        action = str(payload.get("action") or "run").strip().lower()
+        if action == "quantize":
+            return self._create_ris_synthesis_quantization_job(payload)
+        cfg = None
+        config_data = payload.get("config_data")
+        if isinstance(config_data, dict):
+            cfg = config_data
+        elif isinstance(payload.get("config"), dict):
+            cfg = payload.get("config")
+        else:
+            config_value = payload.get("config_path") or payload.get("config") or payload.get("base_config")
+            if not config_value:
+                raise ValueError("RIS synthesis job requires config_path or config_data")
+            config_path = Path(config_value)
+            if not config_path.exists():
+                raise FileNotFoundError(f"RIS synthesis config not found: {config_path}")
+            cfg = _load_yaml(config_path)
+            if not isinstance(cfg, dict):
+                raise ValueError("RIS synthesis config must be a YAML mapping")
+
+        output_cfg = cfg.setdefault("output", {})
+        run_id = generate_run_id()
+        output_cfg["run_id"] = run_id
+        base_dir = output_cfg.get("base_dir", "outputs")
+        output_dir = create_output_dir(base_dir, run_id=run_id)
+
+        job_id = f"job-{run_id}"
+        cfg.setdefault("job", {})
+        cfg["job"].update({"id": job_id, "kind": "ris_synthesis", "action": "run"})
+
+        job_config_path = output_dir / "job_config.yaml"
+        save_yaml(job_config_path, cfg)
+        job_log_path = output_dir / "job.log"
+
+        job = {
+            "job_id": job_id,
+            "run_id": run_id,
+            "kind": "ris_synthesis",
+            "status": "running",
+            "created_at": _now_ts(),
+            "started_at": _now_ts(),
+            "action": "run",
+            "config_path": str(job_config_path),
+            "output_dir": str(output_dir),
+        }
+
+        process = subprocess.Popen(
+            [sys.executable, "-m", "app", "ris-synth", "run", "--config", str(job_config_path)],
+            stdout=job_log_path.open("w", encoding="utf-8"),
+            stderr=subprocess.STDOUT,
+        )
+
+        with self._lock:
+            self.jobs[job_id] = job
+            self.processes[job_id] = JobHandle(job_id=job_id, run_id=run_id, process=process)
+            self._save_jobs()
+
+        save_json(output_dir / "job.json", job)
+        return job
+
+    def _create_ris_synthesis_quantization_job(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        source_run_id = str(payload.get("source_run_id") or "").strip()
+        source_run_dir = str(payload.get("source_run_dir") or "").strip()
+        if not source_run_id and not source_run_dir:
+            raise ValueError("RIS synthesis quantization requires source_run_id or source_run_dir")
+
+        bits = max(1, int(payload.get("bits", 2)))
+        num_offset_samples = max(1, int(payload.get("num_offset_samples", 181)))
+        run_id = generate_run_id()
+        output_dir = create_output_dir("outputs", run_id=run_id)
+        job_id = f"job-{run_id}"
+
+        cfg = {
+            "schema_version": 1,
+            "source": {
+                "run_id": source_run_id or None,
+                "run_dir": source_run_dir or None,
+            },
+            "quantization": {
+                "bits": bits,
+                "method": "global_offset_sweep",
+                "num_offset_samples": num_offset_samples,
+            },
+            "output": {
+                "base_dir": "outputs",
+                "run_id": run_id,
+            },
+            "job": {
+                "id": job_id,
+                "kind": "ris_synthesis",
+                "action": "quantize",
+            },
+        }
+
+        job_config_path = output_dir / "job_config.yaml"
+        save_yaml(job_config_path, cfg)
+        job_log_path = output_dir / "job.log"
+        job = {
+            "job_id": job_id,
+            "run_id": run_id,
+            "kind": "ris_synthesis",
+            "status": "running",
+            "created_at": _now_ts(),
+            "started_at": _now_ts(),
+            "action": "quantize",
+            "source_run_id": source_run_id or None,
+            "bits": bits,
+            "num_offset_samples": num_offset_samples,
+            "config_path": str(job_config_path),
+            "output_dir": str(output_dir),
+        }
+
+        process = subprocess.Popen(
+            [sys.executable, "-m", "app", "ris-synth", "quantize", "--config", str(job_config_path)],
             stdout=job_log_path.open("w", encoding="utf-8"),
             stderr=subprocess.STDOUT,
         )

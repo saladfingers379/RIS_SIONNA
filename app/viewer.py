@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import csv
 import json
+import logging
+import math
 import shutil
 import re
 from pathlib import Path
@@ -11,6 +13,8 @@ import numpy as np
 
 from .scene_file_manifest import load_scene_shape_entries
 from .web_assets import ensure_three_vendor
+
+logger = logging.getLogger(__name__)
 
 
 _RADIO_MAP_PLOT_LABELS = {
@@ -23,6 +27,9 @@ _RADIO_MAP_PLOT_LABELS = {
     "radio_map_ris_on_path_gain_db.png": "Radio map with RIS path gain [dB]",
     "radio_map_ris_on_rx_power_dbm.png": "Radio map with RIS Rx power [dBm]",
     "radio_map_ris_on_path_loss_db.png": "Radio map with RIS path loss [dB]",
+    "radio_map_ris_off_path_gain_db.png": "Radio map RIS-off metal baseline path gain [dB]",
+    "radio_map_ris_off_rx_power_dbm.png": "Radio map RIS-off metal baseline Rx power [dBm]",
+    "radio_map_ris_off_path_loss_db.png": "Radio map RIS-off metal baseline path loss [dB]",
     "radio_map_no_ris_path_gain_db.png": "Radio map without RIS path gain [dB]",
     "radio_map_no_ris_rx_power_dbm.png": "Radio map without RIS Rx power [dBm]",
     "radio_map_no_ris_path_loss_db.png": "Radio map without RIS path loss [dB]",
@@ -47,7 +54,7 @@ def _radio_map_plot_priority(name: str) -> tuple[int, str]:
         return (2, name)
     if name.startswith("radio_map_") and "_diff_" not in name and "_ris_on_" not in name and "_no_ris_" not in name:
         return (3, name)
-    if "_no_ris_" in name or "_ris_on_" in name:
+    if "_no_ris_" in name or "_ris_on_" in name or "_ris_off_" in name:
         return (4, name)
     if "_diff_" in name:
         return (5, name)
@@ -178,8 +185,102 @@ def _segments_to_polylines(segments: List[List[float]]) -> Dict[int, List[List[f
     return polylines
 
 
+def _scene_ris_interaction_names(scene: Any) -> set[str]:
+    if scene is None or not hasattr(scene, "ris"):
+        return set()
+    names: set[str] = set()
+    try:
+        for ris in scene.ris.values():
+            object_id = getattr(ris, "object_id", None)
+            if object_id is None:
+                continue
+            names.add(f"object_{int(object_id)}")
+    except Exception:
+        return set()
+    return names
+
+
 def _ensure_vendor(viewer_dir: Path) -> None:
     ensure_three_vendor(viewer_dir)
+
+
+def _normalize_vector(vec: np.ndarray) -> np.ndarray:
+    arr = np.asarray(vec, dtype=float).reshape(-1)
+    norm = float(np.linalg.norm(arr))
+    if norm <= 0.0:
+        return np.array([1.0, 0.0, 0.0], dtype=float)
+    return arr / norm
+
+
+def _build_thumbnail_camera(scene: Any, aspect: float = 16.0 / 9.0, fov_deg: float = 35.0) -> Any:
+    from sionna.rt import Camera
+
+    bbox = scene.mi_scene.bbox()
+    bbox_min = np.array([float(bbox.min.x), float(bbox.min.y), float(bbox.min.z)], dtype=float)
+    bbox_max = np.array([float(bbox.max.x), float(bbox.max.y), float(bbox.max.z)], dtype=float)
+    center = (bbox_min + bbox_max) * 0.5
+    size = np.maximum(bbox_max - bbox_min, 1e-6)
+    max_dim = float(max(np.max(size), 1.0))
+
+    view_dir = _normalize_vector(np.array([1.0, 1.0, 0.8], dtype=float))
+    world_up = np.array([0.0, 0.0, 1.0], dtype=float)
+    if abs(float(np.dot(view_dir, world_up))) > 0.95:
+        world_up = np.array([0.0, 1.0, 0.0], dtype=float)
+    right = _normalize_vector(np.cross(world_up, view_dir))
+    up = _normalize_vector(np.cross(view_dir, right))
+
+    corners = np.array(
+        [
+            [bbox_min[0], bbox_min[1], bbox_min[2]],
+            [bbox_min[0], bbox_min[1], bbox_max[2]],
+            [bbox_min[0], bbox_max[1], bbox_min[2]],
+            [bbox_min[0], bbox_max[1], bbox_max[2]],
+            [bbox_max[0], bbox_min[1], bbox_min[2]],
+            [bbox_max[0], bbox_min[1], bbox_max[2]],
+            [bbox_max[0], bbox_max[1], bbox_min[2]],
+            [bbox_max[0], bbox_max[1], bbox_max[2]],
+        ],
+        dtype=float,
+    )
+    rel = corners - center[None, :]
+    half_width = float(np.max(np.abs(rel @ right)))
+    half_height = float(np.max(np.abs(rel @ up)))
+    half_depth = float(np.max(np.abs(rel @ view_dir)))
+
+    fit_half_height = max(half_height, half_width / max(aspect, 1e-6), max_dim * 0.15) * 1.16
+    fit_half_width = fit_half_height * aspect
+    v_fov = math.radians(fov_deg)
+    h_fov = 2.0 * math.atan(math.tan(v_fov * 0.5) * aspect)
+    distance_y = fit_half_height / max(math.tan(v_fov * 0.5), 1e-6)
+    distance_x = fit_half_width / max(math.tan(h_fov * 0.5), 1e-6)
+    distance = max(distance_x, distance_y) + half_depth + max_dim * 0.35
+    position = center + view_dir * distance
+
+    return Camera(
+        name="thumbnail_export",
+        position=position,
+        look_at=center,
+    )
+
+
+def _write_run_thumbnail(output_dir: Path, viewer_dir: Path, scene: Any = None) -> Optional[Path]:
+    target = viewer_dir / "thumbnail.png"
+    if target.exists():
+        return target
+    if scene is not None:
+        try:
+            cam = _build_thumbnail_camera(scene)
+            scene.render_to_file(
+                camera=cam,
+                filename=str(target),
+                num_samples=64,
+                resolution=(1600, 900),
+            )
+            if target.exists():
+                return target
+        except Exception as exc:  # pragma: no cover - rendering path depends on runtime stack
+            logger.warning("Explorer thumbnail render failed: %s", exc)
+    return None
 
 
 def generate_viewer(output_dir: Path, config: Dict[str, Any], scene=None) -> Optional[Path]:
@@ -268,8 +369,10 @@ def generate_viewer(output_dir: Path, config: Dict[str, Any], scene=None) -> Opt
     polylines = _segments_to_polylines(segments)
     path_rows = []
     by_id = {row["path_id"]: row for row in path_table}
+    ris_interaction_names = _scene_ris_interaction_names(scene)
     for path_id, points in polylines.items():
         meta = by_id.get(path_id, {})
+        interactions = meta.get("interactions", [])
         path_rows.append(
             {
                 "path_id": path_id,
@@ -280,7 +383,8 @@ def generate_viewer(output_dir: Path, config: Dict[str, Any], scene=None) -> Opt
                 "delay_s": meta.get("delay_s"),
                 "power_db": meta.get("power_db"),
                 "power_linear": meta.get("power_linear"),
-                "interactions": meta.get("interactions", []),
+                "interactions": interactions,
+                "has_ris": bool(ris_interaction_names and any(name in ris_interaction_names for name in interactions)),
             }
         )
 
@@ -502,6 +606,7 @@ def generate_viewer(output_dir: Path, config: Dict[str, Any], scene=None) -> Opt
     (viewer_dir / "radio_map_plots.json").write_text(
         json.dumps({"plots": radio_plots}, indent=2), encoding="utf-8"
     )
+    _write_run_thumbnail(output_dir, viewer_dir, scene=scene)
 
     html = build_viewer_html(data)
     html_path = viewer_dir / "index.html"

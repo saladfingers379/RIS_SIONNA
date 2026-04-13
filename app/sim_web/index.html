@@ -4,8 +4,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>RIS_SIONNA Omniverse-lite Simulator</title>
-  <link rel="stylesheet" href="styles.css" />
+  <title>SIONNA Viewer</title>
+  <link rel="stylesheet" href="styles.css?v=20260413-rislabfix" />
   <script>
     window.MathJax = {
       tex: {
@@ -22,20 +22,58 @@
   <div class="app">
     <header class="topbar">
       <div class="brand">
-        <div class="brand-mark">RIS</div>
+        <div class="brand-mark">SV</div>
         <div>
-          <div class="brand-title">Omniverse-lite Simulator</div>
-          <div class="brand-sub">Sionna RT · 28 GHz · Low VRAM mode</div>
+          <div class="brand-title">SIONNA Viewer</div>
+          <div class="brand-sub">Sionna RT · 28 GHz Propagation Workspace</div>
         </div>
       </div>
       <div class="top-controls">
         <select id="runSelect"></select>
         <button id="refreshRuns">Refresh</button>
+        <button id="runBrowserToggle" type="button">Browse Runs</button>
         <button id="topDown">Top-down</button>
         <button id="snapshot">Take Snapshot</button>
         <button id="runSimTop" type="button">Run Simulation</button>
       </div>
     </header>
+
+    <div class="run-browser-modal" id="runBrowserModal" aria-hidden="true">
+      <div class="run-browser-dialog" role="dialog" aria-modal="true" aria-labelledby="runBrowserTitle">
+        <div class="run-browser-header">
+          <div>
+            <div class="run-browser-title" id="runBrowserTitle">Run Explorer</div>
+            <div class="run-browser-subtitle" id="runBrowserSubtitle">Browse saved runs for the active workspace scope.</div>
+          </div>
+          <div class="run-browser-actions">
+            <button id="runBrowserOpenRun" type="button">Open Selected Run</button>
+            <button id="runBrowserClose" type="button">Close</button>
+          </div>
+        </div>
+        <div class="run-browser-body">
+          <aside class="run-browser-sidebar">
+            <div class="run-browser-toolbar">
+              <input id="runBrowserSearch" type="search" placeholder="Search run, scene, backend, preset..." />
+              <div class="run-browser-count" id="runBrowserCount">0 runs</div>
+            </div>
+            <div class="run-browser-list" id="runBrowserList"></div>
+          </aside>
+          <section class="run-browser-preview">
+            <div class="run-browser-preview-frame">
+              <img id="runBrowserPreviewImage" alt="Run preview" />
+              <div class="run-browser-preview-empty" id="runBrowserPreviewEmpty">Select a run to preview its saved scene render and metadata.</div>
+            </div>
+            <div class="run-browser-meta">
+              <div class="run-browser-meta-header">
+                <div class="run-browser-run-id" id="runBrowserSelectedRun">No run selected</div>
+                <div class="run-browser-meta-badges" id="runBrowserBadges"></div>
+              </div>
+              <div class="run-browser-details" id="runBrowserDetails">Choose a run from the list to inspect its details before opening it in the viewer.</div>
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
 
     <main class="main">
       <div class="main-tab-strip" id="mainTabStrip">
@@ -44,6 +82,8 @@
         <button class="main-tab-button" data-main-tab="campaign" type="button">Indoor Campaign</button>
         <button class="main-tab-button" data-main-tab="campaign2" type="button">Indoor Campaign 2</button>
         <button class="main-tab-button" data-main-tab="ris" type="button">RIS Lab</button>
+        <button class="main-tab-button" data-main-tab="ris-synth" type="button">Target Region Illumination</button>
+        <button class="main-tab-button" data-main-tab="link" type="button">RIS Link-Level</button>
         <button class="main-tab-button" data-main-tab="models" type="button">Propagation Models</button>
       </div>
 
@@ -56,7 +96,28 @@
             <div class="field">
               <label>Heatmap Z (m)</label>
               <input id="radioMapPlaneZ" type="number" step="0.1" placeholder="1.5" />
-              <div class="help-text">Sets radio-map plane height without changing size/cell resolution.</div>
+              <div class="help-text">Sets the base radio-map plane height without changing size or cell resolution.</div>
+            </div>
+            <div class="field">
+              <label class="toggle">
+                <input id="radioMapZStackEnabled" type="checkbox" />
+                Enable multi-Z maps
+              </label>
+              <div class="help-text">Adds extra radio-map slices above and below the base heatmap plane for stacked outdoor coverage views.</div>
+            </div>
+            <div class="field-grid radio-map-z-stack-grid" id="radioMapZStackControls">
+              <div>
+                <label>Slices below</label>
+                <input id="radioMapZStackBelow" type="number" step="1" min="0" placeholder="1" />
+              </div>
+              <div>
+                <label>Slices above</label>
+                <input id="radioMapZStackAbove" type="number" step="1" min="0" placeholder="1" />
+              </div>
+              <div>
+                <label>Spacing (m)</label>
+                <input id="radioMapZStackSpacing" type="number" step="0.1" min="0.1" placeholder="0.5" />
+              </div>
             </div>
             <div class="field">
               <label>Floor Z (m)</label>
@@ -268,8 +329,8 @@
                   <option value="hw_dipole">hw_dipole</option>
                   <option value="tr38901">tr38901</option>
                   <option value="horn_15dbi">horn_15dbi</option>
-                  <option value="horn_15dbi_front">horn_15dbi_front</option>
                   <option value="horn_22dbi">horn_22dbi</option>
+                  <option value="horn_15dbi_front">horn_15dbi_front</option>
                   <option value="horn_22dbi_front">horn_22dbi_front</option>
                 </select>
               </div>
@@ -524,6 +585,10 @@
               <label class="toggle">
                 <input id="campaign2PruneRuns" type="checkbox" checked />
                 Prune per-sample artifacts
+              </label>
+              <label class="toggle">
+                <input id="campaign2ShowSpecularPath" type="checkbox" checked />
+                Show specular path guide
               </label>
             </div>
             <div class="field-grid">
@@ -1189,6 +1254,427 @@
     </div>
   </div>
 
+  <div class="main-tab-panel" data-main-tab="ris-synth">
+    <div class="layout" id="risSynthLayout">
+      <section class="panel left" id="risSynthLeftPanel">
+        <details class="panel-section" open>
+          <summary>Config</summary>
+          <div class="panel-section-body">
+            <div class="field">
+              <label>Config source</label>
+              <select id="risSynthConfigSource">
+                <option value="builder">Builder</option>
+                <option value="file">Config file</option>
+              </select>
+              <div class="help-text">`Builder` uses the form below. `Config file` runs an existing target-region illumination YAML as-is.</div>
+            </div>
+            <div class="field ris-synth-config-file">
+              <label>Config path</label>
+              <input id="risSynthConfigPath" type="text" placeholder="configs/ris_synthesis.yaml" />
+              <div class="help-text">Used only when Config source = file. Builder mode uses the active viewer run instead.</div>
+            </div>
+            <div class="field-grid">
+              <div>
+                <label>Seed source</label>
+                <select id="risSynthSeedSource">
+                  <option value="seed_run">Sim run</option>
+                  <option value="active_run">Active viewer run</option>
+                  <option value="config_file">Config file</option>
+                </select>
+                <div class="help-text">Where the base scene comes from before RIS optimization starts.</div>
+              </div>
+              <div class="ris-synth-seed-run-field">
+                <label>Seed sim run</label>
+                <select id="risSynthSeedRun"></select>
+                <div class="help-text">Pick a completed sim run whose heatmap and RIS setup you want to optimize from.</div>
+              </div>
+              <div>
+                <label>Seed config</label>
+                <input id="risSynthSeedConfig" class="ris-synth-seed-config-field" type="text" placeholder="configs/your_scene.yaml" />
+                <div class="help-text">Manual config path when Seed source = `Config file`.</div>
+              </div>
+              <div>
+                <label>RIS name</label>
+                <input id="risSynthRisName" type="text" value="ris" />
+                <div class="help-text">Name of the RIS object inside the seed scene config, for example `ris1`.</div>
+              </div>
+            </div>
+            <div class="help-text" id="risSynthSeedStatus">Select a completed sim run and the UI will use its saved job config automatically.</div>
+            <div class="field">
+              <label>Target boxes (JSON array)</label>
+              <textarea id="risSynthBoxes" rows="7">[
+  {
+    "name": "roi_1",
+    "u_min_m": 6.0,
+    "u_max_m": 16.0,
+    "v_min_m": -3.0,
+    "v_max_m": 3.0
+  }
+]</textarea>
+              <div class="help-text">Boxes are expressed on the frozen coverage-map plane in meters. Drawing in the viewer fills this for you.</div>
+            </div>
+          </div>
+        </details>
+
+        <details class="panel-section" open>
+          <summary>Viewer ROI Tools</summary>
+          <div class="panel-section-body">
+            <div class="help-text">The shared sim viewer loads in the center column. ROI drawing uses the loaded radio-map heatmap in top-down mode.</div>
+            <div class="job-buttons">
+              <button id="risSynthLoadViewer" type="button">Load Viewer Run</button>
+              <button id="risSynthTopDownView" type="button">Top-Down + Heatmap</button>
+            </div>
+            <div class="help-text">Load the selected seed run into the shared viewer, then switch to a top-down heatmap so ROI drawing matches the synthesis grid.</div>
+            <div class="job-buttons">
+              <button id="risSynthDrawBoxes" type="button">Draw ROIs</button>
+              <button id="risSynthUndoBox" type="button">Undo Last ROI</button>
+              <button id="risSynthClearBoxes" type="button">Clear ROIs</button>
+            </div>
+            <div class="help-text">Start a fresh Draw ROIs session to redefine the target set. The first new box replaces the current target; additional boxes in the same session are added.</div>
+            <div class="help-text" id="risSynthViewerStatus">Load a sim run with a heatmap, then draw boxes directly on the top-down map.</div>
+          </div>
+        </details>
+
+        <details class="panel-section" open>
+          <summary>Optimization</summary>
+          <div class="panel-section-body">
+            <div class="field-grid">
+              <div>
+                <label>Iterations</label>
+                <input id="risSynthIterations" type="number" step="1" min="1" value="60" />
+                <div class="help-text">How many optimizer iterations to run for refinement-based modes.</div>
+              </div>
+              <div>
+                <label>Learning rate</label>
+                <input id="risSynthLearningRate" type="number" step="0.001" min="0.0001" value="0.03" />
+                <div class="help-text">Step size for gradient-based refinement when that mode is active.</div>
+              </div>
+              <div>
+                <label>Log every</label>
+                <input id="risSynthLogEvery" type="number" step="1" min="1" value="5" />
+                <div class="help-text">How often the objective trace and progress updates are recorded.</div>
+              </div>
+            </div>
+            <div class="field-grid">
+              <div>
+                <label>ROI threshold (dBm)</label>
+                <input id="risSynthThresholdDbm" type="number" step="0.5" value="-90" />
+                <div class="help-text">Used for ROI coverage metrics in the summary, not as the optimization target itself.</div>
+              </div>
+              <div>
+                <label>Objective epsilon</label>
+                <input id="risSynthObjectiveEps" type="number" step="0.000000000001" value="0.000000000001" />
+                <div class="help-text">Small stabilizer added before `log(path_gain)` to avoid numerical issues near zero.</div>
+              </div>
+              <div>
+                <label>Offset samples</label>
+                <input id="risSynthOffsetSamples" type="number" step="1" min="1" value="181" />
+                <div class="help-text">How many constant phase offsets to try when generating the 1-bit comparison.</div>
+              </div>
+            </div>
+            <div class="field-grid">
+              <label class="toggle">
+                <input id="risSynthBinarizationEnabled" type="checkbox" />
+                Generate 1-bit comparison
+              </label>
+              <label class="toggle">
+                <input id="risSynthRefineEnabled" type="checkbox" />
+                Enable greedy bit flips
+              </label>
+              <div>
+                <label>Candidate budget</label>
+                <input id="risSynthCandidateBudget" type="number" step="1" min="1" value="64" />
+                <div class="help-text">How many bit positions the greedy 1-bit refiner is allowed to inspect per pass.</div>
+              </div>
+              <div>
+                <label>Max passes</label>
+                <input id="risSynthMaxPasses" type="number" step="1" min="1" value="1" />
+                <div class="help-text">How many refinement sweeps to make over the 1-bit map after offset search.</div>
+              </div>
+            </div>
+            <div class="help-text">`Generate 1-bit comparison` adds a binary phase projection after the continuous run. `Enable greedy bit flips` performs a small local search on that binary map.</div>
+            <div class="job-buttons">
+              <button id="risSynthStart" type="button">Run Target Region Illumination</button>
+              <button id="risSynthRefresh" type="button">Refresh Status</button>
+            </div>
+            <div class="help-text">Start a new synthesis job from the current settings, or poll the server for fresh job status and logs.</div>
+          </div>
+        </details>
+
+        <details class="panel-section">
+          <summary>Config Preview</summary>
+          <div class="panel-section-body">
+            <pre class="code-block" id="risSynthConfigPreview"></pre>
+            <div class="help-text">The exact builder-generated YAML/JSON payload that will be sent when you launch a run.</div>
+          </div>
+        </details>
+      </section>
+
+      <section class="panel right" id="risSynthRightPanel">
+        <details class="panel-section" open>
+          <summary>Status</summary>
+          <div class="panel-section-body">
+            <div id="risSynthJobStatus">Idle.</div>
+            <div class="help-text" id="risSynthProgress"></div>
+            <pre class="log-view" id="risSynthLog"></pre>
+            <div class="job-status">
+              <h3>Recent Target Region Illumination Jobs</h3>
+              <div id="risSynthJobList"></div>
+            </div>
+          </div>
+        </details>
+
+        <details class="panel-section" open>
+          <summary>Results</summary>
+          <div class="panel-section-body">
+            <div class="field">
+              <label>Run directory</label>
+              <select id="risSynthRunSelect"></select>
+            </div>
+            <div class="field-grid">
+              <div>
+                <label>Viewer heatmap</label>
+                <select id="risSynthViewerMode">
+                  <option value="active">Active sim run</option>
+                  <option value="optimal">Optimal result</option>
+                </select>
+              </div>
+              <div class="job-buttons" style="align-items:end;">
+                <button id="risSynthApplyViewerMode" type="button">Apply Viewer Heatmap</button>
+              </div>
+            </div>
+            <div class="help-text">`Active sim run` shows the current seed/viewer heatmap. `Optimal result` swaps in the selected Target Region Illumination run's achieved heatmap while keeping the same scene loaded.</div>
+            <div class="job-buttons">
+              <button id="risSynthLoadResults" type="button">Load Results</button>
+            </div>
+            <div class="field-grid">
+              <div>
+                <label>Quantize bits</label>
+                <input id="risSynthQuantizeBits" type="number" step="1" min="1" value="2" />
+              </div>
+              <div>
+                <label>Quantize offset samples</label>
+                <input id="risSynthQuantizeSamples" type="number" step="1" min="1" value="181" />
+              </div>
+            </div>
+            <div class="job-buttons">
+              <button id="risSynthQuantizeRun" type="button">Quantize Selected Run</button>
+            </div>
+            <div class="help-text">Post-processes the selected continuous run using a constant reference phase φ0 sweep before uniform n-bit quantization.</div>
+            <div id="risSynthResultStatus" class="help-text"></div>
+            <div class="metrics-card" id="risSynthMetrics"></div>
+            <div class="plot-tab-strip" id="risSynthPlotTabs">
+              <button class="plot-tab-button is-active" data-plot="target_region_overlay.png" type="button">ROI Overlay</button>
+              <button class="plot-tab-button" data-plot="radio_map_ris_off.png" type="button">RIS Off</button>
+              <button class="plot-tab-button" data-plot="radio_map_continuous.png" type="button">Optimal Sionna RIS</button>
+              <button class="plot-tab-button" data-plot="radio_map_1bit.png" type="button">1-Bit</button>
+              <button class="plot-tab-button" data-plot="radio_map_quantized.png" type="button">Quantized</button>
+              <button class="plot-tab-button" data-plot="radio_map_diff_continuous_vs_off.png" type="button">Cont vs Off</button>
+              <button class="plot-tab-button" data-plot="radio_map_diff_1bit_vs_off.png" type="button">1-Bit vs Off</button>
+              <button class="plot-tab-button" data-plot="radio_map_diff_1bit_vs_continuous.png" type="button">1-Bit vs Cont</button>
+              <button class="plot-tab-button" data-plot="radio_map_diff_quantized_vs_off.png" type="button">Quant vs Off</button>
+              <button class="plot-tab-button" data-plot="radio_map_diff_quantized_vs_continuous.png" type="button">Quant vs Cont</button>
+              <button class="plot-tab-button" data-plot="objective_trace.png" type="button">Objective</button>
+              <button class="plot-tab-button" data-plot="phase_continuous.png" type="button">Phase Cont</button>
+              <button class="plot-tab-button" data-plot="phase_1bit.png" type="button">Phase 1-Bit</button>
+              <button class="plot-tab-button" data-plot="phase_quantized.png" type="button">Phase Quant</button>
+              <button class="plot-tab-button" data-plot="cdf_roi_rx_power.png" type="button">ROI CDF</button>
+            </div>
+            <figure class="plot-card single">
+              <img id="risSynthPlotImage" alt="Target region illumination plot" />
+              <figcaption id="risSynthPlotCaption"></figcaption>
+            </figure>
+          </div>
+        </details>
+      </section>
+    </div>
+  </div>
+
+  <div class="main-tab-panel" data-main-tab="link">
+    <div class="ris-layout">
+      <section class="panel ris-panel">
+        <details class="panel-section" open>
+          <summary>Evaluation Setup</summary>
+          <div class="panel-section-body">
+            <div class="field-grid">
+              <div>
+                <label>Seed source</label>
+                <select id="linkSeedSourceType">
+                  <option value="run">Existing sim run</option>
+                  <option value="config">Config file (run outdoor sim first)</option>
+                </select>
+              </div>
+              <div class="link-seed-run-field">
+                <label>Seed run</label>
+                <select id="linkSeedRun"></select>
+              </div>
+              <div class="link-seed-config-field" style="display:none;">
+                <label>Seed config</label>
+                <select id="linkSeedConfig"></select>
+              </div>
+            </div>
+            <div class="field-grid">
+              <div>
+                <label>Backend</label>
+                <select id="linkBackend">
+                  <option value="gpu">Prefer GPU</option>
+                  <option value="cpu">CPU only</option>
+                </select>
+              </div>
+              <div>
+                <label>Estimator modes</label>
+                <div class="field-grid">
+                  <label class="toggle">
+                    <input id="linkEstimatorPerfect" type="checkbox" checked />
+                    Perfect CSI
+                  </label>
+                  <label class="toggle">
+                    <input id="linkEstimatorLsLin" type="checkbox" checked />
+                    LS linear
+                  </label>
+                  <label class="toggle">
+                    <input id="linkEstimatorLsNn" type="checkbox" />
+                    LS nearest
+                  </label>
+                </div>
+                <div class="help-text"><strong>Perfect CSI</strong> gives the detector the exact simulated channel response. This is an oracle upper bound and removes channel-estimation error from the comparison.</div>
+                <div class="help-text"><strong>LS linear</strong> estimates the channel from pilot tones using least squares, then linearly interpolates across the OFDM time-frequency grid. This is the main practical baseline here.</div>
+                <div class="help-text"><strong>LS nearest</strong> also starts from least-squares pilot estimates, but fills non-pilot tones using the nearest pilot only. It is a simpler, rougher baseline than linear interpolation.</div>
+              </div>
+            </div>
+            <div class="field-grid">
+              <div>
+                <label>RIS variants</label>
+                <div class="field-grid">
+                  <label class="toggle">
+                    <input id="linkVariantOff" type="checkbox" checked />
+                    RIS off
+                  </label>
+                  <label class="toggle">
+                    <input id="linkVariantConfigured" type="checkbox" checked />
+                    Configured RIS
+                  </label>
+                  <label class="toggle">
+                    <input id="linkVariantFlat" type="checkbox" checked />
+                    Flat RIS
+                  </label>
+                </div>
+              </div>
+              <div>
+                <label>Eb/N0 list (dB)</label>
+                <input id="linkEbnoList" type="text" value="0,5,10,15,20" />
+              </div>
+            </div>
+            <div class="field-grid">
+              <div>
+                <label>Batch size</label>
+                <input id="linkBatchSize" type="number" step="1" min="1" value="32" />
+              </div>
+              <div>
+                <label>Iterations / EbN0</label>
+                <input id="linkIterations" type="number" step="1" min="1" value="8" />
+              </div>
+              <div>
+                <label>FFT size</label>
+                <input id="linkFftSize" type="number" step="1" min="16" value="64" />
+              </div>
+            </div>
+            <div class="field-grid">
+              <div>
+                <label>OFDM symbols</label>
+                <input id="linkNumSymbols" type="number" step="1" min="1" value="14" />
+              </div>
+              <div>
+                <label>Subcarrier spacing (Hz)</label>
+                <input id="linkScsHz" type="number" step="1000" min="1000" value="30000" />
+              </div>
+              <div>
+                <label>Bits / symbol</label>
+                <select id="linkBitsPerSymbol">
+                  <option value="2" selected>QPSK</option>
+                  <option value="4">16-QAM</option>
+                  <option value="6">64-QAM</option>
+                </select>
+              </div>
+            </div>
+            <div class="field-grid">
+              <div>
+                <label>RT max depth</label>
+                <input id="linkMaxDepth" type="number" step="1" min="1" placeholder="inherit seed run" />
+              </div>
+              <div>
+                <label>RT samples / src</label>
+                <input id="linkSamplesPerSrc" type="number" step="1000" min="1000" placeholder="inherit seed run" />
+              </div>
+              <div>
+                <label>CIR paths</label>
+                <input id="linkNumPaths" type="number" step="1" min="1" value="32" />
+              </div>
+            </div>
+            <div class="help-text">Leave the RT depth and samples fields blank to reuse the seed outdoor run tracing settings. Lower overrides can hide RIS gain.</div>
+            <div class="job-buttons">
+              <button id="linkStart" type="button">Run Outdoor Sim + Link Eval</button>
+              <button id="linkRefresh" type="button">Refresh Status</button>
+            </div>
+            <div class="help-text">Using a config here launches a fresh outdoor sim first, then runs the Sionna 0.19.2 link-level evaluation on that completed seed run. Existing sim runs can still be analyzed directly.</div>
+          </div>
+        </details>
+
+        <details class="panel-section" open>
+          <summary>Status</summary>
+          <div class="panel-section-body">
+            <div id="linkJobStatus">Idle.</div>
+            <div class="help-text" id="linkProgress"></div>
+            <pre class="log-view" id="linkLog"></pre>
+            <div class="job-status">
+              <h3>Recent Link Jobs</h3>
+              <div id="linkJobList"></div>
+            </div>
+          </div>
+        </details>
+      </section>
+
+      <section class="panel ris-panel">
+        <details class="panel-section" open>
+          <summary>Seed Scene</summary>
+          <div class="panel-section-body">
+            <div id="linkSeedViewerStatus" class="help-text">Viewer idle.</div>
+            <div class="link-viewer-frame-wrap">
+              <iframe id="linkSeedViewerFrame" title="Link seed scene viewer"></iframe>
+            </div>
+          </div>
+        </details>
+
+        <details class="panel-section" open>
+          <summary>Results</summary>
+          <div class="panel-section-body">
+            <div class="field">
+              <label>Result run</label>
+              <select id="linkRunSelect"></select>
+            </div>
+            <div class="job-buttons">
+              <button id="linkLoadResults" type="button">Load Results</button>
+            </div>
+            <div id="linkResultStatus" class="help-text"></div>
+            <div class="metrics-card" id="linkMetrics"></div>
+            <div class="plot-tab-strip" id="linkPlotTabs">
+              <button class="plot-tab-button is-active" data-plot="ber_vs_ebno.png" type="button">BER</button>
+              <button class="plot-tab-button" data-plot="variant_path_gain_db.png" type="button">Path Gain</button>
+              <button class="plot-tab-button" data-plot="variant_delay_spread_ns.png" type="button">Delay Spread</button>
+              <button class="plot-tab-button" data-plot="variant_path_delay_hist_ns.png" type="button">Path Delay</button>
+              <button class="plot-tab-button" data-plot="variant_ris_phase.png" type="button">RIS Phase</button>
+              <button class="plot-tab-button" data-plot="variant_ris_amplitude.png" type="button">RIS Amplitude</button>
+            </div>
+            <figure class="plot-card single">
+              <img id="linkPlotImage" alt="Link-level plot" />
+              <figcaption id="linkPlotCaption"></figcaption>
+            </figure>
+          </div>
+        </details>
+      </section>
+    </div>
+  </div>
+
   <div class="main-tab-panel" data-main-tab="models">
     <div class="models-layout">
       <div class="models-main">
@@ -1466,9 +1952,130 @@ P_n=\frac{A}{4\pi r_i^2\lambda^2}P_tG_t
     <img id="plotLightboxImg" alt="Enlarged chart" />
     <button id="plotLightboxClose" class="plot-lightbox-close" type="button">&times;</button>
   </div>
+  <div id="snapshotStudio" class="snapshot-studio is-hidden" aria-hidden="true">
+    <div class="snapshot-studio-backdrop" data-close-snapshot="true"></div>
+    <section class="snapshot-studio-dialog" role="dialog" aria-modal="true" aria-labelledby="snapshotStudioTitle">
+      <header class="snapshot-studio-header">
+        <div>
+          <h2 id="snapshotStudioTitle">Snapshot Studio</h2>
+          <p>Generate report-ready scene figures with preview, camera presets, and export controls.</p>
+        </div>
+        <div class="snapshot-studio-actions">
+          <button id="snapshotRefreshPreview" type="button">Refresh Preview</button>
+          <button id="snapshotStudioClose" type="button">Close</button>
+        </div>
+      </header>
+      <div class="snapshot-studio-body">
+        <section class="snapshot-preview-panel">
+          <div class="snapshot-preview-toolbar">
+            <div id="snapshotPreviewMeta">Preview idle.</div>
+            <div id="snapshotStudioStatus">Ready.</div>
+          </div>
+          <div class="snapshot-preview-frame">
+            <img id="snapshotPreviewImage" alt="Snapshot preview" />
+          </div>
+        </section>
+        <aside class="snapshot-controls">
+          <div class="snapshot-control-grid">
+            <div class="field">
+              <label>Figure preset</label>
+              <select id="snapshotPreset">
+                <option value="report_landscape">Report landscape</option>
+                <option value="report_portrait">Report portrait</option>
+                <option value="square">Square</option>
+                <option value="uhd_4k">UHD 4K</option>
+                <option value="custom">Custom</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Theme</label>
+              <select id="snapshotTheme">
+                <option value="dark_viewer">Dark viewer</option>
+                <option value="report_light">Report light</option>
+                <option value="transparent">Transparent</option>
+              </select>
+            </div>
+          </div>
+          <div class="snapshot-control-grid">
+            <div class="field">
+              <label>Width (px)</label>
+              <input id="snapshotWidth" type="number" min="320" step="10" value="1600" />
+            </div>
+            <div class="field">
+              <label>Height (px)</label>
+              <input id="snapshotHeight" type="number" min="240" step="10" value="900" />
+            </div>
+            <div class="field">
+              <label>Supersample</label>
+              <select id="snapshotScale">
+                <option value="1">1x</option>
+                <option value="2" selected>2x</option>
+                <option value="3">3x</option>
+              </select>
+            </div>
+          </div>
+          <div class="snapshot-control-grid">
+            <div class="field">
+              <label>View</label>
+              <select id="snapshotView">
+                <option value="current">Current camera</option>
+                <option value="isometric">Isometric</option>
+                <option value="top">Top</option>
+                <option value="front">Front</option>
+                <option value="right">Right</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Projection</label>
+              <select id="snapshotProjection">
+                <option value="perspective">Perspective</option>
+                <option value="orthographic">Orthographic</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Field of view (deg)</label>
+              <input id="snapshotFov" type="number" min="10" max="100" step="1" value="35" />
+            </div>
+          </div>
+          <div class="snapshot-control-grid">
+            <div class="field">
+              <label>Figure margin (px)</label>
+              <input id="snapshotMargin" type="number" min="0" max="160" step="2" value="28" />
+            </div>
+            <div class="field">
+              <label>Title</label>
+              <input id="snapshotTitle" type="text" placeholder="Run title" />
+            </div>
+          </div>
+          <div class="snapshot-control-grid">
+            <label class="toggle">
+              <input id="snapshotIncludeTitle" type="checkbox" checked />
+              Include title
+            </label>
+            <label class="toggle">
+              <input id="snapshotIncludeMeta" type="checkbox" checked />
+              Include footer metadata
+            </label>
+            <label class="toggle">
+              <input id="snapshotIncludeScaleBar" type="checkbox" checked />
+              Include scale bar
+            </label>
+            <label class="toggle">
+              <input id="snapshotIncludeFrame" type="checkbox" checked />
+              Include figure frame
+            </label>
+          </div>
+          <div class="job-buttons snapshot-download-actions">
+            <button id="snapshotDownload" type="button">Download PNG</button>
+            <button id="snapshotCopy" type="button">Copy PNG</button>
+          </div>
+        </aside>
+      </div>
+    </section>
+  </div>
   </main>
   </div>
-  <script type="module" src="app.js?v=dev"></script>
+  <script type="module" src="app.js?v=20260413-indoorradiofix"></script>
 </body>
 
 </html>

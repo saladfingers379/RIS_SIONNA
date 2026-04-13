@@ -2,10 +2,58 @@
 
 from __future__ import annotations
 
+import logging
+
 from typing import Any
 
 
 _APPLIED = False
+_SVD_FALLBACK_WARNED = False
+logger = logging.getLogger(__name__)
+
+
+def reset_svd_cpu_fallback_flag() -> None:
+    """Clear the per-process RIS SVD fallback marker."""
+
+    global _SVD_FALLBACK_WARNED
+    _SVD_FALLBACK_WARNED = False
+
+
+def svd_cpu_fallback_used() -> bool:
+    """Return whether the RIS curvature SVD fell back to CPU."""
+
+    return bool(_SVD_FALLBACK_WARNED)
+
+
+def _safe_curvature_svd(solver_cm, matrix):
+    """Run the RIS curvature SVD with a CPU fallback for unstable GPU kernels."""
+    global _SVD_FALLBACK_WARNED
+
+    try:
+        return solver_cm.tf.linalg.svd(matrix)
+    except Exception as exc:
+        tf_errors = getattr(solver_cm.tf, "errors", None)
+        invalid_arg = getattr(tf_errors, "InvalidArgumentError", ())
+        op_error = getattr(tf_errors, "OpError", ())
+        if invalid_arg and not isinstance(exc, (invalid_arg, op_error)):
+            raise
+        if not _SVD_FALLBACK_WARNED:
+            logger.warning(
+                "RIS reflection SVD failed on the active TensorFlow device; retrying on CPU. Error: %s",
+                exc,
+            )
+            _SVD_FALLBACK_WARNED = True
+        with solver_cm.tf.device("/CPU:0"):
+            try:
+                return solver_cm.tf.linalg.svd(matrix)
+            except Exception:
+                eye = solver_cm.tf.eye(
+                    solver_cm.tf.shape(matrix)[-1],
+                    batch_shape=solver_cm.tf.shape(matrix)[:1],
+                    dtype=matrix.dtype,
+                )
+                regularized = matrix + solver_cm.tf.cast(1.0e-9, matrix.dtype) * eye
+                return solver_cm.tf.linalg.svd(regularized)
 
 
 def apply_sionna_multi_ris_patch() -> None:
@@ -179,7 +227,7 @@ def apply_sionna_multi_ris_patch() -> None:
             )
             q_r = solver_cm.tf.matmul(q_i - 1 / self._scene.wavenumber * hessian_m, l)
             q_r = solver_cm.tf.matmul(l, q_r, transpose_a=True)
-            e, v, _ = solver_cm.tf.linalg.svd(q_r)
+            e, v, _ = _safe_curvature_svd(solver_cm, q_r)
             radii_curv = 1 / e[:, :2]
             dirs_curv = solver_cm.tf.transpose(v[..., :2], perm=[0, 2, 1])
 

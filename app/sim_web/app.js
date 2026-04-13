@@ -34,6 +34,8 @@ const state = {
   builtinScenes: [],
   fileScenes: [],
   sceneFileManifestCache: {},
+  geometryTemplateCache: new Map(),
+  geometryTemplatePromises: new Map(),
   configs: [],
   radioMapPlots: [],
   heatmapBase: null,
@@ -74,13 +76,63 @@ const state = {
     runs: [],
     activeRunId: null,
     activeJobId: null,
+    selectedRunId: null,
+    followActiveRun: true,
     selectedPlot: null,
+  },
+  risSynthesis: {
+    jobs: [],
+    runs: [],
+    seedRunScopes: {},
+    activeRunId: null,
+    activeJobId: null,
+    selectedRunId: null,
+    followActiveRun: true,
+    autoLoadedViewerRunId: null,
+    viewerOverlayRunId: null,
+    pendingViewerOverlayRunId: null,
+    viewerOverlayRequestToken: 0,
+    selectedPlot: null,
+    drawnBoxes: [],
+    draftBox: null,
+    drawMode: false,
+    replaceOnNextDraw: false,
+  },
+  link: {
+    jobs: [],
+    runs: [],
+    activeRunId: null,
+    activeJobId: null,
+    selectedPlot: null,
+  },
+  snapshotStudio: {
+    open: false,
+    renderToken: 0,
+    previewUrl: "",
+  },
+  runBrowser: {
+    open: false,
+    selectedRunId: null,
+    detailsByRunId: {},
   },
 };
 
 const ui = {
   runSelect: document.getElementById("runSelect"),
   refreshRuns: document.getElementById("refreshRuns"),
+  runBrowserToggle: document.getElementById("runBrowserToggle"),
+  runBrowserModal: document.getElementById("runBrowserModal"),
+  runBrowserClose: document.getElementById("runBrowserClose"),
+  runBrowserOpenRun: document.getElementById("runBrowserOpenRun"),
+  runBrowserSearch: document.getElementById("runBrowserSearch"),
+  runBrowserCount: document.getElementById("runBrowserCount"),
+  runBrowserList: document.getElementById("runBrowserList"),
+  runBrowserSubtitle: document.getElementById("runBrowserSubtitle"),
+  runBrowserPreviewImage: document.getElementById("runBrowserPreviewImage"),
+  runBrowserPreviewEmpty: document.getElementById("runBrowserPreviewEmpty"),
+  runBrowserSelectedRun: document.getElementById("runBrowserSelectedRun"),
+  runBrowserBadges: document.getElementById("runBrowserBadges"),
+  runBrowserDetails: document.getElementById("runBrowserDetails"),
   topDown: document.getElementById("topDown"),
   snapshot: document.getElementById("snapshot"),
   mainTabStrip: document.getElementById("mainTabStrip"),
@@ -178,6 +230,86 @@ const ui = {
   risPreviewTxRay: document.getElementById("risPreviewTxRay"),
   risPreviewRxRay: document.getElementById("risPreviewRxRay"),
   risPreviewMeta: document.getElementById("risPreviewMeta"),
+  risSynthConfigSource: document.getElementById("risSynthConfigSource"),
+  risSynthConfigPath: document.getElementById("risSynthConfigPath"),
+  risSynthSeedSource: document.getElementById("risSynthSeedSource"),
+  risSynthSeedRun: document.getElementById("risSynthSeedRun"),
+  risSynthSeedConfig: document.getElementById("risSynthSeedConfig"),
+  risSynthSeedStatus: document.getElementById("risSynthSeedStatus"),
+  risSynthRisName: document.getElementById("risSynthRisName"),
+  risSynthBoxes: document.getElementById("risSynthBoxes"),
+  risSynthIterations: document.getElementById("risSynthIterations"),
+  risSynthLearningRate: document.getElementById("risSynthLearningRate"),
+  risSynthLogEvery: document.getElementById("risSynthLogEvery"),
+  risSynthThresholdDbm: document.getElementById("risSynthThresholdDbm"),
+  risSynthObjectiveEps: document.getElementById("risSynthObjectiveEps"),
+  risSynthBinarizationEnabled: document.getElementById("risSynthBinarizationEnabled"),
+  risSynthOffsetSamples: document.getElementById("risSynthOffsetSamples"),
+  risSynthRefineEnabled: document.getElementById("risSynthRefineEnabled"),
+  risSynthCandidateBudget: document.getElementById("risSynthCandidateBudget"),
+  risSynthMaxPasses: document.getElementById("risSynthMaxPasses"),
+  risSynthStart: document.getElementById("risSynthStart"),
+  risSynthRefresh: document.getElementById("risSynthRefresh"),
+  risSynthJobStatus: document.getElementById("risSynthJobStatus"),
+  risSynthProgress: document.getElementById("risSynthProgress"),
+  risSynthLog: document.getElementById("risSynthLog"),
+  risSynthJobList: document.getElementById("risSynthJobList"),
+  risSynthRunSelect: document.getElementById("risSynthRunSelect"),
+  risSynthViewerMode: document.getElementById("risSynthViewerMode"),
+  risSynthApplyViewerMode: document.getElementById("risSynthApplyViewerMode"),
+  risSynthLoadResults: document.getElementById("risSynthLoadResults"),
+  risSynthQuantizeBits: document.getElementById("risSynthQuantizeBits"),
+  risSynthQuantizeSamples: document.getElementById("risSynthQuantizeSamples"),
+  risSynthQuantizeRun: document.getElementById("risSynthQuantizeRun"),
+  risSynthResultStatus: document.getElementById("risSynthResultStatus"),
+  risSynthMetrics: document.getElementById("risSynthMetrics"),
+  risSynthPlotTabs: document.getElementById("risSynthPlotTabs"),
+  risSynthPlotImage: document.getElementById("risSynthPlotImage"),
+  risSynthPlotCaption: document.getElementById("risSynthPlotCaption"),
+  risSynthConfigPreview: document.getElementById("risSynthConfigPreview"),
+  risSynthLayout: document.getElementById("risSynthLayout"),
+  risSynthRightPanel: document.getElementById("risSynthRightPanel"),
+  risSynthLoadViewer: document.getElementById("risSynthLoadViewer"),
+  risSynthTopDownView: document.getElementById("risSynthTopDownView"),
+  risSynthDrawBoxes: document.getElementById("risSynthDrawBoxes"),
+  risSynthUndoBox: document.getElementById("risSynthUndoBox"),
+  risSynthClearBoxes: document.getElementById("risSynthClearBoxes"),
+  risSynthViewerStatus: document.getElementById("risSynthViewerStatus"),
+  linkSeedSourceType: document.getElementById("linkSeedSourceType"),
+  linkSeedRun: document.getElementById("linkSeedRun"),
+  linkSeedConfig: document.getElementById("linkSeedConfig"),
+  linkBackend: document.getElementById("linkBackend"),
+  linkEstimatorPerfect: document.getElementById("linkEstimatorPerfect"),
+  linkEstimatorLsLin: document.getElementById("linkEstimatorLsLin"),
+  linkEstimatorLsNn: document.getElementById("linkEstimatorLsNn"),
+  linkVariantOff: document.getElementById("linkVariantOff"),
+  linkVariantConfigured: document.getElementById("linkVariantConfigured"),
+  linkVariantFlat: document.getElementById("linkVariantFlat"),
+  linkEbnoList: document.getElementById("linkEbnoList"),
+  linkBatchSize: document.getElementById("linkBatchSize"),
+  linkIterations: document.getElementById("linkIterations"),
+  linkFftSize: document.getElementById("linkFftSize"),
+  linkNumSymbols: document.getElementById("linkNumSymbols"),
+  linkScsHz: document.getElementById("linkScsHz"),
+  linkBitsPerSymbol: document.getElementById("linkBitsPerSymbol"),
+  linkMaxDepth: document.getElementById("linkMaxDepth"),
+  linkSamplesPerSrc: document.getElementById("linkSamplesPerSrc"),
+  linkNumPaths: document.getElementById("linkNumPaths"),
+  linkStart: document.getElementById("linkStart"),
+  linkRefresh: document.getElementById("linkRefresh"),
+  linkJobStatus: document.getElementById("linkJobStatus"),
+  linkProgress: document.getElementById("linkProgress"),
+  linkLog: document.getElementById("linkLog"),
+  linkJobList: document.getElementById("linkJobList"),
+  linkRunSelect: document.getElementById("linkRunSelect"),
+  linkLoadResults: document.getElementById("linkLoadResults"),
+  linkResultStatus: document.getElementById("linkResultStatus"),
+  linkMetrics: document.getElementById("linkMetrics"),
+  linkPlotTabs: document.getElementById("linkPlotTabs"),
+  linkPlotImage: document.getElementById("linkPlotImage"),
+  linkPlotCaption: document.getElementById("linkPlotCaption"),
+  linkSeedViewerStatus: document.getElementById("linkSeedViewerStatus"),
+  linkSeedViewerFrame: document.getElementById("linkSeedViewerFrame"),
   plotLightbox: document.getElementById("plotLightbox"),
   plotLightboxImg: document.getElementById("plotLightboxImg"),
   plotLightboxClose: document.getElementById("plotLightboxClose"),
@@ -194,6 +326,11 @@ const ui = {
   radioMapCenterY: document.getElementById("radioMapCenterY"),
   radioMapCenterZ: document.getElementById("radioMapCenterZ"),
   radioMapPlaneZ: document.getElementById("radioMapPlaneZ"),
+  radioMapZStackEnabled: document.getElementById("radioMapZStackEnabled"),
+  radioMapZStackControls: document.getElementById("radioMapZStackControls"),
+  radioMapZStackBelow: document.getElementById("radioMapZStackBelow"),
+  radioMapZStackAbove: document.getElementById("radioMapZStackAbove"),
+  radioMapZStackSpacing: document.getElementById("radioMapZStackSpacing"),
   floorElevation: document.getElementById("floorElevation"),
   radioMapPlotStyle: document.getElementById("radioMapPlotStyle"),
   radioMapPlotMetric: document.getElementById("radioMapPlotMetric"),
@@ -269,6 +406,7 @@ const ui = {
   campaign2CompactOutput: document.getElementById("campaign2CompactOutput"),
   campaign2DisableRender: document.getElementById("campaign2DisableRender"),
   campaign2PruneRuns: document.getElementById("campaign2PruneRuns"),
+  campaign2ShowSpecularPath: document.getElementById("campaign2ShowSpecularPath"),
   campaign2CoarseCell: document.getElementById("campaign2CoarseCell"),
   campaign2ResumeRun: document.getElementById("campaign2ResumeRun"),
   campaign2Start: document.getElementById("campaign2Start"),
@@ -333,6 +471,28 @@ const ui = {
   risPresetFlat: document.getElementById("risPresetFlat"),
   risPresetCenterMap: document.getElementById("risPresetCenterMap"),
   risList: document.getElementById("risList"),
+  snapshotStudio: document.getElementById("snapshotStudio"),
+  snapshotStudioClose: document.getElementById("snapshotStudioClose"),
+  snapshotRefreshPreview: document.getElementById("snapshotRefreshPreview"),
+  snapshotPreviewImage: document.getElementById("snapshotPreviewImage"),
+  snapshotPreviewMeta: document.getElementById("snapshotPreviewMeta"),
+  snapshotStudioStatus: document.getElementById("snapshotStudioStatus"),
+  snapshotPreset: document.getElementById("snapshotPreset"),
+  snapshotTheme: document.getElementById("snapshotTheme"),
+  snapshotWidth: document.getElementById("snapshotWidth"),
+  snapshotHeight: document.getElementById("snapshotHeight"),
+  snapshotScale: document.getElementById("snapshotScale"),
+  snapshotView: document.getElementById("snapshotView"),
+  snapshotProjection: document.getElementById("snapshotProjection"),
+  snapshotFov: document.getElementById("snapshotFov"),
+  snapshotMargin: document.getElementById("snapshotMargin"),
+  snapshotTitle: document.getElementById("snapshotTitle"),
+  snapshotIncludeTitle: document.getElementById("snapshotIncludeTitle"),
+  snapshotIncludeMeta: document.getElementById("snapshotIncludeMeta"),
+  snapshotIncludeScaleBar: document.getElementById("snapshotIncludeScaleBar"),
+  snapshotIncludeFrame: document.getElementById("snapshotIncludeFrame"),
+  snapshotDownload: document.getElementById("snapshotDownload"),
+  snapshotCopy: document.getElementById("snapshotCopy"),
 };
 
 const IEEE_TAP_CHAMBER_CONFIG = "indoor_box_ieee_tap_chamber.yaml";
@@ -367,7 +527,15 @@ const IEEE_TAP_CAMPAIGN2_DEFAULTS = {
   compactOutput: true,
   disableRender: true,
   pruneRuns: true,
+  showSpecularPath: true,
   coarseCellSizeM: 0.10,
+};
+
+const SNAPSHOT_PRESETS = {
+  report_landscape: { width: 1600, height: 900 },
+  report_portrait: { width: 1200, height: 1600 },
+  square: { width: 1400, height: 1400 },
+  uhd_4k: { width: 3840, height: 2160 },
 };
 
 const RUN_PROFILES = {
@@ -417,6 +585,50 @@ const RIS_PLOT_FILES = [
   { file: "compare_error_db.png", label: "QUB vs Sionna error" },
 ];
 const RIS_PLOT_LABELS = Object.fromEntries(RIS_PLOT_FILES.map((p) => [p.file, p.label]));
+const RIS_PLOT_FILES_BY_MODE = {
+  pattern: new Set(["phase_map.png", "pattern_cartesian.png", "pattern_polar.png"]),
+  validate: new Set(["phase_map.png", "validation_overlay.png"]),
+  compare: new Set([
+    "phase_map.png",
+    "compare_overlay_norm_db.png",
+    "compare_overlay_abs_db.png",
+    "compare_error_db.png",
+  ]),
+};
+const RIS_SYNTH_PLOT_FILES = [
+  { file: "target_region_overlay.png", label: "ROI overlay" },
+  { file: "radio_map_ris_off.png", label: "RIS off" },
+  { file: "radio_map_continuous.png", label: "Optimal Sionna RIS" },
+  { file: "radio_map_1bit.png", label: "1-Bit" },
+  { file: "radio_map_quantized.png", label: "Quantized" },
+  { file: "radio_map_diff_continuous_vs_off.png", label: "Continuous vs RIS off" },
+  { file: "radio_map_diff_1bit_vs_off.png", label: "1-Bit vs RIS off" },
+  { file: "radio_map_diff_1bit_vs_continuous.png", label: "1-Bit vs continuous" },
+  { file: "radio_map_diff_quantized_vs_off.png", label: "Quantized vs RIS off" },
+  { file: "radio_map_diff_quantized_vs_continuous.png", label: "Quantized vs continuous" },
+  { file: "objective_trace.png", label: "Objective trace" },
+  { file: "phase_continuous.png", label: "Continuous phase" },
+  { file: "phase_1bit.png", label: "1-Bit phase" },
+  { file: "phase_quantized.png", label: "Quantized phase" },
+  { file: "cdf_roi_rx_power.png", label: "ROI Rx power CDF" },
+];
+const RIS_SYNTH_PLOT_LABELS = Object.fromEntries(RIS_SYNTH_PLOT_FILES.map((p) => [p.file, p.label]));
+const LINK_PLOT_FILES = [
+  { file: "ber_vs_ebno.png", label: "BER" },
+  { file: "variant_path_gain_db.png", label: "Path Gain" },
+  { file: "variant_delay_spread_ns.png", label: "Delay Spread" },
+  { file: "variant_path_delay_hist_ns.png", label: "Path Delay" },
+  { file: "variant_ris_phase.png", label: "RIS Phase" },
+  { file: "variant_ris_amplitude.png", label: "RIS Amplitude" },
+];
+const LINK_PLOT_LABELS = {
+  "ber_vs_ebno.png": "BER vs Eb/N0",
+  "variant_path_gain_db.png": "Path gain by RIS variant",
+  "variant_delay_spread_ns.png": "Delay spread by RIS variant",
+  "variant_path_delay_hist_ns.png": "Path delay distribution",
+  "variant_ris_phase.png": "RIS phase by variant",
+  "variant_ris_amplitude.png": "RIS amplitude by variant",
+};
 
 const CAMPAIGN_PLOT_FILES = [
   { file: "campaign_rx_power_dbm.png", label: "Campaign Rx power" },
@@ -432,12 +644,68 @@ function isSimScopeTab(tabName) {
   return tabName === "sim" || tabName === "indoor" || tabName === "campaign" || tabName === "campaign2";
 }
 
+function isIndoorScopeTab(tabName = state.activeTab) {
+  return tabName === "indoor" || tabName === "campaign" || tabName === "campaign2";
+}
+
+function getActiveProfileKey(tabName = state.activeTab) {
+  if (isIndoorScopeTab(tabName)) {
+    return "indoor_box_high";
+  }
+  return ui.runProfile && ui.runProfile.value ? ui.runProfile.value : "cpu_only";
+}
+
+function usesSharedViewerTab(tabName) {
+  return isSimScopeTab(tabName) || tabName === "ris-synth";
+}
+
 function getRunScopeForTab(tabName = state.activeTab) {
-  return tabName === "indoor" || tabName === "campaign" || tabName === "campaign2" ? "indoor" : "sim";
+  return isIndoorScopeTab(tabName) ? "indoor" : "sim";
+}
+
+function hasActiveRisSynthesisViewerOverlay(scope = getRunScopeForTab()) {
+  return Boolean(
+    scope === "sim"
+      && state.activeTab === "ris-synth"
+      && (state.risSynthesis.viewerOverlayRunId || state.risSynthesis.pendingViewerOverlayRunId)
+  );
+}
+
+function clearRisSynthesisViewerOverlay(options = {}) {
+  const { keepMode = false, cancelPending = true } = options;
+  if (cancelPending) {
+    state.risSynthesis.viewerOverlayRequestToken += 1;
+  }
+  state.risSynthesis.autoLoadedViewerRunId = null;
+  state.risSynthesis.viewerOverlayRunId = null;
+  state.risSynthesis.pendingViewerOverlayRunId = null;
+  if (!keepMode && ui.risSynthViewerMode) {
+    ui.risSynthViewerMode.value = "active";
+  }
+}
+
+function syncRisSynthesisSelectedRun(runId, options = {}) {
+  const { followActive = false } = options;
+  const nextRunId = runId || null;
+  state.risSynthesis.selectedRunId = nextRunId;
+  state.risSynthesis.followActiveRun = Boolean(followActive);
+  if (ui.risSynthRunSelect && nextRunId && ui.risSynthRunSelect.value !== nextRunId) {
+    ui.risSynthRunSelect.value = nextRunId;
+  }
+}
+
+function syncRisSelectedRun(runId, options = {}) {
+  const { followActive = false } = options;
+  const nextRunId = runId || null;
+  state.ris.selectedRunId = nextRunId;
+  state.ris.followActiveRun = Boolean(followActive);
+  if (ui.risRunSelect && nextRunId && ui.risRunSelect.value !== nextRunId) {
+    ui.risRunSelect.value = nextRunId;
+  }
 }
 
 function getRequestedRunScope() {
-  return state.activeTab === "indoor" || state.activeTab === "campaign" || state.activeTab === "campaign2" || ui.runProfile.value === "indoor_box_high" ? "indoor" : "sim";
+  return isIndoorScopeTab(state.activeTab) || getActiveProfileKey() === "indoor_box_high" ? "indoor" : "sim";
 }
 
 function getScopedUiSnapshotKey(tabName = state.activeTab) {
@@ -481,6 +749,46 @@ function getGeometryAssetKey(_runId = state.runId, manifest = state.manifest) {
   return [manifest.mesh || "", meshFiles, meshManifest, rotation, proxy].join("::");
 }
 
+function cloneGeometryTemplate(template) {
+  return template ? template.clone(true) : null;
+}
+
+function getCachedGeometryTemplate(assetKey) {
+  if (!assetKey) return null;
+  const template = state.geometryTemplateCache.get(assetKey) || null;
+  if (!template) return null;
+  state.geometryTemplateCache.delete(assetKey);
+  state.geometryTemplateCache.set(assetKey, template);
+  return template;
+}
+
+function cacheGeometryTemplate(assetKey, template) {
+  if (!assetKey || !template) return template;
+  if (state.geometryTemplateCache.has(assetKey)) {
+    state.geometryTemplateCache.delete(assetKey);
+  }
+  state.geometryTemplateCache.set(assetKey, template);
+  return template;
+}
+
+async function getOrBuildGeometryTemplate(assetKey, builder) {
+  if (!assetKey) return null;
+  const cached = getCachedGeometryTemplate(assetKey);
+  if (cached) return cached;
+  const pending = state.geometryTemplatePromises.get(assetKey);
+  if (pending) return await pending;
+  const promise = (async () => {
+    const built = await builder();
+    return cacheGeometryTemplate(assetKey, built);
+  })();
+  state.geometryTemplatePromises.set(assetKey, promise);
+  try {
+    return await promise;
+  } finally {
+    state.geometryTemplatePromises.delete(assetKey);
+  }
+}
+
 let renderer;
 let scene;
 let camera;
@@ -489,6 +797,7 @@ let geometryGroup;
 let markerGroup;
 let rayGroup;
 let heatmapGroup;
+let risSynthRoiGroup;
 let alignmentGroup;
 let campaignPreviewGroup;
 let highlightLine;
@@ -498,7 +807,9 @@ let dragRisIndex = null;
 let dragStartYaw = 0;
 let dragStartMouse = null;
 let debugHeatmapMesh = null;
+let snapshotPreviewTimer = null;
 const TX_RX_MARKER_BASE_SCALE = 0.2;
+const RIS_SYNTH_ROI_ELEVATION_M = 0.08;
 
 function getSceneScale() {
   if (geometryGroup) {
@@ -641,6 +952,7 @@ function applyIeeeTapCampaign2Defaults(config = getIndoorChamberConfig()) {
     compactOutput: cfgCampaign.compact_output ?? IEEE_TAP_CAMPAIGN2_DEFAULTS.compactOutput,
     disableRender: cfgCampaign.disable_render ?? IEEE_TAP_CAMPAIGN2_DEFAULTS.disableRender,
     pruneRuns: cfgCampaign.prune_angle_outputs ?? IEEE_TAP_CAMPAIGN2_DEFAULTS.pruneRuns,
+    showSpecularPath: cfgCampaign.show_specular_path ?? IEEE_TAP_CAMPAIGN2_DEFAULTS.showSpecularPath,
     coarseCellSizeM: cfgCampaign.coarse_cell_size_m ?? IEEE_TAP_CAMPAIGN2_DEFAULTS.coarseCellSizeM,
   };
   setInputValue(ui.campaign2TargetAngles, defaults.targetAngles);
@@ -658,7 +970,79 @@ function applyIeeeTapCampaign2Defaults(config = getIndoorChamberConfig()) {
   if (ui.campaign2CompactOutput) ui.campaign2CompactOutput.checked = Boolean(defaults.compactOutput);
   if (ui.campaign2DisableRender) ui.campaign2DisableRender.checked = Boolean(defaults.disableRender);
   if (ui.campaign2PruneRuns) ui.campaign2PruneRuns.checked = Boolean(defaults.pruneRuns);
+  if (ui.campaign2ShowSpecularPath) ui.campaign2ShowSpecularPath.checked = Boolean(defaults.showSpecularPath);
   setInputValue(ui.campaign2CoarseCell, defaults.coarseCellSizeM);
+  syncCampaign2FixedRxPosition(config, { force: true });
+}
+
+function getCampaign2FixedRxPosition(config = getIndoorChamberConfig()) {
+  const cfg = (config && config.data) || {};
+  const scene = cfg.scene || {};
+  const campaign = cfg.campaign || {};
+  const experiment = cfg.experiment || {};
+  const risObjects = cfg.ris && Array.isArray(cfg.ris.objects) ? cfg.ris.objects : [];
+  const baseRis = risObjects.find((item) => item && item.enabled !== false) || risObjects[0] || {};
+  const baseRisPos = Array.isArray(baseRis.position) && baseRis.position.length >= 3
+    ? [Number(baseRis.position[0]), Number(baseRis.position[1]), Number(baseRis.position[2])]
+    : [0.0, 1.3, 1.5];
+  const baseRx = scene.rx && Array.isArray(scene.rx.position) && scene.rx.position.length >= 3
+    ? [Number(scene.rx.position[0]), Number(scene.rx.position[1]), Number(scene.rx.position[2])]
+    : [0.0, -0.7, 1.6];
+
+  let baseReferenceYawDeg = 0.0;
+  if (Array.isArray(baseRis.orientation) && baseRis.orientation.length >= 1) {
+    baseReferenceYawDeg = _radToDeg(baseRis.orientation[0]);
+  } else if (Array.isArray(baseRis.look_at) && baseRis.look_at.length >= 3) {
+    const dx = Number(baseRis.look_at[0]) - baseRisPos[0];
+    const dy = Number(baseRis.look_at[1]) - baseRisPos[1];
+    if (Math.abs(dx) > 1e-9 || Math.abs(dy) > 1e-9) {
+      baseReferenceYawDeg = _radToDeg(Math.atan2(dy, dx));
+    }
+  }
+
+  const targetDistanceM = readNumber(ui.campaign2TargetDistance)
+    ?? Number(experiment.rx_ris_distance_m)
+    ?? IEEE_TAP_CAMPAIGN2_DEFAULTS.targetDistanceM;
+  const targetHeightOffsetM = campaign.target_height_offset_m !== undefined && campaign.target_height_offset_m !== null
+    ? Number(campaign.target_height_offset_m)
+    : (baseRx[2] - baseRisPos[2]);
+  const baseTargetAngleDeg = normalizeAngleDeg(
+    _radToDeg(Math.atan2(baseRx[1] - baseRisPos[1], baseRx[0] - baseRisPos[0])) - baseReferenceYawDeg
+  );
+  const activeRisPose = getActiveRisPose() || { position: baseRisPos, yawDeg: baseReferenceYawDeg };
+  return campaignPositionOnArcOriented(
+    activeRisPose.position,
+    Number.isFinite(targetDistanceM) ? targetDistanceM : IEEE_TAP_CAMPAIGN2_DEFAULTS.targetDistanceM,
+    baseTargetAngleDeg,
+    activeRisPose.yawDeg,
+    Number.isFinite(targetHeightOffsetM) ? targetHeightOffsetM : 0.0
+  ).map((value) => Number(Number(value).toFixed(4)));
+}
+
+function syncCampaign2FixedRxPosition(config = getIndoorChamberConfig(), options = {}) {
+  const { force = false, rebuild = true } = options;
+  const desired = getCampaign2FixedRxPosition(config);
+  const current = Array.isArray(state.markers.rx) && state.markers.rx.length >= 3
+    ? [Number(state.markers.rx[0]), Number(state.markers.rx[1]), Number(state.markers.rx[2])]
+    : null;
+  const matchesDesired = Boolean(
+    current &&
+    current.every((value, idx) => Number.isFinite(value) && Math.abs(value - desired[idx]) < 1e-6)
+  );
+  if (!force && matchesDesired) {
+    return false;
+  }
+
+  state.markers.rx = desired.slice();
+  const sceneCfg = state.sceneOverride || {};
+  sceneCfg.rx = Object.assign(sceneCfg.rx || {}, { position: state.markers.rx });
+  state.sceneOverride = sceneCfg;
+  state.sceneOverrideDirty = true;
+  updateInputs();
+  if (rebuild) {
+    rebuildScene({ refit: false });
+  }
+  return true;
 }
 
 function applyIeeeTapChamberPreset() {
@@ -723,6 +1107,17 @@ function moveSharedPanels(targetLayout) {
   targetLayout.appendChild(right);
 }
 
+function moveViewerPanel(targetLayout, beforeNode = null) {
+  if (!targetLayout) return;
+  const viewer = document.getElementById("viewerPanel");
+  if (!viewer) return;
+  if (beforeNode && beforeNode.parentElement === targetLayout) {
+    targetLayout.insertBefore(viewer, beforeNode);
+    return;
+  }
+  targetLayout.appendChild(viewer);
+}
+
 function snapshotUiState() {
   const readText = (el) => (el ? el.value : "");
   const readCheck = (el) => (el ? Boolean(el.checked) : false);
@@ -755,6 +1150,10 @@ function snapshotUiState() {
       centerY: readText(ui.radioMapCenterY),
       centerZ: readText(ui.radioMapCenterZ),
       planeZ: readText(ui.radioMapPlaneZ),
+      zStackEnabled: readCheck(ui.radioMapZStackEnabled),
+      zStackBelow: readText(ui.radioMapZStackBelow),
+      zStackAbove: readText(ui.radioMapZStackAbove),
+      zStackSpacing: readText(ui.radioMapZStackSpacing),
       plotStyle: readText(ui.radioMapPlotStyle),
       plotMetric: readText(ui.radioMapPlotMetric),
       showTx: readCheck(ui.radioMapPlotShowTx),
@@ -847,6 +1246,7 @@ function snapshotUiState() {
       compactOutput: readCheck(ui.campaign2CompactOutput),
       disableRender: readCheck(ui.campaign2DisableRender),
       pruneRuns: readCheck(ui.campaign2PruneRuns),
+      showSpecularPath: readCheck(ui.campaign2ShowSpecularPath),
       coarseCell: readText(ui.campaign2CoarseCell),
       resumeRun: readText(ui.campaign2ResumeRun),
     },
@@ -889,12 +1289,17 @@ function applyUiState(snapshot) {
     setText(ui.radioMapCenterY, snapshot.radio.centerY);
     setText(ui.radioMapCenterZ, snapshot.radio.centerZ);
     setText(ui.radioMapPlaneZ, snapshot.radio.planeZ);
+    setCheck(ui.radioMapZStackEnabled, snapshot.radio.zStackEnabled);
+    setText(ui.radioMapZStackBelow, snapshot.radio.zStackBelow);
+    setText(ui.radioMapZStackAbove, snapshot.radio.zStackAbove);
+    setText(ui.radioMapZStackSpacing, snapshot.radio.zStackSpacing);
     setText(ui.radioMapPlotStyle, snapshot.radio.plotStyle);
     setText(ui.radioMapPlotMetric, snapshot.radio.plotMetric);
     setCheck(ui.radioMapPlotShowTx, snapshot.radio.showTx);
     setCheck(ui.radioMapPlotShowRx, snapshot.radio.showRx);
     setCheck(ui.radioMapPlotShowRis, snapshot.radio.showRis);
     setCheck(ui.radioMapDiffRis, snapshot.radio.diffRis);
+    syncRadioMapZStackControls({ primeDefaults: snapshot.radio.zStackEnabled });
   }
   if (snapshot.simTuning) {
     setCheck(ui.simScaleEnabled, snapshot.simTuning.scaleEnabled);
@@ -989,6 +1394,7 @@ function applyUiState(snapshot) {
     setCheck(ui.campaign2CompactOutput, snapshot.campaign2.compactOutput);
     setCheck(ui.campaign2DisableRender, snapshot.campaign2.disableRender);
     setCheck(ui.campaign2PruneRuns, snapshot.campaign2.pruneRuns);
+    setCheck(ui.campaign2ShowSpecularPath, snapshot.campaign2.showSpecularPath !== false);
     setText(ui.campaign2CoarseCell, snapshot.campaign2.coarseCell);
     setText(ui.campaign2ResumeRun, snapshot.campaign2.resumeRun);
   }
@@ -1031,6 +1437,21 @@ function risUiOrientationToBackend(orientation) {
 function risBackendOrientationToUi(orientation) {
   if (!Array.isArray(orientation) || orientation.length < 3) return null;
   return [orientation[2], orientation[1], orientation[0]];
+}
+
+function backendForwardVectorFromOrientation(orientation) {
+  if (!Array.isArray(orientation) || orientation.length < 3) return null;
+  const a = Number(orientation[0]) || 0;
+  const b = Number(orientation[1]) || 0;
+  const cosA = Math.cos(a);
+  const cosB = Math.cos(b);
+  const sinA = Math.sin(a);
+  const sinB = Math.sin(b);
+  return new THREE.Vector3(
+    cosA * cosB,
+    sinA * cosB,
+    -sinB
+  );
 }
 
 function clearRisList() {
@@ -1508,17 +1929,19 @@ function updateRisItemYaw(index, yawRad) {
 function refreshHeatmap() {
   heatmapGroup.clear();
   addHeatmap();
+  renderRisSynthesisRoiOverlay();
 }
 
 function initViewer() {
   const container = document.getElementById("viewerCanvas");
   scene = new THREE.Scene();
-  scene.background = new THREE.Color(0xf3f4f6);
+  scene.background = new THREE.Color(0x070c12);
   camera = new THREE.PerspectiveCamera(60, container.clientWidth / container.clientHeight, 0.1, 5000);
   camera.position.set(80, 80, 80);
   camera.up.set(0, 0, 1);
 
   renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.setSize(container.clientWidth, container.clientHeight);
   container.appendChild(renderer.domElement);
   renderer.domElement.addEventListener("contextmenu", (event) => event.preventDefault());
@@ -1531,9 +1954,9 @@ function initViewer() {
   controls.keyPanSpeed = 18.0;
   controls.listenToKeyEvents(window);
 
-  const hemi = new THREE.HemisphereLight(0xffffff, 0x64748b, 0.8);
+  const hemi = new THREE.HemisphereLight(0xf7fbff, 0x0f1720, 0.92);
   scene.add(hemi);
-  const dir = new THREE.DirectionalLight(0xffffff, 0.8);
+  const dir = new THREE.DirectionalLight(0xf8fbff, 0.9);
   dir.position.set(50, 120, 60);
   scene.add(dir);
 
@@ -1541,6 +1964,7 @@ function initViewer() {
   markerGroup = new THREE.Group();
   rayGroup = new THREE.Group();
   heatmapGroup = new THREE.Group();
+  risSynthRoiGroup = new THREE.Group();
   alignmentGroup = new THREE.Group();
   alignmentGroup.visible = false;
   campaignPreviewGroup = new THREE.Group();
@@ -1550,6 +1974,7 @@ function initViewer() {
     markerGroup,
     rayGroup,
     heatmapGroup,
+    risSynthRoiGroup,
     alignmentGroup,
     campaignPreviewGroup
   );
@@ -1616,13 +2041,9 @@ function animate() {
   renderer.render(scene, camera);
 }
 
-function updateScaleBar() {
-  if (!ui.scaleBar || !ui.scaleBarLabel || !ui.scaleBarLine) return;
-  if (!camera || !renderer || !controls) return;
-  const width = renderer.domElement.clientWidth;
-  const height = renderer.domElement.clientHeight;
-  if (!width || !height) return;
-  const center = controls.target || new THREE.Vector3(0, 0, 0);
+function computeScaleBarMetrics(activeCamera, width, height, target = controls?.target || new THREE.Vector3(0, 0, 0)) {
+  if (!activeCamera || !width || !height) return null;
+  const center = target || new THREE.Vector3(0, 0, 0);
   const z = Number.isFinite(center.z) ? center.z : 0;
   const candidates = [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000];
   const minPx = 70;
@@ -1632,33 +2053,483 @@ function updateScaleBar() {
   candidates.forEach((length) => {
     const p1 = new THREE.Vector3(center.x - length / 2, center.y, z);
     const p2 = new THREE.Vector3(center.x + length / 2, center.y, z);
-    const s1 = p1.clone().project(camera);
-    const s2 = p2.clone().project(camera);
+    const s1 = p1.clone().project(activeCamera);
+    const s2 = p2.clone().project(activeCamera);
     const dx = (s2.x - s1.x) * (width / 2);
     const dy = (s2.y - s1.y) * (height / 2);
     const px = Math.hypot(dx, dy);
     if (!Number.isFinite(px) || px <= 0) return;
-    const target = (minPx + maxPx) / 2;
-    const score = Math.abs(px - target);
+    const targetPx = (minPx + maxPx) / 2;
+    const score = Math.abs(px - targetPx);
     if ((px >= minPx && px <= maxPx && score < bestScore) || (!best && score < bestScore)) {
       bestScore = score;
       best = { length, px };
     }
   });
-  if (!best) return;
+  if (!best) return null;
   const px = Math.max(24, Math.min(best.px, 260));
-  ui.scaleBarLine.style.width = `${px}px`;
   let label = `${best.length} m`;
   if (best.length >= 1000) {
     label = `${(best.length / 1000).toFixed(best.length % 1000 === 0 ? 0 : 1)} km`;
   } else if (best.length < 1) {
     label = `${Math.round(best.length * 100)} cm`;
   }
-  ui.scaleBarLabel.textContent = label;
+  return { px, label, length: best.length };
+}
+
+function updateScaleBar() {
+  if (!ui.scaleBar || !ui.scaleBarLabel || !ui.scaleBarLine) return;
+  if (!camera || !renderer || !controls) return;
+  const width = renderer.domElement.clientWidth;
+  const height = renderer.domElement.clientHeight;
+  if (!width || !height) return;
+  const metrics = computeScaleBarMetrics(camera, width, height, controls.target || new THREE.Vector3(0, 0, 0));
+  if (!metrics) return;
+  ui.scaleBarLine.style.width = `${metrics.px}px`;
+  ui.scaleBarLabel.textContent = metrics.label;
 }
 
 function setMeta(text) {
   ui.viewerMeta.textContent = text;
+}
+
+function getSnapshotDefaultTitle() {
+  const sceneName =
+    state.manifest?.label
+    || state.runInfo?.summary?.runtime?.scene_label
+    || (ui.sceneSelect && ui.sceneSelect.selectedOptions && ui.sceneSelect.selectedOptions[0]?.textContent)
+    || "Scene";
+  const runName = state.runId || "preview";
+  return `${sceneName} · ${runName}`;
+}
+
+function setSnapshotStudioStatus(text) {
+  if (ui.snapshotStudioStatus) ui.snapshotStudioStatus.textContent = text;
+}
+
+function setSnapshotPreviewMeta(text) {
+  if (ui.snapshotPreviewMeta) ui.snapshotPreviewMeta.textContent = text;
+}
+
+function readSnapshotInt(input, fallback, min = 0) {
+  const value = parseInt(input?.value || "", 10);
+  if (!Number.isFinite(value)) return fallback;
+  return Math.max(min, value);
+}
+
+function readSnapshotFloat(input, fallback, min = 0) {
+  const value = parseFloat(input?.value || "");
+  if (!Number.isFinite(value)) return fallback;
+  return Math.max(min, value);
+}
+
+function applySnapshotPreset(presetName) {
+  const preset = SNAPSHOT_PRESETS[presetName];
+  if (!preset) return;
+  if (ui.snapshotWidth) ui.snapshotWidth.value = String(preset.width);
+  if (ui.snapshotHeight) ui.snapshotHeight.value = String(preset.height);
+}
+
+function syncSnapshotPresetFromDimensions() {
+  if (!ui.snapshotPreset) return;
+  const width = readSnapshotInt(ui.snapshotWidth, 0);
+  const height = readSnapshotInt(ui.snapshotHeight, 0);
+  const matching = Object.entries(SNAPSHOT_PRESETS).find(([, preset]) => preset.width === width && preset.height === height);
+  ui.snapshotPreset.value = matching ? matching[0] : "custom";
+}
+
+function updateSnapshotStudioControlState() {
+  if (ui.snapshotFov) ui.snapshotFov.disabled = ui.snapshotProjection?.value === "orthographic";
+}
+
+function getSnapshotOptions() {
+  const width = readSnapshotInt(ui.snapshotWidth, 1600, 320);
+  const height = readSnapshotInt(ui.snapshotHeight, 900, 240);
+  const margin = readSnapshotInt(ui.snapshotMargin, 28, 0);
+  return {
+    preset: ui.snapshotPreset?.value || "report_landscape",
+    width,
+    height,
+    supersample: readSnapshotInt(ui.snapshotScale, 2, 1),
+    theme: ui.snapshotTheme?.value || "dark_viewer",
+    view: ui.snapshotView?.value || "current",
+    projection: ui.snapshotProjection?.value || "perspective",
+    fov: readSnapshotFloat(ui.snapshotFov, camera?.fov || 35, 10),
+    margin,
+    title: (ui.snapshotTitle?.value || "").trim() || getSnapshotDefaultTitle(),
+    includeTitle: Boolean(ui.snapshotIncludeTitle?.checked),
+    includeMeta: Boolean(ui.snapshotIncludeMeta?.checked),
+    includeScaleBar: Boolean(ui.snapshotIncludeScaleBar?.checked),
+    includeFrame: Boolean(ui.snapshotIncludeFrame?.checked),
+  };
+}
+
+function getSnapshotThemeConfig(themeName) {
+  if (themeName === "report_light") {
+    return {
+      matte: "#f7f8fb",
+      background: 0xf7f8fb,
+      transparent: false,
+      title: "#18212b",
+      subtitle: "#516172",
+      frame: "#cbd5df",
+      scale: "#18212b",
+      scaleText: "#18212b",
+      footerBg: "#ffffff",
+      footerText: "#314050",
+    };
+  }
+  if (themeName === "transparent") {
+    return {
+      matte: null,
+      background: null,
+      transparent: true,
+      title: "#e8eef6",
+      subtitle: "#b4c0cb",
+      frame: "rgba(255,255,255,0.2)",
+      scale: "#e8eef6",
+      scaleText: "#e8eef6",
+      footerBg: "rgba(7,12,18,0.72)",
+      footerText: "#e8eef6",
+    };
+  }
+  return {
+    matte: "#070c12",
+    background: 0x070c12,
+    transparent: false,
+    title: "#f2f8ff",
+    subtitle: "#8fa0b2",
+    frame: "#223241",
+    scale: "#f2f8ff",
+    scaleText: "#f2f8ff",
+    footerBg: "#0b1117",
+    footerText: "#e8eef6",
+  };
+}
+
+function getBoundsCorners(box) {
+  const min = box.min;
+  const max = box.max;
+  return [
+    new THREE.Vector3(min.x, min.y, min.z),
+    new THREE.Vector3(min.x, min.y, max.z),
+    new THREE.Vector3(min.x, max.y, min.z),
+    new THREE.Vector3(min.x, max.y, max.z),
+    new THREE.Vector3(max.x, min.y, min.z),
+    new THREE.Vector3(max.x, min.y, max.z),
+    new THREE.Vector3(max.x, max.y, min.z),
+    new THREE.Vector3(max.x, max.y, max.z),
+  ];
+}
+
+function getSnapshotViewDirection(viewName) {
+  if (viewName === "current" && camera && controls) {
+    const delta = camera.position.clone().sub(controls.target);
+    if (delta.lengthSq() > 0) return delta.normalize();
+  }
+  if (viewName === "top") return new THREE.Vector3(0, 0, 1);
+  if (viewName === "front") return new THREE.Vector3(0, -1, 0);
+  if (viewName === "right") return new THREE.Vector3(1, 0, 0);
+  return new THREE.Vector3(1, 1, 0.8).normalize();
+}
+
+function getCameraFrameFromDirection(box, direction, width, height) {
+  const center = box.getCenter(new THREE.Vector3());
+  const size = box.getSize(new THREE.Vector3());
+  const maxDim = Math.max(size.x, size.y, size.z, 1);
+  const viewDir = direction.clone().normalize();
+  const worldUp = Math.abs(viewDir.dot(new THREE.Vector3(0, 0, 1))) > 0.95
+    ? new THREE.Vector3(0, 1, 0)
+    : new THREE.Vector3(0, 0, 1);
+  const right = new THREE.Vector3().crossVectors(worldUp, viewDir).normalize();
+  const up = new THREE.Vector3().crossVectors(viewDir, right).normalize();
+  const corners = getBoundsCorners(box);
+  let halfWidth = 0;
+  let halfHeight = 0;
+  let halfDepth = 0;
+  corners.forEach((corner) => {
+    const rel = corner.clone().sub(center);
+    halfWidth = Math.max(halfWidth, Math.abs(rel.dot(right)));
+    halfHeight = Math.max(halfHeight, Math.abs(rel.dot(up)));
+    halfDepth = Math.max(halfDepth, Math.abs(rel.dot(viewDir)));
+  });
+  const aspect = Math.max(width / Math.max(height, 1), 0.1);
+  let fitHalfHeight = Math.max(halfHeight, halfWidth / aspect, maxDim * 0.15);
+  fitHalfHeight *= 1.16;
+  const fitHalfWidth = fitHalfHeight * aspect;
+  return {
+    center,
+    viewDir,
+    right,
+    up,
+    halfDepth,
+    fitHalfWidth,
+    fitHalfHeight,
+    maxDim,
+  };
+}
+
+function buildSnapshotCamera(options, width, height) {
+  const box = _getFitBounds();
+  if (!box || box.isEmpty()) {
+    const fallback = camera ? camera.clone() : new THREE.PerspectiveCamera(options.fov || 35, width / height, 0.1, 5000);
+    fallback.aspect = width / height;
+    fallback.updateProjectionMatrix();
+    return fallback;
+  }
+  const direction = getSnapshotViewDirection(options.view);
+  const frame = getCameraFrameFromDirection(box, direction, width, height);
+  if (options.view === "current" && camera && options.projection === "perspective") {
+    const cloned = camera.clone();
+    cloned.aspect = width / Math.max(height, 1);
+    cloned.fov = options.fov || camera.fov;
+    cloned.updateProjectionMatrix();
+    return cloned;
+  }
+  if (options.projection === "orthographic") {
+    const ortho = new THREE.OrthographicCamera(
+      -frame.fitHalfWidth,
+      frame.fitHalfWidth,
+      frame.fitHalfHeight,
+      -frame.fitHalfHeight,
+      0.1,
+      frame.maxDim * 20 + frame.halfDepth * 10 + 100,
+    );
+    const distance = Math.max(frame.maxDim * 4, frame.halfDepth * 6 + 10);
+    ortho.position.copy(frame.center.clone().add(frame.viewDir.clone().multiplyScalar(distance)));
+    ortho.up.copy(frame.up);
+    ortho.lookAt(frame.center);
+    ortho.updateProjectionMatrix();
+    ortho.updateMatrixWorld();
+    return ortho;
+  }
+  const perspective = new THREE.PerspectiveCamera(options.fov || 35, width / Math.max(height, 1), 0.1, frame.maxDim * 20 + 1000);
+  const vFov = THREE.MathUtils.degToRad(perspective.fov);
+  const hFov = 2 * Math.atan(Math.tan(vFov / 2) * perspective.aspect);
+  const distanceY = frame.fitHalfHeight / Math.tan(vFov / 2);
+  const distanceX = frame.fitHalfWidth / Math.tan(hFov / 2);
+  const distance = Math.max(distanceX, distanceY) + frame.halfDepth + frame.maxDim * 0.35;
+  perspective.position.copy(frame.center.clone().add(frame.viewDir.clone().multiplyScalar(distance)));
+  perspective.up.copy(frame.up);
+  perspective.lookAt(frame.center);
+  perspective.updateProjectionMatrix();
+  perspective.updateMatrixWorld();
+  return perspective;
+}
+
+function drawSnapshotScaleBar(ctx, theme, metrics, width, height, margin) {
+  if (!metrics) return;
+  const lineWidth = Math.max(2, Math.round(height * 0.002));
+  const barX = margin;
+  const barY = height - margin - 28;
+  ctx.save();
+  ctx.lineWidth = lineWidth;
+  ctx.strokeStyle = theme.scale;
+  ctx.fillStyle = theme.scaleText;
+  ctx.font = '12px "IBM Plex Mono", monospace';
+  ctx.textBaseline = "bottom";
+  ctx.fillText(metrics.label, barX, barY - 8);
+  ctx.beginPath();
+  ctx.moveTo(barX, barY);
+  ctx.lineTo(barX + metrics.px, barY);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(barX, barY - 6);
+  ctx.lineTo(barX, barY + 6);
+  ctx.moveTo(barX + metrics.px, barY - 6);
+  ctx.lineTo(barX + metrics.px, barY + 6);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawSnapshotTitle(ctx, theme, title, margin, width) {
+  if (!title) return 0;
+  ctx.save();
+  ctx.fillStyle = theme.title;
+  ctx.font = '600 24px "IBM Plex Sans", sans-serif';
+  ctx.textBaseline = "top";
+  ctx.fillText(title, margin, margin);
+  ctx.restore();
+  return 32;
+}
+
+function drawSnapshotFooter(ctx, theme, text, width, height, margin) {
+  const footerHeight = 28;
+  const y = height - margin - footerHeight;
+  ctx.save();
+  ctx.fillStyle = theme.footerBg;
+  ctx.fillRect(margin, y, width - margin * 2, footerHeight);
+  ctx.fillStyle = theme.footerText;
+  ctx.font = '12px "IBM Plex Mono", monospace';
+  ctx.textBaseline = "middle";
+  ctx.fillText(text, margin + 10, y + footerHeight / 2);
+  ctx.restore();
+  return footerHeight + 8;
+}
+
+async function renderSnapshotCanvas(options, mode = "export") {
+  if (!scene) throw new Error("Viewer scene is not ready.");
+  const baseWidth = Math.max(320, Math.round(options.width));
+  const baseHeight = Math.max(240, Math.round(options.height));
+  const previewScale = mode === "preview" ? Math.min(1, 1100 / Math.max(baseWidth, baseHeight)) : 1;
+  const outputWidth = Math.max(320, Math.round(baseWidth * previewScale));
+  const outputHeight = Math.max(240, Math.round(baseHeight * previewScale));
+  const supersample = mode === "preview" ? 1 : Math.max(1, options.supersample || 1);
+  const renderWidth = outputWidth * supersample;
+  const renderHeight = outputHeight * supersample;
+  const exportCamera = buildSnapshotCamera(options, renderWidth, renderHeight);
+  const theme = getSnapshotThemeConfig(options.theme);
+  const rendererOptions = { antialias: true, alpha: theme.transparent, preserveDrawingBuffer: true };
+  const exportRenderer = new THREE.WebGLRenderer(rendererOptions);
+  const previousBackground = scene.background;
+  try {
+    exportRenderer.setPixelRatio(1);
+    exportRenderer.setSize(renderWidth, renderHeight, false);
+    scene.background = theme.transparent || theme.background === null ? null : new THREE.Color(theme.background);
+    exportRenderer.render(scene, exportCamera);
+    const imageCanvas = exportRenderer.domElement;
+    const finalCanvas = document.createElement("canvas");
+    finalCanvas.width = outputWidth;
+    finalCanvas.height = outputHeight;
+    const ctx = finalCanvas.getContext("2d");
+    if (!ctx) throw new Error("2D export context unavailable.");
+    if (theme.matte) {
+      ctx.fillStyle = theme.matte;
+      ctx.fillRect(0, 0, outputWidth, outputHeight);
+    } else {
+      ctx.clearRect(0, 0, outputWidth, outputHeight);
+    }
+    const margin = Math.round(options.margin * previewScale);
+    let topOffset = margin;
+    let bottomReserve = margin;
+    if (options.includeTitle) {
+      topOffset += drawSnapshotTitle(ctx, theme, options.title, margin, outputWidth);
+    }
+    const footerText = `${state.runId || "preview"} · ${state.paths.length} paths · ${options.projection} · ${baseWidth}x${baseHeight}`;
+    if (options.includeMeta) {
+      bottomReserve += drawSnapshotFooter(ctx, theme, footerText, outputWidth, outputHeight, margin);
+    }
+    const drawX = margin;
+    const drawY = topOffset;
+    const drawWidth = Math.max(1, outputWidth - margin * 2);
+    const drawHeight = Math.max(1, outputHeight - topOffset - bottomReserve);
+    ctx.drawImage(imageCanvas, drawX, drawY, drawWidth, drawHeight);
+    if (options.includeFrame) {
+      ctx.save();
+      ctx.strokeStyle = theme.frame;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(drawX + 0.5, drawY + 0.5, drawWidth - 1, drawHeight - 1);
+      ctx.restore();
+    }
+    if (options.includeScaleBar) {
+      const metrics = computeScaleBarMetrics(exportCamera, drawWidth, drawHeight, controls?.target || new THREE.Vector3(0, 0, 0));
+      if (metrics) {
+        drawSnapshotScaleBar(ctx, theme, metrics, outputWidth, outputHeight, margin + 12);
+      }
+    }
+    const meta = `${options.view} · ${options.projection} · ${baseWidth}x${baseHeight} · ${options.supersample}x`;
+    return { canvas: finalCanvas, meta };
+  } finally {
+    scene.background = previousBackground;
+    exportRenderer.dispose();
+  }
+}
+
+function canvasToBlob(canvas) {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (blob) resolve(blob);
+      else reject(new Error("Snapshot export failed."));
+    }, "image/png");
+  });
+}
+
+async function updateSnapshotPreview() {
+  if (!state.snapshotStudio.open) return;
+  const token = ++state.snapshotStudio.renderToken;
+  const options = getSnapshotOptions();
+  updateSnapshotStudioControlState();
+  setSnapshotStudioStatus("Rendering preview...");
+  try {
+    const { canvas, meta } = await renderSnapshotCanvas(options, "preview");
+    if (token !== state.snapshotStudio.renderToken) return;
+    const url = canvas.toDataURL("image/png");
+    if (state.snapshotStudio.previewUrl) URL.revokeObjectURL?.(state.snapshotStudio.previewUrl);
+    state.snapshotStudio.previewUrl = url;
+    if (ui.snapshotPreviewImage) ui.snapshotPreviewImage.src = url;
+    setSnapshotPreviewMeta(meta);
+    setSnapshotStudioStatus("Preview ready.");
+  } catch (err) {
+    console.error("Snapshot preview failed:", err);
+    setSnapshotStudioStatus(`Preview failed: ${err.message || err}`);
+  }
+}
+
+function scheduleSnapshotPreview(delay = 150) {
+  if (!state.snapshotStudio.open) return;
+  if (snapshotPreviewTimer) window.clearTimeout(snapshotPreviewTimer);
+  snapshotPreviewTimer = window.setTimeout(() => {
+    snapshotPreviewTimer = null;
+    updateSnapshotPreview();
+  }, delay);
+}
+
+function openSnapshotStudio() {
+  if (!ui.snapshotStudio) return;
+  state.snapshotStudio.open = true;
+  ui.snapshotStudio.classList.remove("is-hidden");
+  ui.snapshotStudio.setAttribute("aria-hidden", "false");
+  if (ui.snapshotTitle && !ui.snapshotTitle.value) {
+    ui.snapshotTitle.value = getSnapshotDefaultTitle();
+  }
+  syncSnapshotPresetFromDimensions();
+  updateSnapshotStudioControlState();
+  scheduleSnapshotPreview(10);
+}
+
+function closeSnapshotStudio() {
+  if (!ui.snapshotStudio) return;
+  state.snapshotStudio.open = false;
+  if (snapshotPreviewTimer) {
+    window.clearTimeout(snapshotPreviewTimer);
+    snapshotPreviewTimer = null;
+  }
+  ui.snapshotStudio.classList.add("is-hidden");
+  ui.snapshotStudio.setAttribute("aria-hidden", "true");
+}
+
+async function downloadSnapshotExport() {
+  const options = getSnapshotOptions();
+  setSnapshotStudioStatus("Rendering export...");
+  try {
+    const { canvas } = await renderSnapshotCanvas(options, "export");
+    const link = document.createElement("a");
+    link.download = `snapshot-${state.runId || "run"}-${options.view}-${options.theme}.png`;
+    link.href = canvas.toDataURL("image/png");
+    link.click();
+    setSnapshotStudioStatus("PNG downloaded.");
+  } catch (err) {
+    console.error("Snapshot export failed:", err);
+    setSnapshotStudioStatus(`Export failed: ${err.message || err}`);
+  }
+}
+
+async function copySnapshotExport() {
+  if (!navigator.clipboard?.write || typeof ClipboardItem === "undefined") {
+    setSnapshotStudioStatus("Clipboard image export is not available in this browser.");
+    return;
+  }
+  const options = getSnapshotOptions();
+  setSnapshotStudioStatus("Rendering copy payload...");
+  try {
+    const { canvas } = await renderSnapshotCanvas(options, "export");
+    const blob = await canvasToBlob(canvas);
+    await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+    setSnapshotStudioStatus("PNG copied to clipboard.");
+  } catch (err) {
+    console.error("Snapshot copy failed:", err);
+    setSnapshotStudioStatus(`Copy failed: ${err.message || err}`);
+  }
 }
 
 function updateCampaignPreviewVisibility() {
@@ -1718,6 +2589,32 @@ function setInputValue(input, value) {
   }
 }
 
+function primeRadioMapZStackDefaults() {
+  if (ui.radioMapZStackBelow && ui.radioMapZStackBelow.value === "") {
+    ui.radioMapZStackBelow.value = "1";
+  }
+  if (ui.radioMapZStackAbove && ui.radioMapZStackAbove.value === "") {
+    ui.radioMapZStackAbove.value = "1";
+  }
+  if (ui.radioMapZStackSpacing && ui.radioMapZStackSpacing.value === "") {
+    ui.radioMapZStackSpacing.value = "0.5";
+  }
+}
+
+function syncRadioMapZStackControls(options = {}) {
+  const { primeDefaults = false } = options;
+  const enabled = Boolean(ui.radioMapZStackEnabled && ui.radioMapZStackEnabled.checked);
+  if (enabled && primeDefaults) {
+    primeRadioMapZStackDefaults();
+  }
+  [ui.radioMapZStackBelow, ui.radioMapZStackAbove, ui.radioMapZStackSpacing].forEach((el) => {
+    if (el) el.disabled = !enabled;
+  });
+  if (ui.radioMapZStackControls) {
+    ui.radioMapZStackControls.classList.toggle("is-disabled", !enabled);
+  }
+}
+
 function setCampaignUiVisible(isVisible) {
   document.querySelectorAll(".campaign-only").forEach((el) => {
     el.classList.toggle("is-active", isVisible);
@@ -1750,6 +2647,8 @@ function setMainTab(tabName) {
   const campaignLayout = document.getElementById("campaignLayout");
   const campaign2Layout = document.getElementById("campaign2Layout");
   const simLayout = document.getElementById("simLayout");
+  const risSynthLayout = document.getElementById("risSynthLayout");
+  const risSynthRightPanel = document.getElementById("risSynthRightPanel");
   const indoorSection = document.getElementById("indoorViewerSection");
   if (tabName === "indoor" || tabName === "campaign" || tabName === "campaign2") {
     const isCampaign = tabName === "campaign";
@@ -1771,6 +2670,9 @@ function setMainTab(tabName) {
         state.indoorInitialized = true;
       }
       applyUiState(savedSnapshot);
+      if (isCampaign2) {
+        syncCampaign2FixedRxPosition(getIndoorChamberConfig(), { force: true });
+      }
     } else if (firstVisit) {
       applyIndoorDefaults();
       if (isCampaign) {
@@ -1788,9 +2690,7 @@ function setMainTab(tabName) {
         applyIeeeTapCampaign2Defaults();
       }
     }
-    if (!savedSnapshot && ui.runProfile) {
-      ui.runProfile.value = "indoor_box_high";
-    }
+    if (ui.runProfile) ui.runProfile.value = "indoor_box_high";
     if (ui.indoorViewerNormalize && ui.indoorViewerTargetSize && ui.indoorViewerTargetSize.value === "") {
       ui.indoorViewerTargetSize.value = String(state.viewerScale.targetSize || 160);
     }
@@ -1805,12 +2705,17 @@ function setMainTab(tabName) {
       void refreshCampaignJobs();
     }
   } else if (tabName === "models") {
+    if (simLayout) {
+      moveSharedPanels(simLayout);
+    }
     if (indoorSection) indoorSection.style.display = "none";
     setSimilarityScalingLocked(false);
     state.viewerScale.enabled = false;
   } else {
     if (tabName === "sim") {
       moveSharedPanels(simLayout);
+    } else if (tabName === "ris-synth") {
+      moveViewerPanel(risSynthLayout, risSynthRightPanel);
     }
     if (indoorSection) indoorSection.style.display = "none";
     setSimilarityScalingLocked(false);
@@ -1823,12 +2728,27 @@ function setMainTab(tabName) {
       }
       void fetchRuns("sim");
       void refreshJobs("sim");
+    } else if (tabName === "ris-synth") {
+      void fetchRuns("sim").then(() => loadRisSynthesisViewerRun(false));
+      void refreshJobs("sim");
+      void refreshRisSynthesisJobs();
+      renderRisSynthesisRoiOverlay();
+      if (state.heatmap && state.heatmap.values) {
+        setRisSynthesisViewerStatus(`Viewer ready on ${state.runId || ui.runSelect?.value || "selected run"}.`);
+      } else {
+        setRisSynthesisViewerStatus("Load a sim run with a heatmap, then switch to Top-Down + Heatmap.");
+      }
     }
-    fitCamera();
     requestAnimationFrame(() => {
       refreshViewerSize();
+      if (tabName === "ris-synth") {
+        renderRisSynthesisRoiOverlay();
+      }
       fitCamera();
     });
+  }
+  if (risSynthRoiGroup) {
+    risSynthRoiGroup.visible = tabName === "ris-synth";
   }
 }
 
@@ -2029,6 +2949,702 @@ function updateRisPreview() {
   }
 }
 
+function parseRisSynthesisBoxes() {
+  const raw = ui.risSynthBoxes && typeof ui.risSynthBoxes.value === "string" ? ui.risSynthBoxes.value.trim() : "[]";
+  if (!raw) {
+    throw new Error("Target boxes JSON is required.");
+  }
+  const parsed = JSON.parse(raw);
+  if (!Array.isArray(parsed) || !parsed.length) {
+    throw new Error("Target boxes must be a non-empty JSON array.");
+  }
+  return parsed.map((box, index) => ({
+    name: box && box.name ? String(box.name) : `roi_${index + 1}`,
+    u_min_m: Number(box.u_min_m),
+    u_max_m: Number(box.u_max_m),
+    v_min_m: Number(box.v_min_m),
+    v_max_m: Number(box.v_max_m),
+  }));
+}
+
+function getRisSynthesisSeedConfigObject() {
+  const seedSource = ui.risSynthSeedSource ? ui.risSynthSeedSource.value : "seed_run";
+  if (seedSource === "active_run") {
+    return (state.runInfo && state.runInfo.config) || null;
+  }
+  const runId = getRisSynthesisSeedRunId();
+  const details = runId ? state.runConfigs[runId] : null;
+  return (details && details.config) || null;
+}
+
+function getCoverageMapBoundsFromConfig(config) {
+  const radio = config && config.radio_map;
+  if (!radio || typeof radio !== "object" || !radio.enabled) return null;
+  const center = Array.isArray(radio.center) ? radio.center : [0, 0, 0];
+  const size = Array.isArray(radio.size) ? radio.size : [0, 0];
+  const cellSize = Array.isArray(radio.cell_size) ? radio.cell_size : [1, 1];
+  const centerX = Number(center[0]);
+  const centerY = Number(center[1]);
+  const sizeX = Number(size[0]);
+  const sizeY = Number(size[1]);
+  const cellX = Number(cellSize[0]);
+  const cellY = Number(cellSize[1]);
+  if (![centerX, centerY, sizeX, sizeY, cellX, cellY].every((value) => Number.isFinite(value))) {
+    return null;
+  }
+  if (sizeX <= 0 || sizeY <= 0 || cellX <= 0 || cellY <= 0) {
+    return null;
+  }
+  const numX = Math.max(1, Math.round(sizeX / Math.max(cellX, 1.0e-9)));
+  const numY = Math.max(1, Math.round(sizeY / Math.max(cellY, 1.0e-9)));
+  const halfSpanX = ((numX - 1) * 0.5) * cellX;
+  const halfSpanY = ((numY - 1) * 0.5) * cellY;
+  return {
+    u_min_m: centerX - halfSpanX,
+    u_max_m: centerX + halfSpanX,
+    v_min_m: centerY - halfSpanY,
+    v_max_m: centerY + halfSpanY,
+    center: [centerX, centerY],
+    size: [sizeX, sizeY],
+    cell_size: [cellX, cellY],
+  };
+}
+
+function risSynthesisBoxIntersectsBounds(box, bounds) {
+  if (!box || !bounds) return false;
+  return !(
+    Number(box.u_max_m) < Number(bounds.u_min_m)
+    || Number(box.u_min_m) > Number(bounds.u_max_m)
+    || Number(box.v_max_m) < Number(bounds.v_min_m)
+    || Number(box.v_min_m) > Number(bounds.v_max_m)
+  );
+}
+
+function formatRisSynthesisBounds(bounds) {
+  if (!bounds) return "unknown bounds";
+  return `u=[${bounds.u_min_m.toFixed(2)}, ${bounds.u_max_m.toFixed(2)}], v=[${bounds.v_min_m.toFixed(2)}, ${bounds.v_max_m.toFixed(2)}]`;
+}
+
+function hasStaticCoverageMapBounds(config) {
+  const radio = config && config.radio_map;
+  if (!radio || typeof radio !== "object" || !radio.enabled) return false;
+  return !Boolean(radio.auto_size);
+}
+
+function buildRisSynthesisConfigFromUI() {
+  const seedSource = ui.risSynthSeedSource ? ui.risSynthSeedSource.value : "seed_run";
+  const seedRunId = getRisSynthesisSeedRunId();
+  const seedConfigPath = getRisSynthesisSeedConfigPath();
+  if (!seedConfigPath) {
+    if (seedSource === "seed_run") {
+      throw new Error("Select a seed sim run.");
+    }
+    throw new Error(seedSource === "active_run"
+      ? "Load a sim run first so target region illumination can use the active viewer scene."
+      : "Seed config path is required.");
+  }
+  const defaultRisName = getDefaultRisNameForRisSynthesis();
+  if (seedSource === "seed_run" && seedRunId) {
+    const details = state.runConfigs[seedRunId];
+    if (details && getRisNamesFromConfig(details.config).length === 0) {
+      throw new Error(`Selected seed run ${seedRunId} does not contain any RIS objects.`);
+    }
+  }
+  const boxes = parseRisSynthesisBoxes();
+  const seedConfigObject = getRisSynthesisSeedConfigObject();
+  const bounds = hasStaticCoverageMapBounds(seedConfigObject)
+    ? getCoverageMapBoundsFromConfig(seedConfigObject)
+    : null;
+  if (bounds && !boxes.some((box) => risSynthesisBoxIntersectsBounds(box, bounds))) {
+    throw new Error(
+      `ROI boxes do not intersect the seed coverage map (${formatRisSynthesisBounds(bounds)}). `
+      + "Load the seed run into the viewer and redraw the ROI on that heatmap."
+    );
+  }
+  return {
+    schema_version: 1,
+    seed: {
+      type: "config",
+      config_path: seedConfigPath,
+      ris_name: (ui.risSynthRisName && ui.risSynthRisName.value.trim()) || defaultRisName || "ris",
+      source_run_id: seedSource === "config_file" ? null : seedRunId,
+    },
+    target_region: {
+      plane: "coverage_map",
+      boxes,
+      freeze_mask: true,
+    },
+    objective: {
+      kind: "mean_log_path_gain",
+      eps: readOptionalNumber(ui.risSynthObjectiveEps, 1.0e-12),
+      threshold_dbm: readOptionalNumber(ui.risSynthThresholdDbm, -90.0),
+      temperature_db: 2.0,
+    },
+    parameterization: {
+      kind: "steering_search",
+      basis: "quadratic",
+    },
+    search: {
+      azimuth_span_deg: 30.0,
+      elevation_span_deg: 16.0,
+      coarse_num_azimuth: 9,
+      coarse_num_elevation: 5,
+      coarse_cell_scale: 4.0,
+      coarse_sample_scale: 0.15,
+      refine_top_k: 5,
+      refine_num_azimuth: 7,
+      refine_num_elevation: 5,
+      refine_cell_scale: 2.0,
+      refine_sample_scale: 0.4,
+    },
+    optimizer: {
+      iterations: readOptionalInt(ui.risSynthIterations, 60),
+      learning_rate: readOptionalNumber(ui.risSynthLearningRate, 0.03),
+      algorithm: "adam",
+      log_every: readOptionalInt(ui.risSynthLogEvery, 5),
+    },
+    binarization: {
+      enabled: ui.risSynthBinarizationEnabled ? Boolean(ui.risSynthBinarizationEnabled.checked) : false,
+      method: "global_offset_sweep",
+      num_offset_samples: readOptionalInt(ui.risSynthOffsetSamples, 181),
+    },
+    refinement: {
+      enabled: ui.risSynthRefineEnabled ? Boolean(ui.risSynthRefineEnabled.checked) : false,
+      method: "greedy_flip",
+      candidate_budget: readOptionalInt(ui.risSynthCandidateBudget, 64),
+      max_passes: readOptionalInt(ui.risSynthMaxPasses, 1),
+    },
+    evaluation: {
+      dense_map: {
+        enabled: true,
+      },
+    },
+    output: {
+      base_dir: "outputs",
+    },
+  };
+}
+
+function updateRisSynthesisConfigSourceVisibility() {
+  const source = ui.risSynthConfigSource ? ui.risSynthConfigSource.value : "builder";
+  const fileFields = document.querySelectorAll(".ris-synth-config-file");
+  fileFields.forEach((el) => {
+    el.style.display = source === "file" ? "" : "none";
+  });
+}
+
+function getActiveViewerSeedRunId() {
+  return (ui.runSelect && ui.runSelect.value) || state.runId || null;
+}
+
+function getRunSeedConfigPath(runId, details = null) {
+  if (!runId) return "";
+  const runDetails = details || state.runConfigs[runId] || null;
+  if (runDetails && runDetails.effective_config) {
+    return `outputs/${runId}/config.yaml`;
+  }
+  if (runDetails && runDetails.config) {
+    return `outputs/${runId}/job_config.yaml`;
+  }
+  return `outputs/${runId}/config.yaml`;
+}
+
+function getActiveViewerSeedConfigPath() {
+  const runId = getActiveViewerSeedRunId();
+  return runId ? getRunSeedConfigPath(runId, state.runInfo) : null;
+}
+
+function getRisSynthesisSeedRunId() {
+  const seedSource = ui.risSynthSeedSource ? ui.risSynthSeedSource.value : "seed_run";
+  if (seedSource === "active_run") {
+    return getActiveViewerSeedRunId();
+  }
+  if (seedSource === "seed_run") {
+    return (ui.risSynthSeedRun && ui.risSynthSeedRun.value) || null;
+  }
+  return null;
+}
+
+function getRisSynthesisSeedConfigPath() {
+  const seedSource = ui.risSynthSeedSource ? ui.risSynthSeedSource.value : "seed_run";
+  if (seedSource === "config_file") {
+    return (ui.risSynthSeedConfig && ui.risSynthSeedConfig.value.trim()) || "";
+  }
+  const runId = getRisSynthesisSeedRunId();
+  return runId ? getRunSeedConfigPath(runId) : "";
+}
+
+function getActiveViewerSceneLabel() {
+  return getSceneLabelFromConfig(state.runInfo && state.runInfo.config ? state.runInfo.config : null);
+}
+
+function getSceneLabelFromConfig(config) {
+  const sceneCfg = config && config.scene ? config.scene : null;
+  if (!sceneCfg || typeof sceneCfg !== "object") return null;
+  if (sceneCfg.type === "file" && sceneCfg.file) return String(sceneCfg.file);
+  if (sceneCfg.type === "builtin" && sceneCfg.builtin) return `builtin:${sceneCfg.builtin}`;
+  return null;
+}
+
+function getDefaultRisNameFromActiveRun() {
+  const risObjects = (((state.runInfo || {}).config || {}).ris || {}).objects || [];
+  if (!Array.isArray(risObjects) || !risObjects.length) return null;
+  const first = risObjects.find((item) => item && item.name) || risObjects[0];
+  return first && first.name ? String(first.name) : null;
+}
+
+function getRisNamesFromConfig(config) {
+  const risObjects = (((config || {}).ris || {}).objects || []);
+  if (!Array.isArray(risObjects)) return [];
+  return risObjects
+    .map((item) => (item && item.name ? String(item.name) : ""))
+    .filter(Boolean);
+}
+
+async function ensureRunDetailsCached(runId) {
+  if (!runId) return null;
+  if (state.runConfigs[runId]) return state.runConfigs[runId];
+  const details = await fetchRunDetails(runId);
+  if (details) {
+    state.runConfigs[runId] = details;
+  }
+  return details;
+}
+
+function getDefaultRisNameForRisSynthesis() {
+  const seedSource = ui.risSynthSeedSource ? ui.risSynthSeedSource.value : "seed_run";
+  if (seedSource === "active_run") {
+    return getDefaultRisNameFromActiveRun();
+  }
+  const runId = getRisSynthesisSeedRunId();
+  const details = runId ? state.runConfigs[runId] : null;
+  const risNames = getRisNamesFromConfig((details && details.config) || null);
+  return risNames[0] || null;
+}
+
+async function updateRisSynthesisSeedStatus() {
+  if (!ui.risSynthSeedStatus) return;
+  const seedSource = ui.risSynthSeedSource ? ui.risSynthSeedSource.value : "seed_run";
+  if (seedSource === "seed_run") {
+    const runId = getRisSynthesisSeedRunId();
+    if (!runId) {
+      ui.risSynthSeedStatus.textContent = "Select a completed sim run to use as the seed scene.";
+      return;
+    }
+    const details = await ensureRunDetailsCached(runId);
+    const sceneLabel = getSceneLabelFromConfig(details && details.config ? details.config : null);
+    const configPath = getRisSynthesisSeedConfigPath();
+    const risNames = getRisNamesFromConfig((details && details.config) || null);
+    const bounds = hasStaticCoverageMapBounds((details && details.config) || null)
+      ? getCoverageMapBoundsFromConfig((details && details.config) || null)
+      : null;
+    if (ui.risSynthRisName && (!ui.risSynthRisName.value.trim() || ui.risSynthRisName.value.trim() === "ris")) {
+      if (risNames[0]) ui.risSynthRisName.value = risNames[0];
+    }
+    const sceneText = sceneLabel ? ` · scene ${sceneLabel}` : "";
+    const risText = risNames.length ? ` · RIS ${risNames.join(", ")}` : " · no RIS objects found";
+    const boundsText = bounds ? ` · map ${formatRisSynthesisBounds(bounds)}` : "";
+    ui.risSynthSeedStatus.textContent = `Using sim run ${runId}${sceneText}${risText}${boundsText} → ${configPath}`;
+    return;
+  }
+  if (seedSource === "active_run") {
+    const runId = getActiveViewerSeedRunId();
+    const configPath = getActiveViewerSeedConfigPath();
+    const sceneLabel = getActiveViewerSceneLabel();
+    const bounds = hasStaticCoverageMapBounds((state.runInfo && state.runInfo.config) || null)
+      ? getCoverageMapBoundsFromConfig((state.runInfo && state.runInfo.config) || null)
+      : null;
+    if (!runId || !configPath) {
+      ui.risSynthSeedStatus.textContent = "Active viewer run is not loaded yet. Load a sim run first.";
+      return;
+    }
+    const sceneText = sceneLabel ? ` · scene ${sceneLabel}` : "";
+    const boundsText = bounds ? ` · map ${formatRisSynthesisBounds(bounds)}` : "";
+    ui.risSynthSeedStatus.textContent = `Using active viewer run ${runId}${sceneText}${boundsText} → ${configPath}`;
+    if (ui.risSynthRisName && !ui.risSynthRisName.value.trim()) {
+      const defaultRisName = getDefaultRisNameFromActiveRun();
+      if (defaultRisName) ui.risSynthRisName.value = defaultRisName;
+    }
+    return;
+  }
+  const configPath = (ui.risSynthSeedConfig && ui.risSynthSeedConfig.value.trim()) || "";
+  ui.risSynthSeedStatus.textContent = configPath
+    ? `Using seed config file ${configPath}`
+    : "Enter a seed config file path or switch back to Active viewer run.";
+}
+
+function updateRisSynthesisSeedSourceVisibility() {
+  const seedSource = ui.risSynthSeedSource ? ui.risSynthSeedSource.value : "seed_run";
+  document.querySelectorAll(".ris-synth-seed-run-field").forEach((el) => {
+    el.style.display = seedSource === "seed_run" ? "" : "none";
+  });
+  document.querySelectorAll(".ris-synth-seed-config-field").forEach((el) => {
+    el.style.display = seedSource === "config_file" ? "" : "none";
+  });
+  void updateRisSynthesisSeedStatus();
+}
+
+function updateRisSynthesisBinarizationVisibility() {
+  const enabled = ui.risSynthBinarizationEnabled ? Boolean(ui.risSynthBinarizationEnabled.checked) : false;
+  [ui.risSynthOffsetSamples, ui.risSynthRefineEnabled, ui.risSynthCandidateBudget, ui.risSynthMaxPasses].forEach((el) => {
+    if (el) el.disabled = !enabled;
+  });
+}
+
+function updateRisSynthesisConfigPreview() {
+  if (!ui.risSynthConfigPreview) return;
+  if (ui.risSynthConfigSource && ui.risSynthConfigSource.value === "file") {
+    ui.risSynthConfigPreview.textContent = "Using config file path.";
+    return;
+  }
+  try {
+    ui.risSynthConfigPreview.textContent = JSON.stringify(buildRisSynthesisConfigFromUI(), null, 2);
+  } catch (err) {
+    ui.risSynthConfigPreview.textContent = `Config error: ${err instanceof Error ? err.message : String(err)}`;
+  }
+}
+
+function setRisSynthesisViewerStatus(text) {
+  if (ui.risSynthViewerStatus) {
+    ui.risSynthViewerStatus.textContent = text;
+  }
+}
+
+function getNextRisSynthesisRoiName() {
+  const existingBoxes = state.risSynthesis.replaceOnNextDraw ? [] : (state.risSynthesis.drawnBoxes || []);
+  const taken = new Set(existingBoxes.map((box) => String(box?.name || "")));
+  let index = Math.max(existingBoxes.length, 0) + 1;
+  while (taken.has(`roi_${index}`)) {
+    index += 1;
+  }
+  return `roi_${index}`;
+}
+
+function normalizeRisSynthesisBox(box, index = 0) {
+  if (!box || typeof box !== "object") return null;
+  const u0 = Number(box.u_min_m);
+  const u1 = Number(box.u_max_m);
+  const v0 = Number(box.v_min_m);
+  const v1 = Number(box.v_max_m);
+  if (![u0, u1, v0, v1].every((value) => Number.isFinite(value))) {
+    return null;
+  }
+  return {
+    name: box.name ? String(box.name) : `roi_${index + 1}`,
+    u_min_m: Math.min(u0, u1),
+    u_max_m: Math.max(u0, u1),
+    v_min_m: Math.min(v0, v1),
+    v_max_m: Math.max(v0, v1),
+  };
+}
+
+function getRisSynthesisMaskStatsFromCellCenters(cellCenters, boxes) {
+  if (!Array.isArray(cellCenters) || !cellCenters.length || !Array.isArray(cellCenters[0]) || !cellCenters[0].length) {
+    return null;
+  }
+  const normalizedBoxes = (boxes || [])
+    .map((box, index) => normalizeRisSynthesisBox(box, index))
+    .filter(Boolean);
+  if (!normalizedBoxes.length) {
+    return { count: 0, bounds: null };
+  }
+  let count = 0;
+  let uMin = Infinity;
+  let uMax = -Infinity;
+  let vMin = Infinity;
+  let vMax = -Infinity;
+  cellCenters.forEach((row) => {
+    row.forEach((cell) => {
+      if (!Array.isArray(cell) || cell.length < 2) return;
+      const u = Number(cell[0]);
+      const v = Number(cell[1]);
+      if (!Number.isFinite(u) || !Number.isFinite(v)) return;
+      if (u < uMin) uMin = u;
+      if (u > uMax) uMax = u;
+      if (v < vMin) vMin = v;
+      if (v > vMax) vMax = v;
+      if (normalizedBoxes.some((box) => (
+        u >= box.u_min_m
+        && u <= box.u_max_m
+        && v >= box.v_min_m
+        && v <= box.v_max_m
+      ))) {
+        count += 1;
+      }
+    });
+  });
+  const bounds = Number.isFinite(uMin) && Number.isFinite(vMin)
+    ? { u_min_m: uMin, u_max_m: uMax, v_min_m: vMin, v_max_m: vMax }
+    : null;
+  return { count, bounds };
+}
+
+function formatRisSynthesisCellCenterBounds(bounds) {
+  if (!bounds) return "unknown bounds";
+  return `u=[${bounds.u_min_m.toFixed(2)}, ${bounds.u_max_m.toFixed(2)}], v=[${bounds.v_min_m.toFixed(2)}, ${bounds.v_max_m.toFixed(2)}]`;
+}
+
+function getRisSynthesisViewerSeedRunId() {
+  const seedSource = ui.risSynthSeedSource ? ui.risSynthSeedSource.value : "seed_run";
+  if (seedSource === "config_file") return null;
+  return getRisSynthesisSeedRunId();
+}
+
+function isViewingRisSynthesisSeedHeatmap() {
+  const seedRunId = getRisSynthesisViewerSeedRunId();
+  if (!seedRunId) return Boolean(state.heatmap && state.heatmap.cell_centers);
+  return Boolean(
+    state.runId === seedRunId
+      && !state.risSynthesis.viewerOverlayRunId
+      && !state.risSynthesis.pendingViewerOverlayRunId
+      && state.heatmap
+      && state.heatmap.cell_centers
+  );
+}
+
+async function getRisSynthesisSeedHeatmap() {
+  if (isViewingRisSynthesisSeedHeatmap()) {
+    return state.heatmap;
+  }
+  const seedRunId = getRisSynthesisViewerSeedRunId();
+  if (!seedRunId) return null;
+  const heatmap = await fetchJsonMaybe(`/runs/${seedRunId}/viewer/heatmap.json`);
+  return heatmap && heatmap.cell_centers ? heatmap : null;
+}
+
+async function validateRisSynthesisBoxesAgainstSeedGrid(boxes) {
+  const heatmap = await getRisSynthesisSeedHeatmap();
+  if (!heatmap || !heatmap.cell_centers) {
+    return { ok: true, count: null, bounds: null };
+  }
+  const stats = getRisSynthesisMaskStatsFromCellCenters(heatmap.cell_centers, boxes);
+  if (!stats) {
+    return { ok: true, count: null, bounds: null };
+  }
+  return {
+    ok: stats.count > 0,
+    count: stats.count,
+    bounds: stats.bounds,
+  };
+}
+
+async function ensureRisSynthesisViewerMatchesSeedRun() {
+  const seedRunId = getRisSynthesisViewerSeedRunId();
+  if (!seedRunId) {
+    return Boolean(state.heatmap && state.heatmap.values);
+  }
+  if (isViewingRisSynthesisSeedHeatmap()) {
+    return true;
+  }
+  await loadRisSynthesisViewerRun(true);
+  return isViewingRisSynthesisSeedHeatmap();
+}
+
+function syncRisSynthesisDrawModeUi() {
+  if (ui.risSynthDrawBoxes) {
+    ui.risSynthDrawBoxes.textContent = state.risSynthesis.drawMode ? "Stop Drawing" : "Draw ROIs";
+  }
+}
+
+function setRisSynthesisDrawMode(enabled) {
+  state.risSynthesis.drawMode = Boolean(enabled);
+  state.risSynthesis.draftBox = null;
+  state.risSynthesis.replaceOnNextDraw = Boolean(enabled && (state.risSynthesis.drawnBoxes || []).length);
+  if (controls) {
+    controls.enabled = true;
+  }
+  syncRisSynthesisDrawModeUi();
+  renderRisSynthesisRoiOverlay();
+}
+
+function syncRisSynthesisBoxesTextareaFromState() {
+  if (!ui.risSynthBoxes) return;
+  ui.risSynthBoxes.value = JSON.stringify(state.risSynthesis.drawnBoxes || [], null, 2);
+  if (ui.risSynthConfigSource && ui.risSynthConfigSource.value !== "builder") {
+    ui.risSynthConfigSource.value = "builder";
+    updateRisSynthesisConfigSourceVisibility();
+  }
+  updateRisSynthesisConfigPreview();
+}
+
+function syncRisSynthesisBoxesStateFromTextarea(options = {}) {
+  const { quiet = false } = options;
+  try {
+    const boxes = parseRisSynthesisBoxes()
+      .map((box, index) => normalizeRisSynthesisBox(box, index))
+      .filter(Boolean);
+    if (!boxes.length) {
+      throw new Error("At least one ROI box is required.");
+    }
+    state.risSynthesis.drawnBoxes = boxes;
+    state.risSynthesis.draftBox = null;
+    renderRisSynthesisRoiOverlay();
+    if (!quiet) {
+      setRisSynthesisViewerStatus(`${boxes.length} ROI box${boxes.length === 1 ? "" : "es"} ready.`);
+    }
+    return true;
+  } catch (err) {
+    if (!quiet) {
+      setRisSynthesisViewerStatus(`ROI JSON error: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    return false;
+  }
+}
+
+function getRisSynthesisOverlayBaseZ() {
+  if (debugHeatmapMesh) {
+    const box = new THREE.Box3().setFromObject(debugHeatmapMesh);
+    if (!box.isEmpty()) {
+      return box.max.z + RIS_SYNTH_ROI_ELEVATION_M;
+    }
+  }
+  const active = getActiveHeatmap();
+  if (active && Array.isArray(active.center) && Number.isFinite(Number(active.center[2]))) {
+    return Number(active.center[2]) + RIS_SYNTH_ROI_ELEVATION_M;
+  }
+  return getFloorElevation() + RIS_SYNTH_ROI_ELEVATION_M;
+}
+
+function addRisSynthesisRoiOverlayBox(box, options = {}) {
+  if (!risSynthRoiGroup) return;
+  const { draft = false } = options;
+  const z = getRisSynthesisOverlayBaseZ();
+  const corners = [
+    new THREE.Vector3(box.u_min_m, box.v_min_m, z),
+    new THREE.Vector3(box.u_max_m, box.v_min_m, z),
+    new THREE.Vector3(box.u_max_m, box.v_max_m, z),
+    new THREE.Vector3(box.u_min_m, box.v_max_m, z),
+  ];
+  const line = new THREE.LineLoop(
+    new THREE.BufferGeometry().setFromPoints(corners),
+    new THREE.LineBasicMaterial({
+      color: draft ? 0xf59e0b : 0x22c55e,
+      transparent: true,
+      opacity: draft ? 0.95 : 0.9,
+    }),
+  );
+  line.renderOrder = 4;
+  risSynthRoiGroup.add(line);
+
+  const shape = new THREE.Shape();
+  shape.moveTo(box.u_min_m, box.v_min_m);
+  shape.lineTo(box.u_max_m, box.v_min_m);
+  shape.lineTo(box.u_max_m, box.v_max_m);
+  shape.lineTo(box.u_min_m, box.v_max_m);
+  shape.closePath();
+  const fill = new THREE.Mesh(
+    new THREE.ShapeGeometry(shape),
+    new THREE.MeshBasicMaterial({
+      color: draft ? 0xf59e0b : 0x22c55e,
+      transparent: true,
+      opacity: draft ? 0.14 : 0.09,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    }),
+  );
+  fill.position.z = z - 0.01;
+  fill.renderOrder = 3;
+  risSynthRoiGroup.add(fill);
+}
+
+function renderRisSynthesisRoiOverlay() {
+  if (!risSynthRoiGroup) return;
+  risSynthRoiGroup.clear();
+  risSynthRoiGroup.visible = state.activeTab === "ris-synth";
+  (state.risSynthesis.drawnBoxes || []).forEach((box, index) => {
+    const normalized = normalizeRisSynthesisBox(box, index);
+    if (normalized) {
+      addRisSynthesisRoiOverlayBox(normalized);
+    }
+  });
+  if (state.risSynthesis.draftBox) {
+    const draft = normalizeRisSynthesisBox(state.risSynthesis.draftBox, state.risSynthesis.drawnBoxes.length);
+    if (draft) {
+      addRisSynthesisRoiOverlayBox(draft, { draft: true });
+    }
+  }
+}
+
+function getViewerBounds(options = {}) {
+  const { preferHeatmap = false } = options;
+  if (preferHeatmap && debugHeatmapMesh) {
+    const heatmapBox = new THREE.Box3().setFromObject(debugHeatmapMesh);
+    if (!heatmapBox.isEmpty()) {
+      return heatmapBox;
+    }
+  }
+  return _getFitBounds();
+}
+
+function setTopDownView(options = {}) {
+  const { preferHeatmap = false } = options;
+  const box = getViewerBounds({ preferHeatmap });
+  if (!box || box.isEmpty()) {
+    camera.position.set(0.2, 0.2, 200);
+    controls.target.set(0, 0, 0);
+    controls.update();
+    return;
+  }
+  const center = box.getCenter(new THREE.Vector3());
+  const size = box.getSize(new THREE.Vector3());
+  const maxDim = Math.max(size.x, size.y, 1.0);
+  const halfFov = THREE.MathUtils.degToRad(camera.fov * 0.5);
+  const distance = Math.max((maxDim * 1.2) / (2 * Math.tan(halfFov || 1)), size.z + maxDim, 20.0);
+  camera.position.set(center.x + maxDim * 0.001, center.y + maxDim * 0.001, center.z + distance);
+  controls.target.copy(center);
+  camera.lookAt(center);
+  controls.update();
+}
+
+function prepareRisSynthesisViewer() {
+  if (ui.toggleHeatmap && !ui.toggleHeatmap.checked) {
+    ui.toggleHeatmap.checked = true;
+    heatmapGroup.visible = true;
+    updateHeatmapScaleVisibility();
+  }
+  if (ui.heatmapRotation) {
+    ui.heatmapRotation.value = "0";
+  }
+  if (ui.heatmapRotationLabel) {
+    ui.heatmapRotationLabel.textContent = "0";
+  }
+  refreshHeatmap();
+  renderRisSynthesisRoiOverlay();
+  setTopDownView({ preferHeatmap: true });
+}
+
+function getRisSynthesisHeatmapHit(event) {
+  if (!debugHeatmapMesh) return null;
+  const mouse = getMouse(event);
+  const raycaster = new THREE.Raycaster();
+  raycaster.setFromCamera(mouse, camera);
+  const hits = raycaster.intersectObject(debugHeatmapMesh, true);
+  if (!hits.length) return null;
+  return hits[0].point.clone();
+}
+
+async function loadRisSynthesisViewerRun(force = false) {
+  const seedSource = ui.risSynthSeedSource ? ui.risSynthSeedSource.value : "seed_run";
+  const runId = seedSource === "seed_run"
+    ? getRisSynthesisSeedRunId()
+    : (ui.runSelect ? ui.runSelect.value : null);
+  if (!runId) {
+    setRisSynthesisViewerStatus("No seed sim run is selected.");
+    return;
+  }
+  const scope = seedSource === "seed_run"
+    ? (state.risSynthesis.seedRunScopes[runId] || "sim")
+    : getRunScopeForTab();
+  clearRisSynthesisViewerOverlay();
+  await loadRun(runId, scope, { force });
+  if (state.heatmap && state.heatmap.values) {
+    setRisSynthesisViewerStatus(`Viewer loaded ${runId}. Use Top-Down + Heatmap before drawing.`);
+  } else {
+    setRisSynthesisViewerStatus(`Loaded ${runId}, but this run has no heatmap to draw on.`);
+  }
+  renderRisSynthesisRoiOverlay();
+}
+
 async function fetchJsonMaybe(url) {
   const res = await fetch(url);
   if (!res.ok) return null;
@@ -2053,12 +3669,108 @@ async function fetchTextMaybe(url) {
   return await res.text();
 }
 
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function formatRunBrowserTimestamp(runId) {
+  const match = String(runId || "").match(/^(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})/);
+  if (!match) return "Unknown time";
+  const [, year, month, day, hour, minute, second] = match;
+  return `${year}-${month}-${day} ${hour}:${minute}:${second}`;
+}
+
+function formatRunBrowserDuration(seconds) {
+  if (typeof seconds !== "number" || !Number.isFinite(seconds) || seconds <= 0) return "n/a";
+  if (seconds < 60) return `${seconds.toFixed(seconds >= 10 ? 0 : 1)} s`;
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.round(seconds % 60);
+  if (mins < 60) return `${mins}m ${String(secs).padStart(2, "0")}s`;
+  const hours = Math.floor(mins / 60);
+  const remMins = mins % 60;
+  return `${hours}h ${String(remMins).padStart(2, "0")}m`;
+}
+
+function formatRunBrowserNumber(value, digits = 1, suffix = "") {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "n/a";
+  return `${value.toFixed(digits)}${suffix}`;
+}
+
+function getRunBrowserScopeLabel(scope) {
+  return scope === "indoor" ? "Indoor" : "Simulation";
+}
+
+function getRunBrowserKindLabel(kind) {
+  if (kind === "campaign") return "Campaign";
+  if (kind === "link_level") return "Link";
+  if (kind === "ris_lab") return "RIS Lab";
+  if (kind === "ris_synthesis") return "Target Region Illumination";
+  return "Run";
+}
+
+function getRunBrowserSearchText(run) {
+  return [
+    run.run_id,
+    run.scene_label,
+    run.backend,
+    run.quality_preset,
+    run.scope,
+    run.kind,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
+
+function getRunById(runId) {
+  return (state.runs || []).find((run) => run && run.run_id === runId) || null;
+}
+
 function formatMetricValue(value) {
   if (value === null || value === undefined) return "n/a";
   if (typeof value === "number") return Number.isFinite(value) ? value.toFixed(4) : "n/a";
   if (typeof value === "boolean") return value ? "true" : "false";
   if (typeof value === "string") return value;
   return JSON.stringify(value);
+}
+
+function resolveRunArtifactHref(runId, value) {
+  if (!runId || typeof value !== "string" || !value.trim()) return null;
+  const trimmed = value.trim();
+  if (trimmed.startsWith("http://") || trimmed.startsWith("https://") || trimmed.startsWith("/")) {
+    return trimmed;
+  }
+  let rel = trimmed.replace(/\\/g, "/");
+  const runPrefix = `outputs/${runId}/`;
+  if (rel.startsWith(runPrefix)) {
+    rel = rel.slice(runPrefix.length);
+  }
+  if (!rel) return null;
+  return `/runs/${runId}/${rel}`;
+}
+
+function appendMetricValue(row, key, value, runId = null) {
+  const label = document.createElement("strong");
+  label.textContent = `${key}: `;
+  row.appendChild(label);
+  const href = resolveRunArtifactHref(runId, value);
+  if (href && /\.(ya?ml|npy|png)$/i.test(String(value))) {
+    const link = document.createElement("a");
+    link.href = href;
+    link.textContent = String(value);
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    row.appendChild(link);
+    return;
+  }
+  const val = document.createElement("span");
+  val.textContent = formatMetricValue(value);
+  row.appendChild(val);
 }
 
 function renderRisMetrics(metrics) {
@@ -2084,6 +3796,102 @@ function renderRisPlotSingle(runId, file) {
   ui.risPlotCaption.textContent = label;
   ui.risPlotImage.src = `/runs/${runId}/plots/${file}`;
   ui.risPlotImage.alt = label;
+}
+
+function renderLinkMetrics(summary) {
+  ui.linkMetrics.innerHTML = "";
+  if (!summary) {
+    ui.linkMetrics.textContent = "No link-level metrics found for this run.";
+    return;
+  }
+  const rows = [
+    ["seed_type", summary.seed ? summary.seed.type : null],
+    ["seed_run_id", summary.seed ? summary.seed.run_id : null],
+    ["seed_config_path", summary.seed ? summary.seed.config_path : null],
+    ["prepared_seed_run_id", summary.seed ? summary.seed.prepared_run_id : null],
+    ["rt_backend", summary.runtime ? summary.runtime.rt_backend : null],
+    ["mitsuba_variant", summary.runtime ? summary.runtime.mitsuba_variant : null],
+    ["rt_max_depth", summary.evaluation ? summary.evaluation.rt_max_depth : null],
+    ["rt_samples_per_src", summary.evaluation ? summary.evaluation.rt_samples_per_src : null],
+    ["seed_rt_max_depth", summary.evaluation ? summary.evaluation.seed_rt_max_depth : null],
+    ["seed_rt_samples_per_src", summary.evaluation ? summary.evaluation.seed_rt_samples_per_src : null],
+    ["estimators", summary.evaluation ? (summary.evaluation.estimators || []).join(", ") : null],
+    ["ebno_db_list", summary.evaluation ? (summary.evaluation.ebno_db_list || []).join(", ") : null],
+    ["ber_reference_mode", summary.evaluation ? summary.evaluation.ber_reference_mode : null],
+    ["ber_reference_path_gain_db", summary.evaluation ? summary.evaluation.ber_reference_path_gain_db : null],
+  ];
+  rows.forEach(([key, value]) => {
+    const row = document.createElement("div");
+    const label = document.createElement("strong");
+    label.textContent = `${key}: `;
+    const val = document.createElement("span");
+    val.textContent = formatMetricValue(value);
+    row.append(label, val);
+    ui.linkMetrics.appendChild(row);
+  });
+  const warnings = Array.isArray(summary.warnings) ? summary.warnings : [];
+  warnings.forEach((warning, index) => {
+    const row = document.createElement("div");
+    const label = document.createElement("strong");
+    label.textContent = `warning_${index + 1}: `;
+    const val = document.createElement("span");
+    val.textContent = formatMetricValue(warning);
+    row.append(label, val);
+    ui.linkMetrics.appendChild(row);
+  });
+  const variants = summary.results || {};
+  Object.values(variants).forEach((variant) => {
+    const row = document.createElement("div");
+    const label = document.createElement("strong");
+    label.textContent = `${variant.label || variant.key}: `;
+    const val = document.createElement("span");
+    const parts = [];
+    if (variant.path_gain_db !== undefined && variant.path_gain_db !== null) {
+      parts.push(`gain ${formatMetricValue(variant.path_gain_db)} dB`);
+    }
+    if (variant.rms_delay_spread_ns !== undefined && variant.rms_delay_spread_ns !== null) {
+      parts.push(`delay ${formatMetricValue(variant.rms_delay_spread_ns)} ns`);
+    }
+    if (variant.num_ris_paths !== undefined && variant.num_ris_paths !== null) {
+      parts.push(`RIS paths ${formatMetricValue(variant.num_ris_paths)}`);
+    }
+    val.textContent = parts.join(" · ") || "n/a";
+    row.append(label, val);
+    ui.linkMetrics.appendChild(row);
+  });
+}
+
+function renderLinkPlotSingle(runId, file) {
+  if (!ui.linkPlotImage || !ui.linkPlotCaption) return;
+  const label = LINK_PLOT_LABELS[file] || file;
+  ui.linkPlotCaption.textContent = label;
+  ui.linkPlotImage.onerror = () => {
+    setLinkResultStatus(`Plot not found for this run: ${file}`);
+  };
+  ui.linkPlotImage.onload = () => {
+    if (state.link.activeRunId === runId) {
+      setLinkResultStatus("Results loaded.");
+    }
+  };
+  ui.linkPlotImage.src = `/runs/${runId}/plots/${file}?v=${Date.now()}`;
+  ui.linkPlotImage.alt = label;
+}
+
+function renderLinkPlotTabs(plots, activeFile) {
+  if (!ui.linkPlotTabs) return;
+  ui.linkPlotTabs.innerHTML = "";
+  const requested = Array.isArray(plots) && plots.length
+    ? plots
+    : LINK_PLOT_FILES.map((plot) => plot.file);
+  requested.forEach((file, index) => {
+    const meta = LINK_PLOT_FILES.find((plot) => plot.file === file);
+    const button = document.createElement("button");
+    button.className = `plot-tab-button${file === activeFile || (!activeFile && index === 0) ? " is-active" : ""}`;
+    button.dataset.plot = file;
+    button.type = "button";
+    button.textContent = meta ? meta.label : (LINK_PLOT_LABELS[file] || file);
+    ui.linkPlotTabs.appendChild(button);
+  });
 }
 
 function renderCampaignMetrics(summary) {
@@ -2119,7 +3927,7 @@ function renderCampaignPlotSingle(runId, file) {
   if (!ui.campaignPlotImage || !ui.campaignPlotCaption) return;
   const label = (state.campaign.plotLabels && state.campaign.plotLabels[file]) || CAMPAIGN_PLOT_LABELS[file] || file;
   ui.campaignPlotCaption.textContent = label;
-  ui.campaignPlotImage.src = `/runs/${runId}/plots/${file}`;
+  ui.campaignPlotImage.src = `/runs/${runId}/plots/${file}?v=${Date.now()}`;
   ui.campaignPlotImage.alt = label;
 }
 
@@ -2167,7 +3975,7 @@ function renderCampaign2PlotSingle(runId, file) {
   if (!ui.campaign2PlotImage || !ui.campaign2PlotCaption) return;
   const label = (state.campaign2.plotLabels && state.campaign2.plotLabels[file]) || file;
   ui.campaign2PlotCaption.textContent = label;
-  ui.campaign2PlotImage.src = `/runs/${runId}/plots/${file}`;
+  ui.campaign2PlotImage.src = `/runs/${runId}/plots/${file}?v=${Date.now()}`;
   ui.campaign2PlotImage.alt = label;
 }
 
@@ -2193,6 +4001,14 @@ function setRisResultStatus(text) {
   ui.risResultStatus.textContent = text;
 }
 
+function setRisSynthesisStatus(text) {
+  ui.risSynthJobStatus.textContent = text;
+}
+
+function setRisSynthesisResultStatus(text) {
+  ui.risSynthResultStatus.textContent = text;
+}
+
 function setCampaignStatus(text) {
   ui.campaignJobStatus.textContent = text;
 }
@@ -2207,6 +4023,14 @@ function setCampaign2Status(text) {
 
 function setCampaign2ResultStatus(text) {
   ui.campaign2ResultStatus.textContent = text;
+}
+
+function setLinkStatus(text) {
+  ui.linkJobStatus.textContent = text;
+}
+
+function setLinkResultStatus(text) {
+  ui.linkResultStatus.textContent = text;
 }
 
 function sleep(ms) {
@@ -2291,7 +4115,7 @@ function bindKeyboardNavigation() {
 }
 
 function getProfileDefinition() {
-  return RUN_PROFILES[ui.runProfile.value] || RUN_PROFILES.cpu_only;
+  return RUN_PROFILES[getActiveProfileKey()] || RUN_PROFILES.cpu_only;
 }
 
 function loadUiSnapshot(tabName = "sim") {
@@ -2358,6 +4182,7 @@ function applyRadioMapDefaults(config) {
   const centerZ = Number.isFinite(zOnly)
     ? zOnly
     : (Array.isArray(radio.center) && radio.center.length >= 3 ? radio.center[2] : null);
+  const zStack = radio && typeof radio.z_stack === "object" && radio.z_stack ? radio.z_stack : {};
   ui.radioMapAuto.checked = Boolean(radio.auto_size);
   setInputValue(ui.radioMapPadding, radio.auto_padding);
   if (ui.radioMapPlotStyle) {
@@ -2401,6 +4226,13 @@ function applyRadioMapDefaults(config) {
     setInputValue(ui.radioMapCenterZ, centerZ);
     setInputValue(ui.radioMapPlaneZ, centerZ);
   }
+  if (ui.radioMapZStackEnabled) {
+    ui.radioMapZStackEnabled.checked = Boolean(zStack.enabled);
+  }
+  setInputValue(ui.radioMapZStackBelow, zStack.num_below);
+  setInputValue(ui.radioMapZStackAbove, zStack.num_above);
+  setInputValue(ui.radioMapZStackSpacing, zStack.spacing_m);
+  syncRadioMapZStackControls({ primeDefaults: Boolean(zStack.enabled) });
 }
 
 function applyCustomDefaults(config) {
@@ -2504,7 +4336,7 @@ function updateRisGeometryVisibility() {
 }
 
 function updateCustomVisibility() {
-  const isCustom = ui.runProfile.value === "custom" || ui.runProfile.value === "indoor_box_high";
+  const isCustom = getActiveProfileKey() === "custom" || isIndoorScopeTab(state.activeTab);
   ui.customOverridesSection.open = isCustom;
   ui.customOverridesSection.style.display = isCustom ? "" : "none";
 }
@@ -2534,13 +4366,18 @@ async function fetchConfigs() {
     applyIndoorDefaults();
     state.indoorInitialized = true;
   }
+  void refreshLinkSeedOptions();
 }
 
 async function fetchRuns(scope = getRunScopeForTab()) {
   const res = await fetch(`/api/runs?scope=${encodeURIComponent(scope)}`);
   const data = await res.json();
   state.runs = data.runs || [];
-  const isActiveScope = isSimScopeTab(state.activeTab) && getRunScopeForTab() === scope;
+  state.runBrowser.detailsByRunId = Object.fromEntries(
+    Object.entries(state.runBrowser.detailsByRunId || {}).filter(([runId]) => state.runs.some((run) => run.run_id === runId)),
+  );
+  const isActiveScope = usesSharedViewerTab(state.activeTab) && getRunScopeForTab() === scope;
+  const preserveTargetRegionViewer = isActiveScope && hasActiveRisSynthesisViewerOverlay(scope);
   const previous = state.scopedRunIds[scope] || state.lastLoadedRunByScope[scope] || (isActiveScope ? state.runId : null);
   const previousDiff = ui.radioMapDiffRun ? ui.radioMapDiffRun.value : null;
   ui.runSelect.innerHTML = "";
@@ -2561,18 +4398,27 @@ async function fetchRuns(scope = getRunScopeForTab()) {
   if (data.runs.length > 0) {
     const nextRunId = data.runs.find((r) => r.run_id === previous)?.run_id || data.runs[0].run_id;
     state.scopedRunIds[scope] = nextRunId;
-    if (isActiveScope) {
+    if (isActiveScope && !preserveTargetRegionViewer) {
       state.runId = nextRunId;
       ui.runSelect.value = nextRunId;
     }
-    if (ui.radioMapDiffRun && isActiveScope) {
+    if (ui.radioMapDiffRun && isActiveScope && !preserveTargetRegionViewer) {
       ui.radioMapDiffRun.value = previousDiff || nextRunId;
     }
-    if (!state.loadingRun && state.lastLoadedRunByScope[scope] !== nextRunId && isActiveScope) {
+    if (
+      !preserveTargetRegionViewer
+      && !state.loadingRun
+      && state.lastLoadedRunByScope[scope] !== nextRunId
+      && isActiveScope
+    ) {
       await loadRun(nextRunId, scope);
     }
   } else if (isActiveScope) {
     state.runId = null;
+  }
+  renderRunBrowserList();
+  if (scope === "sim") {
+    void refreshLinkSeedOptions();
   }
 }
 
@@ -2737,6 +4583,235 @@ async function fetchRunDetails(runId) {
     return null;
   }
   return await res.json();
+}
+
+function renderRunBrowserBadges(run) {
+  if (!ui.runBrowserBadges) return;
+  const badges = [
+    getRunBrowserScopeLabel(run.scope),
+    getRunBrowserKindLabel(run.kind),
+    run.backend,
+    run.quality_preset ? `${run.quality_preset} preset` : null,
+    run.has_viewer ? "Viewer ready" : "No viewer",
+  ].filter(Boolean);
+  ui.runBrowserBadges.innerHTML = badges
+    .map((badge) => `<span class="run-browser-badge">${escapeHtml(badge)}</span>`)
+    .join("");
+}
+
+function renderRunBrowserPreview(run) {
+  if (!ui.runBrowserPreviewImage || !ui.runBrowserPreviewEmpty) return;
+  const thumbnailPath = run && run.thumbnail_path ? run.thumbnail_path : "";
+  if (!thumbnailPath) {
+    ui.runBrowserPreviewImage.style.display = "none";
+    ui.runBrowserPreviewImage.removeAttribute("src");
+    ui.runBrowserPreviewEmpty.style.display = "block";
+    ui.runBrowserPreviewEmpty.textContent = run && run.has_viewer
+      ? "This run has viewer data, but no saved thumbnail was found."
+      : "This run does not have a saved scene preview yet.";
+    return;
+  }
+  ui.runBrowserPreviewEmpty.style.display = "none";
+  ui.runBrowserPreviewImage.style.display = "block";
+  ui.runBrowserPreviewImage.alt = run.thumbnail_label || "Run preview";
+  ui.runBrowserPreviewImage.onerror = () => {
+    ui.runBrowserPreviewImage.style.display = "none";
+    ui.runBrowserPreviewEmpty.style.display = "block";
+    ui.runBrowserPreviewEmpty.textContent = "Saved preview could not be loaded for this run.";
+  };
+  ui.runBrowserPreviewImage.src = `${thumbnailPath}?v=${encodeURIComponent(run.run_id)}`;
+}
+
+function renderRunBrowserDetails(run, detail = null) {
+  if (!ui.runBrowserSelectedRun || !ui.runBrowserDetails) return;
+  if (!run) {
+    ui.runBrowserSelectedRun.textContent = "No run selected";
+    if (ui.runBrowserBadges) ui.runBrowserBadges.innerHTML = "";
+    ui.runBrowserDetails.textContent = "Choose a run from the list to inspect its details before opening it in the viewer.";
+    renderRunBrowserPreview(null);
+    return;
+  }
+
+  const config = detail && detail.config ? detail.config : null;
+  const scene = config && config.scene ? config.scene : null;
+  const summary = run.summary || {};
+  const metrics = summary.metrics || {};
+  const txPos = scene && scene.tx && Array.isArray(scene.tx.position) ? scene.tx.position.join(", ") : "n/a";
+  const rxPos = scene && scene.rx && Array.isArray(scene.rx.position) ? scene.rx.position.join(", ") : "n/a";
+  const risObjects = config && config.ris && Array.isArray(config.ris.objects)
+    ? config.ris.objects.filter((item) => item && item.enabled !== false)
+    : [];
+  const radioMap = config && config.radio_map ? config.radio_map : null;
+  const detailCards = [
+    ["Timestamp", formatRunBrowserTimestamp(run.run_id)],
+    ["Scene", run.scene_label || "n/a"],
+    ["Backend", run.backend || "n/a"],
+    ["Duration", formatRunBrowserDuration(run.duration_s)],
+    ["Frequency", formatRunBrowserNumber(run.frequency_ghz, 1, " GHz")],
+    ["Max depth", run.max_depth ?? "n/a"],
+    ["Valid paths", run.path_count ?? "n/a"],
+    ["Total path gain", formatRunBrowserNumber(run.total_path_gain_db, 2, " dB")],
+    ["Rx power", formatRunBrowserNumber(run.rx_power_dbm, 2, " dBm")],
+    ["Tx position", txPos],
+    ["Rx position", rxPos],
+    ["RIS objects", risObjects.length || (metrics.num_ris_paths ? "Configured" : "None")],
+  ];
+
+  if (radioMap && Array.isArray(radioMap.size) && Array.isArray(radioMap.cell_size)) {
+    detailCards.push([
+      "Radio map",
+      `${radioMap.size[0]} x ${radioMap.size[1]} m @ ${radioMap.cell_size[0]} x ${radioMap.cell_size[1]} m`,
+    ]);
+  }
+
+  const notes = [];
+  if (!run.has_viewer) {
+    notes.push("Viewer assets are missing for this run, so it cannot be opened in the 3D viewer.");
+  }
+  if (!detail) {
+    notes.push("Loading saved config details...");
+  }
+
+  ui.runBrowserSelectedRun.textContent = run.run_id;
+  renderRunBrowserBadges(run);
+  ui.runBrowserDetails.innerHTML = `
+    ${detailCards.map(([label, value]) => `
+      <div class="run-browser-detail">
+        <div class="run-browser-detail-label">${escapeHtml(label)}</div>
+        <div class="run-browser-detail-value">${escapeHtml(value)}</div>
+      </div>
+    `).join("")}
+    ${notes.map((note) => `<div class="run-browser-detail-note">${escapeHtml(note)}</div>`).join("")}
+  `;
+  renderRunBrowserPreview(run);
+}
+
+function renderRunBrowserList() {
+  if (!ui.runBrowserList || !ui.runBrowserCount) return;
+  const filterText = (ui.runBrowserSearch ? ui.runBrowserSearch.value : "").trim().toLowerCase();
+  const scope = getRunScopeForTab();
+  const allRuns = Array.isArray(state.runs) ? state.runs : [];
+  const filteredRuns = filterText ? allRuns.filter((run) => getRunBrowserSearchText(run).includes(filterText)) : allRuns;
+
+  if (ui.runBrowserSubtitle) {
+    ui.runBrowserSubtitle.textContent = `${getRunBrowserScopeLabel(scope)} scope · browse saved runs and inspect a preview before loading.`;
+  }
+  ui.runBrowserCount.textContent = `${filteredRuns.length} / ${allRuns.length} runs`;
+
+  if (!filteredRuns.length) {
+    state.runBrowser.selectedRunId = null;
+    ui.runBrowserList.innerHTML = '<div class="run-browser-detail-note">No runs match the current filter.</div>';
+    renderRunBrowserDetails(null);
+    if (ui.runBrowserOpenRun) ui.runBrowserOpenRun.disabled = true;
+    return;
+  }
+
+  const selectedRunId = filteredRuns.some((run) => run.run_id === state.runBrowser.selectedRunId)
+    ? state.runBrowser.selectedRunId
+    : (filteredRuns.find((run) => run.run_id === state.runId)?.run_id || filteredRuns[0].run_id);
+  state.runBrowser.selectedRunId = selectedRunId;
+
+  ui.runBrowserList.innerHTML = "";
+  filteredRuns.forEach((run) => {
+    const item = document.createElement("div");
+    item.className = "run-browser-item";
+    item.tabIndex = 0;
+    item.setAttribute("role", "button");
+    if (run.run_id === state.runBrowser.selectedRunId) item.classList.add("is-selected");
+    if (run.run_id === state.runId) item.classList.add("is-current");
+    const sceneLabel = run.scene_label || "Unnamed scene";
+    const backendLabel = run.backend || "backend n/a";
+    const statusLabel = run.has_viewer ? "Viewer ready" : "No viewer";
+    item.title = [run.run_id, sceneLabel, backendLabel, statusLabel].join(" · ");
+    item.innerHTML = `
+      <div class="run-browser-item-head">
+        <div class="run-browser-item-id" title="${escapeHtml(run.run_id)}">
+          <span class="run-browser-item-id-text">${escapeHtml(run.run_id)}</span>
+        </div>
+        <span class="run-browser-status ${run.has_viewer ? "is-ready" : "is-missing"}">${escapeHtml(statusLabel)}</span>
+      </div>
+      <div class="run-browser-item-meta">
+        <div class="run-browser-item-scene" title="${escapeHtml(sceneLabel)}">${escapeHtml(sceneLabel)}</div>
+        <div class="run-browser-item-time" title="${escapeHtml(formatRunBrowserTimestamp(run.run_id))}">${escapeHtml(formatRunBrowserTimestamp(run.run_id))}</div>
+      </div>
+      <div class="run-browser-item-foot">
+        <div class="run-browser-item-summary" title="${escapeHtml(backendLabel)}">${escapeHtml(backendLabel)}</div>
+        <div class="run-browser-item-time" title="${escapeHtml(formatRunBrowserDuration(run.duration_s))}">${escapeHtml(formatRunBrowserDuration(run.duration_s))}</div>
+      </div>
+    `;
+    item.addEventListener("click", () => {
+      void selectRunBrowserRun(run.run_id);
+    });
+    item.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      void selectRunBrowserRun(run.run_id);
+    });
+    item.addEventListener("dblclick", () => {
+      if (!run.has_viewer) return;
+      void activateRunFromBrowser(run.run_id);
+    });
+    ui.runBrowserList.appendChild(item);
+  });
+
+  const selectedRun = getRunById(state.runBrowser.selectedRunId);
+  renderRunBrowserDetails(selectedRun, state.runBrowser.detailsByRunId[state.runBrowser.selectedRunId] || null);
+  if (ui.runBrowserOpenRun) ui.runBrowserOpenRun.disabled = !(selectedRun && selectedRun.has_viewer);
+}
+
+async function selectRunBrowserRun(runId) {
+  if (!runId) return;
+  state.runBrowser.selectedRunId = runId;
+  renderRunBrowserList();
+  if (state.runBrowser.detailsByRunId[runId]) {
+    renderRunBrowserDetails(getRunById(runId), state.runBrowser.detailsByRunId[runId]);
+    return;
+  }
+  const details = await fetchRunDetails(runId);
+  if (!details) return;
+  state.runBrowser.detailsByRunId[runId] = details;
+  if (state.runBrowser.selectedRunId === runId) {
+    renderRunBrowserDetails(getRunById(runId), details);
+  }
+}
+
+function closeRunBrowser() {
+  if (!ui.runBrowserModal) return;
+  state.runBrowser.open = false;
+  ui.runBrowserModal.classList.remove("is-open");
+  ui.runBrowserModal.setAttribute("aria-hidden", "true");
+}
+
+async function openRunBrowser() {
+  if (!ui.runBrowserModal) return;
+  state.runBrowser.open = true;
+  ui.runBrowserModal.classList.add("is-open");
+  ui.runBrowserModal.setAttribute("aria-hidden", "false");
+  renderRunBrowserList();
+  if (ui.runBrowserSearch) {
+    requestAnimationFrame(() => ui.runBrowserSearch.focus());
+  }
+  await fetchRuns(getRunScopeForTab());
+  if (state.runBrowser.selectedRunId) {
+    await selectRunBrowserRun(state.runBrowser.selectedRunId);
+  } else if (state.runId) {
+    await selectRunBrowserRun(state.runId);
+  }
+}
+
+async function activateRunFromBrowser(runId) {
+  const run = getRunById(runId);
+  if (!run || !run.has_viewer) return;
+  const scope = getRunScopeForTab();
+  state.followLatestRun = false;
+  state.followLatestRunByScope[scope] = false;
+  state.sceneOverrideDirty = false;
+  state.scopedRunIds[scope] = runId;
+  if (ui.runSelect) {
+    ui.runSelect.value = runId;
+  }
+  closeRunBrowser();
+  await loadRun(runId, scope);
 }
 
 async function fetchProgress(runId) {
@@ -2939,7 +5014,7 @@ async function refreshRisRunSelect() {
     }
   });
   const runList = Array.from(runIds).sort((a, b) => b.localeCompare(a));
-  const previous = ui.risRunSelect.value;
+  const previous = state.ris.selectedRunId || ui.risRunSelect.value;
   ui.risRunSelect.innerHTML = "";
   runList.forEach((runId) => {
     const opt = document.createElement("option");
@@ -2948,7 +5023,10 @@ async function refreshRisRunSelect() {
     ui.risRunSelect.appendChild(opt);
   });
   if (runList.length > 0) {
-    ui.risRunSelect.value = runList.includes(previous) ? previous : runList[0];
+    const selectedRunId = runList.includes(previous) ? previous : runList[0];
+    syncRisSelectedRun(selectedRunId, { followActive: state.ris.followActiveRun });
+  } else {
+    syncRisSelectedRun(null, { followActive: state.ris.followActiveRun });
   }
   state.ris.runs = runList;
 }
@@ -3006,9 +5084,20 @@ async function refreshRisJobs() {
     state.ris.activeRunId = null;
   }
   await refreshRisProgressAndLog();
-  if (state.ris.activeRunId) {
-    ui.risRunSelect.value = state.ris.activeRunId;
-    loadRisResults(state.ris.activeRunId);
+  if (state.ris.followActiveRun && state.ris.activeRunId) {
+    syncRisSelectedRun(state.ris.activeRunId, { followActive: true });
+  } else if (
+    !state.ris.selectedRunId
+    || !state.ris.runs.includes(state.ris.selectedRunId)
+  ) {
+    const fallbackRunId = state.ris.activeRunId || state.ris.runs[0] || null;
+    syncRisSelectedRun(
+      fallbackRunId,
+      { followActive: Boolean(fallbackRunId && fallbackRunId === state.ris.activeRunId) }
+    );
+  }
+  if (state.ris.selectedRunId) {
+    await loadRisResults(state.ris.selectedRunId);
   }
 }
 
@@ -3069,6 +5158,7 @@ async function submitRisJob() {
     } else {
       state.ris.activeRunId = data.run_id;
       state.ris.activeJobId = data.job_id;
+      syncRisSelectedRun(data.run_id, { followActive: true });
       setRisStatus(`RIS job submitted: ${data.run_id}`);
     }
     await refreshRisJobs();
@@ -3080,18 +5170,29 @@ async function submitRisJob() {
 
 async function loadRisResults(runId) {
   if (!runId) {
+    syncRisSelectedRun(null, { followActive: false });
     setRisResultStatus("Select a run to load results.");
     renderRisMetrics(null);
     if (ui.risPlotImage) ui.risPlotImage.src = "";
     return;
   }
+  syncRisSelectedRun(runId, { followActive: state.ris.followActiveRun && runId === state.ris.activeRunId });
   setRisResultStatus(`Loading ${runId}...`);
   const [metrics, progress] = await Promise.all([
     fetchJsonMaybe(`/runs/${runId}/metrics.json`),
     fetchProgress(runId),
   ]);
   renderRisMetrics(metrics);
-  const defaultPlot = state.ris.selectedPlot || "phase_map.png";
+  const mode = metrics && typeof metrics.mode === "string" ? metrics.mode : null;
+  const allowedPlots = mode && RIS_PLOT_FILES_BY_MODE[mode]
+    ? RIS_PLOT_FILES_BY_MODE[mode]
+    : null;
+  const defaultPlot = !metrics
+    ? "phase_map.png"
+    : (allowedPlots && allowedPlots.has(state.ris.selectedPlot))
+      ? state.ris.selectedPlot
+      : "phase_map.png";
+  state.ris.selectedPlot = defaultPlot;
   renderRisPlotSingle(runId, defaultPlot);
   if (ui.risPlotTabs) {
     ui.risPlotTabs.querySelectorAll(".plot-tab-button").forEach((btn) => {
@@ -3105,6 +5206,733 @@ async function loadRisResults(runId) {
     setRisResultStatus(`Run status: ${progress.status}`);
   } else {
     setRisResultStatus("Results loaded.");
+  }
+}
+
+async function fetchRisSynthesisJobs() {
+  const data = await fetchJsonMaybe("/api/ris-synth/jobs");
+  return data || { jobs: [] };
+}
+
+function renderRisSynthesisMetrics(runId, summary, metrics) {
+  if (!ui.risSynthMetrics) return;
+  ui.risSynthMetrics.innerHTML = "";
+  const runtime = summary && summary.runtime ? summary.runtime : {};
+  const variants = metrics && metrics.variants ? metrics.variants : {};
+  const artifacts = summary && summary.artifacts ? summary.artifacts : {};
+  const quantization = summary && summary.quantization ? summary.quantization : (metrics && metrics.quantization ? metrics.quantization : {});
+  const rows = [
+    ["action", summary && summary.action ? summary.action : "run"],
+    ["rt_backend", runtime.rt_backend],
+    ["mitsuba_variant", runtime.mitsuba_variant],
+    ["seed_scene", summary && summary.seed ? summary.seed.config_path : null],
+    ["seed_run_id", summary && summary.seed ? summary.seed.source_run_id : null],
+    ["source_run_id", summary && summary.source ? summary.source.run_id : null],
+    ["mask_cells", metrics && metrics.target_region ? metrics.target_region.num_masked_cells : null],
+    ["continuous_objective", metrics && metrics.objective ? metrics.objective.continuous_final : null],
+    ["1bit_objective", metrics && metrics.objective ? metrics.objective.one_bit_best : null],
+    ["quantized_objective", metrics && metrics.objective ? metrics.objective.quantized_best : null],
+    ["best_offset_rad", metrics && metrics.objective ? metrics.objective.best_offset_rad : null],
+    ["quantization_bits", quantization.bits],
+    ["quantization_levels", quantization.levels],
+    ["quantization_method", quantization.method],
+    ["continuous_profile_config", artifacts.continuous_seed_config_path],
+    ["continuous_profile_snippet", artifacts.continuous_profile_snippet_path],
+    ["continuous_phase_array", artifacts.continuous_phase_array_path],
+    ["continuous_amp_array", artifacts.continuous_amp_array_path],
+  ];
+  if (artifacts.one_bit_seed_config_path) {
+    rows.push(["1bit_profile_config", artifacts.one_bit_seed_config_path]);
+  }
+  if (artifacts.one_bit_profile_snippet_path) {
+    rows.push(["1bit_profile_snippet", artifacts.one_bit_profile_snippet_path]);
+  }
+  if (artifacts.one_bit_phase_array_path) {
+    rows.push(["1bit_phase_array", artifacts.one_bit_phase_array_path]);
+  }
+  if (artifacts.one_bit_amp_array_path) {
+    rows.push(["1bit_amp_array", artifacts.one_bit_amp_array_path]);
+  }
+  if (artifacts.quantized_seed_config_path) {
+    rows.push(["quantized_profile_config", artifacts.quantized_seed_config_path]);
+  }
+  if (artifacts.quantized_profile_snippet_path) {
+    rows.push(["quantized_profile_snippet", artifacts.quantized_profile_snippet_path]);
+  }
+  if (artifacts.quantized_phase_array_path) {
+    rows.push(["quantized_phase_array", artifacts.quantized_phase_array_path]);
+  }
+  if (artifacts.quantized_amp_array_path) {
+    rows.push(["quantized_amp_array", artifacts.quantized_amp_array_path]);
+  }
+  Object.entries(variants).forEach(([key, value]) => {
+    rows.push([`${key}_mean_rx_power_dbm`, value.mean_rx_power_dbm]);
+    rows.push([`${key}_coverage_fraction`, value.coverage_fraction_above_threshold]);
+  });
+  rows.forEach(([key, value]) => {
+    const row = document.createElement("div");
+    appendMetricValue(row, key, value, runId);
+    ui.risSynthMetrics.appendChild(row);
+  });
+}
+
+function renderRisSynthesisPlotTabs(summary) {
+  if (!ui.risSynthPlotTabs) return;
+  const available = new Set((summary && summary.artifacts && Array.isArray(summary.artifacts.plot_files))
+    ? summary.artifacts.plot_files
+    : RIS_SYNTH_PLOT_FILES.map((plot) => plot.file));
+  let firstVisible = null;
+  ui.risSynthPlotTabs.querySelectorAll(".plot-tab-button").forEach((btn) => {
+    const visible = available.has(btn.dataset.plot);
+    btn.style.display = visible ? "" : "none";
+    if (visible && !firstVisible) {
+      firstVisible = btn.dataset.plot;
+    }
+  });
+  if (state.risSynthesis.selectedPlot && available.has(state.risSynthesis.selectedPlot)) {
+    return state.risSynthesis.selectedPlot;
+  }
+  return firstVisible || "target_region_overlay.png";
+}
+
+function renderRisSynthesisPlotSingle(runId, file) {
+  if (!ui.risSynthPlotImage || !ui.risSynthPlotCaption) return;
+  const label = RIS_SYNTH_PLOT_LABELS[file] || file;
+  ui.risSynthPlotCaption.textContent = label;
+  ui.risSynthPlotImage.src = `/runs/${runId}/plots/${file}?v=${Date.now()}`;
+  ui.risSynthPlotImage.alt = label;
+}
+
+function renderRisSynthesisJobList(jobs) {
+  ui.risSynthJobList.innerHTML = "";
+  const sorted = [...jobs].sort((a, b) => (a.created_at || "").localeCompare(b.created_at || ""));
+  const recent = sorted.slice(-5).reverse();
+  recent.forEach((job) => {
+    const item = document.createElement("div");
+    const status = job.status || "unknown";
+    const action = job.action === "quantize"
+      ? `quantize ${job.bits || "?"}-bit`
+      : (job.action || "run");
+    const error = job.error ? ` · ERROR: ${job.error}` : "";
+    item.textContent = `${job.run_id} · ${action} · ${status}${error}`;
+    ui.risSynthJobList.appendChild(item);
+  });
+}
+
+async function refreshRisSynthesisRunSelect() {
+  const data = await fetchJsonMaybe("/api/runs?kind=ris_synthesis");
+  const runList = (data && data.runs ? data.runs : []).map((run) => run.run_id).sort((a, b) => b.localeCompare(a));
+  state.risSynthesis.runs = runList;
+  const previous = state.risSynthesis.selectedRunId || ui.risSynthRunSelect.value;
+  ui.risSynthRunSelect.innerHTML = "";
+  runList.forEach((runId) => {
+    const opt = document.createElement("option");
+    opt.value = runId;
+    opt.textContent = runId;
+    ui.risSynthRunSelect.appendChild(opt);
+  });
+  if (runList.length > 0) {
+    const selectedRunId = runList.includes(previous) ? previous : runList[0];
+    syncRisSynthesisSelectedRun(selectedRunId, { followActive: state.risSynthesis.followActiveRun });
+  } else {
+    syncRisSynthesisSelectedRun(null, { followActive: state.risSynthesis.followActiveRun });
+  }
+}
+
+async function refreshRisSynthesisSeedRunOptions() {
+  if (!ui.risSynthSeedRun) return;
+  const data = await fetchJsonMaybe("/api/runs");
+  const runs = Array.isArray(data && data.runs) ? data.runs : [];
+  const seedRuns = runs
+    .filter((run) => run && run.kind === "run" && run.run_id)
+    .sort((a, b) => String(b.run_id).localeCompare(String(a.run_id)));
+  state.risSynthesis.seedRunScopes = Object.fromEntries(
+    seedRuns.map((run) => [run.run_id, run.scope || "sim"]),
+  );
+  const preferred = ui.risSynthSeedRun.value || getActiveViewerSeedRunId() || "";
+  ui.risSynthSeedRun.innerHTML = "";
+  seedRuns.forEach((run) => {
+    const opt = document.createElement("option");
+    opt.value = run.run_id;
+    const scope = run.scope && run.scope !== "sim" ? ` · ${run.scope}` : "";
+    const scene = run.scene_label ? ` · ${run.scene_label}` : "";
+    opt.textContent = `${run.run_id}${scope}${scene}`;
+    ui.risSynthSeedRun.appendChild(opt);
+  });
+  if (seedRuns.length) {
+    const selectable = seedRuns.map((run) => run.run_id);
+    ui.risSynthSeedRun.value = selectable.includes(preferred) ? preferred : selectable[0];
+    await ensureRunDetailsCached(ui.risSynthSeedRun.value);
+  }
+}
+
+async function refreshRisSynthesisProgressAndLog() {
+  const runId = state.risSynthesis.activeRunId;
+  if (!runId) {
+    ui.risSynthProgress.textContent = "";
+    ui.risSynthLog.textContent = "";
+    return;
+  }
+  const progress = await fetchProgress(runId);
+  if (progress) {
+    const step = progress.step_name || "Running";
+    const total = progress.total_steps || 0;
+    const idx = progress.step_index != null ? progress.step_index + 1 : null;
+    const pct = progress.progress != null ? Math.round(progress.progress * 100) : null;
+    const stepLabel = total && idx ? `${step} (${idx}/${total})` : step;
+    const pctLabel = pct !== null ? ` · ${pct}%` : "";
+    const iterLabel = progress.current_iteration ? ` · iter ${progress.current_iteration}/${progress.total_iterations || "?"}` : "";
+    const error = progress.error ? ` · ERROR: ${progress.error}` : "";
+    ui.risSynthProgress.textContent = `${progress.status || "running"} · ${stepLabel}${pctLabel}${iterLabel}${error}`;
+  } else {
+    ui.risSynthProgress.textContent = "Progress unavailable.";
+  }
+  const logText = await fetchTextMaybe(`/runs/${runId}/job.log`);
+  ui.risSynthLog.textContent = logText ? tailLines(logText, 120) : "No log available.";
+}
+
+async function refreshRisSynthesisJobs() {
+  const data = await fetchRisSynthesisJobs();
+  state.risSynthesis.jobs = data.jobs || [];
+  renderRisSynthesisJobList(state.risSynthesis.jobs);
+  const sorted = [...state.risSynthesis.jobs].sort((a, b) => (a.created_at || "").localeCompare(b.created_at || ""));
+  const running = sorted.find((job) => job.status === "running");
+  const latest = sorted[sorted.length - 1];
+  const active = state.risSynthesis.activeJobId
+    ? sorted.find((job) => job.job_id === state.risSynthesis.activeJobId)
+    : null;
+  await refreshRisSynthesisSeedRunOptions();
+  await refreshRisSynthesisRunSelect();
+  const runExists = (job) => job && job.run_id && state.risSynthesis.runs.includes(job.run_id);
+  const current = [active, running, latest].find((job) => job && (job.status === "running" || runExists(job)));
+  if (current) {
+    state.risSynthesis.activeJobId = current.job_id;
+    state.risSynthesis.activeRunId = current.run_id;
+    setRisSynthesisStatus(`${current.run_id} · ${current.status || "running"}`);
+  } else {
+    setRisSynthesisStatus("Idle.");
+    state.risSynthesis.activeJobId = null;
+    state.risSynthesis.activeRunId = null;
+  }
+  await refreshRisSynthesisProgressAndLog();
+  if (state.risSynthesis.followActiveRun && state.risSynthesis.activeRunId) {
+    syncRisSynthesisSelectedRun(state.risSynthesis.activeRunId, { followActive: true });
+  } else if (
+    !state.risSynthesis.selectedRunId
+    || !state.risSynthesis.runs.includes(state.risSynthesis.selectedRunId)
+  ) {
+    const fallbackRunId = state.risSynthesis.activeRunId || state.risSynthesis.runs[0] || null;
+    syncRisSynthesisSelectedRun(fallbackRunId, { followActive: Boolean(fallbackRunId && fallbackRunId === state.risSynthesis.activeRunId) });
+  }
+  if (state.risSynthesis.selectedRunId) {
+    await loadRisSynthesisResults(state.risSynthesis.selectedRunId);
+  }
+  await updateRisSynthesisSeedStatus();
+}
+
+async function submitRisSynthesisJob() {
+  const payload = {};
+  const source = ui.risSynthConfigSource ? ui.risSynthConfigSource.value : "builder";
+  if (source === "file") {
+    let configPath = ui.risSynthConfigPath.value.trim();
+    if (!configPath && ui.risSynthConfigPath.placeholder) {
+      configPath = ui.risSynthConfigPath.placeholder;
+    }
+    if (!configPath) {
+      setRisSynthesisStatus("Config path required.");
+      return;
+    }
+    payload.config_path = configPath;
+  } else {
+    try {
+      if (ui.risSynthSeedSource && ui.risSynthSeedSource.value === "seed_run") {
+        await updateRisSynthesisSeedStatus();
+      }
+      if (!syncRisSynthesisBoxesStateFromTextarea({ quiet: true })) {
+        setRisSynthesisStatus("Config error: fix the ROI JSON before starting a new run.");
+        return;
+      }
+      payload.config_data = buildRisSynthesisConfigFromUI();
+      const roiValidation = await validateRisSynthesisBoxesAgainstSeedGrid(payload.config_data.target_region.boxes);
+      if (!roiValidation.ok) {
+        const boundsText = formatRisSynthesisCellCenterBounds(roiValidation.bounds);
+        setRisSynthesisStatus(
+          `Config error: ROI boxes do not hit any seed-grid cells (${boundsText}). `
+          + "Load the seed run into the viewer and redraw on that heatmap."
+        );
+        return;
+      }
+    } catch (err) {
+      setRisSynthesisStatus(`Config error: ${err instanceof Error ? err.message : String(err)}`);
+      return;
+    }
+  }
+  setRisSynthesisStatus("Submitting target region illumination job...");
+  try {
+    const res = await fetch("/api/ris-synth/jobs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) {
+      setRisSynthesisStatus(`Target region illumination job error: ${String(data.error || res.status)}`);
+    } else {
+      state.risSynthesis.activeRunId = data.run_id;
+      state.risSynthesis.activeJobId = data.job_id;
+      syncRisSynthesisSelectedRun(data.run_id, { followActive: true });
+      clearRisSynthesisViewerOverlay();
+      setRisSynthesisStatus(`Target region illumination job submitted: ${data.run_id}`);
+    }
+    await refreshRisSynthesisJobs();
+  } catch (err) {
+    setRisSynthesisStatus("Target region illumination job error: network failure");
+  }
+}
+
+async function submitRisSynthesisQuantizationJob() {
+  const selectedRunId = ui.risSynthRunSelect ? ui.risSynthRunSelect.value : "";
+  if (!selectedRunId) {
+    setRisSynthesisResultStatus("Select a target region illumination run to quantize.");
+    return;
+  }
+  setRisSynthesisResultStatus(`Preparing quantization from ${selectedRunId}...`);
+  let sourceRunId = selectedRunId;
+  const selectedSummary = await fetchJsonMaybe(`/runs/${selectedRunId}/summary.json`);
+  if (!selectedSummary) {
+    setRisSynthesisResultStatus(`Could not load summary for ${selectedRunId}.`);
+    return;
+  }
+  const artifacts = selectedSummary.artifacts || {};
+  if (
+    selectedSummary.action !== "quantize"
+    && !artifacts.continuous_phase_array_path
+  ) {
+    setRisSynthesisResultStatus(
+      `Run ${selectedRunId} does not expose a continuous RIS phase artifact, so it cannot be post-quantized.`
+    );
+    return;
+  }
+  if (
+    selectedSummary
+    && selectedSummary.action === "quantize"
+    && selectedSummary.source
+    && selectedSummary.source.run_id
+  ) {
+    sourceRunId = String(selectedSummary.source.run_id);
+  }
+  const bits = readOptionalInt(ui.risSynthQuantizeBits, 2);
+  const numOffsetSamples = readOptionalInt(ui.risSynthQuantizeSamples, 181);
+  if (!bits || bits < 1) {
+    setRisSynthesisResultStatus("Quantize bits must be >= 1.");
+    return;
+  }
+  if (!numOffsetSamples || numOffsetSamples < 1) {
+    setRisSynthesisResultStatus("Quantize offset samples must be >= 1.");
+    return;
+  }
+  setRisSynthesisResultStatus(`Submitting ${bits}-bit quantization from ${sourceRunId}...`);
+  setRisSynthesisStatus(`Submitting ${bits}-bit quantization job from ${sourceRunId}...`);
+  try {
+    const res = await fetch("/api/ris-synth/jobs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "quantize",
+        source_run_id: sourceRunId,
+        bits,
+        num_offset_samples: numOffsetSamples,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) {
+      const message = `Target region illumination quantization error: ${String(data.error || res.status)}`;
+      setRisSynthesisStatus(message);
+      setRisSynthesisResultStatus(message);
+    } else {
+      state.risSynthesis.activeRunId = data.run_id;
+      state.risSynthesis.activeJobId = data.job_id;
+      syncRisSynthesisSelectedRun(data.run_id, { followActive: true });
+      clearRisSynthesisViewerOverlay();
+      setRisSynthesisStatus(`Target region illumination quantization submitted: ${data.run_id}`);
+      setRisSynthesisResultStatus(`Quantization job submitted: ${data.run_id}`);
+    }
+    await refreshRisSynthesisJobs();
+    await refreshRisSynthesisProgressAndLog();
+  } catch (_err) {
+    setRisSynthesisStatus("Target region illumination quantization error: network failure");
+    setRisSynthesisResultStatus("Target region illumination quantization error: network failure");
+  }
+}
+
+async function loadRisSynthesisResults(runId) {
+  if (!runId) {
+    setRisSynthesisResultStatus("Select a run to load results.");
+    renderRisSynthesisMetrics(null, null, null);
+    if (ui.risSynthPlotImage) ui.risSynthPlotImage.src = "";
+    return;
+  }
+  syncRisSynthesisSelectedRun(runId, { followActive: state.risSynthesis.followActiveRun });
+  setRisSynthesisResultStatus(`Loading ${runId}...`);
+  const [summary, metrics, progress] = await Promise.all([
+    fetchJsonMaybe(`/runs/${runId}/summary.json`),
+    fetchJsonMaybe(`/runs/${runId}/metrics.json`),
+    fetchProgress(runId),
+  ]);
+  renderRisSynthesisMetrics(runId, summary, metrics);
+  const defaultPlot = renderRisSynthesisPlotTabs(summary);
+  state.risSynthesis.selectedPlot = defaultPlot;
+  renderRisSynthesisPlotSingle(runId, defaultPlot);
+  if (ui.risSynthPlotTabs) {
+    ui.risSynthPlotTabs.querySelectorAll(".plot-tab-button").forEach((btn) => {
+      btn.classList.toggle("is-active", btn.dataset.plot === defaultPlot);
+    });
+  }
+  if (progress && progress.status === "failed") {
+    const error = progress.error ? ` · ERROR: ${progress.error}` : "";
+    setRisSynthesisResultStatus(`Run failed${error}`);
+  } else if (progress && progress.status) {
+    setRisSynthesisResultStatus(`Run status: ${progress.status}`);
+  } else {
+    setRisSynthesisResultStatus("Results loaded.");
+  }
+}
+
+async function refreshLinkSeedOptions() {
+  const [runData] = await Promise.all([
+    fetchJsonMaybe("/api/runs?scope=sim&kind=run"),
+  ]);
+  const runs = (runData && runData.runs ? runData.runs : []).map((run) => run.run_id);
+  const previousRun = ui.linkSeedRun ? ui.linkSeedRun.value : "";
+  if (ui.linkSeedRun) {
+    ui.linkSeedRun.innerHTML = "";
+    runs.forEach((runId) => {
+      const opt = document.createElement("option");
+      opt.value = runId;
+      opt.textContent = runId;
+      ui.linkSeedRun.appendChild(opt);
+    });
+    if (runs.length > 0) {
+      ui.linkSeedRun.value = runs.includes(previousRun) ? previousRun : runs[0];
+    }
+  }
+  const previousConfig = ui.linkSeedConfig ? ui.linkSeedConfig.value : "";
+  if (ui.linkSeedConfig) {
+    const configEntries = [...(state.configs || [])].sort((a, b) => {
+      const aRis = Boolean(a && a.data && a.data.ris && a.data.ris.enabled);
+      const bRis = Boolean(b && b.data && b.data.ris && b.data.ris.enabled);
+      if (aRis !== bRis) return aRis ? -1 : 1;
+      return String(a.name || a.path || "").localeCompare(String(b.name || b.path || ""));
+    });
+    ui.linkSeedConfig.innerHTML = "";
+    configEntries.forEach((cfg) => {
+      const risEnabled = Boolean(cfg && cfg.data && cfg.data.ris && cfg.data.ris.enabled);
+      const opt = document.createElement("option");
+      opt.value = cfg.path;
+      opt.textContent = `${cfg.name || cfg.path}${risEnabled ? " · RIS" : " · no RIS"}`;
+      ui.linkSeedConfig.appendChild(opt);
+    });
+    const values = Array.from(ui.linkSeedConfig.options || []).map((opt) => opt.value);
+    if (values.length > 0) {
+      const preferredConfig = configEntries.find((cfg) => cfg.path === "configs/ashby_ris_link.yaml" && cfg.data && cfg.data.ris && cfg.data.ris.enabled)
+        || configEntries.find((cfg) => cfg.path === "configs/ris_preview.yaml" && cfg.data && cfg.data.ris && cfg.data.ris.enabled)
+        || configEntries.find((cfg) => cfg.data && cfg.data.ris && cfg.data.ris.enabled)
+        || configEntries[0];
+      ui.linkSeedConfig.value = values.includes(previousConfig) ? previousConfig : preferredConfig.path;
+    }
+  }
+  void updateLinkSeedViewer();
+}
+
+function updateLinkSeedSourceVisibility() {
+  const source = ui.linkSeedSourceType ? ui.linkSeedSourceType.value : "run";
+  document.querySelectorAll(".link-seed-run-field").forEach((el) => {
+    el.style.display = source === "run" ? "" : "none";
+  });
+  document.querySelectorAll(".link-seed-config-field").forEach((el) => {
+    el.style.display = source === "config" ? "" : "none";
+  });
+  void updateLinkSeedViewer();
+}
+
+function setLinkSeedViewerStatus(text) {
+  if (ui.linkSeedViewerStatus) ui.linkSeedViewerStatus.textContent = text;
+}
+
+function _activeLinkJob() {
+  const jobs = state.link.jobs || [];
+  if (state.link.activeJobId) {
+    const byId = jobs.find((job) => job.job_id === state.link.activeJobId);
+    if (byId) return byId;
+  }
+  if (state.link.activeRunId) {
+    const byRun = jobs.find((job) => job.run_id === state.link.activeRunId);
+    if (byRun) return byRun;
+  }
+  return jobs.find((job) => job.status === "running") || jobs[jobs.length - 1] || null;
+}
+
+function resolveLinkViewerRunId(summary = null) {
+  if (summary && summary.seed) {
+    if (summary.seed.prepared_run_id) return summary.seed.prepared_run_id;
+    if (summary.seed.run_id) return summary.seed.run_id;
+  }
+  const activeJob = _activeLinkJob();
+  if (activeJob) {
+    if (activeJob.seed_type === "run" && activeJob.seed_run_id) {
+      return activeJob.seed_run_id;
+    }
+    if (activeJob.seed_type === "config" && activeJob.run_id) {
+      return `${activeJob.run_id}__seed`;
+    }
+  }
+  const source = ui.linkSeedSourceType ? ui.linkSeedSourceType.value : "run";
+  if (source === "run" && ui.linkSeedRun && ui.linkSeedRun.value) {
+    return ui.linkSeedRun.value;
+  }
+  return null;
+}
+
+async function updateLinkSeedViewer(summary = null) {
+  if (!ui.linkSeedViewerFrame) return;
+  const source = ui.linkSeedSourceType ? ui.linkSeedSourceType.value : "run";
+  const runId = resolveLinkViewerRunId(summary);
+  if (!runId) {
+    ui.linkSeedViewerFrame.src = "about:blank";
+    ui.linkSeedViewerFrame.dataset.runId = "";
+    setLinkSeedViewerStatus(
+      source === "config"
+        ? "Viewer will appear after the prepared seed outdoor run starts."
+        : "Select a seed run to view the scene."
+    );
+    return;
+  }
+  const manifest = await fetchJsonMaybe(`/runs/${runId}/viewer/scene_manifest.json`);
+  if (!manifest) {
+    ui.linkSeedViewerFrame.src = "about:blank";
+    ui.linkSeedViewerFrame.dataset.runId = "";
+    setLinkSeedViewerStatus(
+      source === "config"
+        ? `Prepared seed run ${runId} has not written its viewer yet.`
+        : `Viewer not available for seed run ${runId}.`
+    );
+    return;
+  }
+  const src = `/runs/${runId}/viewer/index.html?v=${Date.now()}`;
+  if (ui.linkSeedViewerFrame.dataset.runId !== runId) {
+    ui.linkSeedViewerFrame.src = src;
+    ui.linkSeedViewerFrame.dataset.runId = runId;
+  }
+  setLinkSeedViewerStatus(`Viewing seed scene: ${runId}`);
+}
+
+async function fetchLinkJobs() {
+  const data = await fetchJsonMaybe("/api/link/jobs");
+  return data || { jobs: [] };
+}
+
+function renderLinkJobList(jobs) {
+  ui.linkJobList.innerHTML = "";
+  const sorted = [...jobs].sort((a, b) => (a.created_at || "").localeCompare(b.created_at || ""));
+  const recent = sorted.slice(-5).reverse();
+  recent.forEach((job) => {
+    const item = document.createElement("div");
+    const seed = job.seed_run_id ? ` · seed ${job.seed_run_id}` : job.seed_config_path ? ` · ${job.seed_config_path}` : "";
+    const error = job.error ? ` · ERROR: ${job.error}` : "";
+    item.textContent = `${job.run_id}${seed} · ${job.status || "unknown"}${error}`;
+    ui.linkJobList.appendChild(item);
+  });
+}
+
+async function refreshLinkRunSelect() {
+  const data = await fetchJsonMaybe("/api/link/runs");
+  const runList = (data && data.runs ? data.runs : []).map((run) => run.run_id).sort((a, b) => b.localeCompare(a));
+  const previous = ui.linkRunSelect.value;
+  ui.linkRunSelect.innerHTML = "";
+  runList.forEach((runId) => {
+    const opt = document.createElement("option");
+    opt.value = runId;
+    opt.textContent = runId;
+    ui.linkRunSelect.appendChild(opt);
+  });
+  if (runList.length > 0) {
+    ui.linkRunSelect.value = runList.includes(previous) ? previous : runList[0];
+  }
+  state.link.runs = runList;
+}
+
+async function refreshLinkProgressAndLog() {
+  const runId = state.link.activeRunId;
+  if (!runId) {
+    ui.linkProgress.textContent = "";
+    ui.linkLog.textContent = "";
+    return;
+  }
+  const progress = await fetchProgress(runId);
+  if (progress) {
+    const step = progress.step_name || "Running";
+    const total = progress.total_steps || 0;
+    const idx = progress.step_index != null ? progress.step_index + 1 : null;
+    const pct = progress.progress != null ? Math.round(progress.progress * 100) : null;
+    const pctLabel = pct !== null ? `${pct}%` : "";
+    const stepLabel = total && idx ? `${step} (${idx}/${total})` : step;
+    const error = progress.error ? ` · ERROR: ${progress.error}` : "";
+    ui.linkProgress.textContent = `${progress.status || "running"} · ${stepLabel} ${pctLabel}${error}`.trim();
+  } else {
+    ui.linkProgress.textContent = "Progress unavailable.";
+  }
+  const logText = await fetchTextMaybe(`/runs/${runId}/job.log`);
+  ui.linkLog.textContent = logText ? tailLines(logText, 120) : "No log available.";
+}
+
+async function refreshLinkJobs() {
+  const data = await fetchLinkJobs();
+  state.link.jobs = data.jobs || [];
+  renderLinkJobList(state.link.jobs);
+  await refreshLinkRunSelect();
+  await refreshLinkSeedOptions();
+  const sorted = [...state.link.jobs].sort((a, b) => (a.created_at || "").localeCompare(b.created_at || ""));
+  const running = sorted.find((job) => job.status === "running");
+  const latest = sorted[sorted.length - 1];
+  const active = state.link.activeJobId
+    ? sorted.find((job) => job.job_id === state.link.activeJobId)
+    : null;
+  const runExists = (job) => job && job.run_id && state.link.runs.includes(job.run_id);
+  const current = [active, running, latest].find((job) => job && (job.status === "running" || runExists(job)));
+  if (current) {
+    state.link.activeJobId = current.job_id;
+    state.link.activeRunId = current.run_id;
+    setLinkStatus(`${current.run_id} · ${current.status || "running"}`);
+  } else {
+    state.link.activeJobId = null;
+    state.link.activeRunId = null;
+    setLinkStatus("Idle.");
+  }
+  await refreshLinkProgressAndLog();
+  await updateLinkSeedViewer();
+  if (state.link.activeRunId && ui.linkRunSelect) {
+    ui.linkRunSelect.value = state.link.activeRunId;
+    if (state.activeTab === "link") {
+      loadLinkResults(state.link.activeRunId);
+    }
+  }
+}
+
+function buildLinkJobPayload() {
+  const sourceType = ui.linkSeedSourceType ? ui.linkSeedSourceType.value : "run";
+  const estimators = [];
+  if (ui.linkEstimatorPerfect && ui.linkEstimatorPerfect.checked) estimators.push("perfect_csi");
+  if (ui.linkEstimatorLsLin && ui.linkEstimatorLsLin.checked) estimators.push("ls_lin");
+  if (ui.linkEstimatorLsNn && ui.linkEstimatorLsNn.checked) estimators.push("ls_nn");
+  if (!estimators.length) {
+    setLinkStatus("Choose at least one estimator.");
+    return null;
+  }
+  const risVariants = [];
+  if (ui.linkVariantOff && ui.linkVariantOff.checked) risVariants.push("ris_off");
+  if (ui.linkVariantConfigured && ui.linkVariantConfigured.checked) risVariants.push("ris_configured");
+  if (ui.linkVariantFlat && ui.linkVariantFlat.checked) risVariants.push("ris_flat");
+  if (!risVariants.length) {
+    setLinkStatus("Choose at least one RIS variant.");
+    return null;
+  }
+
+  const payload = {
+    seed_type: sourceType,
+    estimators,
+    ris_variants: risVariants,
+    runtime: {
+      prefer_gpu: !ui.linkBackend || ui.linkBackend.value !== "cpu",
+      mitsuba_variant: "auto",
+      tensorflow_import: "auto",
+    },
+    evaluation: {
+      ebno_db_list: ui.linkEbnoList ? ui.linkEbnoList.value : "0,5,10,15,20",
+      batch_size: readNumber(ui.linkBatchSize) || 32,
+      iterations_per_ebno: readNumber(ui.linkIterations) || 8,
+      fft_size: readNumber(ui.linkFftSize) || 64,
+      num_ofdm_symbols: readNumber(ui.linkNumSymbols) || 14,
+      subcarrier_spacing_hz: readNumber(ui.linkScsHz) || 30000,
+      num_bits_per_symbol: readNumber(ui.linkBitsPerSymbol) || 2,
+      num_paths: readNumber(ui.linkNumPaths) || 32,
+    },
+  };
+  const rtMaxDepth = readNumber(ui.linkMaxDepth);
+  const rtSamplesPerSrc = readNumber(ui.linkSamplesPerSrc);
+  if (rtMaxDepth !== null) payload.evaluation.max_depth = rtMaxDepth;
+  if (rtSamplesPerSrc !== null) payload.evaluation.samples_per_src = rtSamplesPerSrc;
+  if (sourceType === "run") {
+    if (!ui.linkSeedRun || !ui.linkSeedRun.value) {
+      setLinkStatus("Select a seed run.");
+      return null;
+    }
+    payload.seed_run_id = ui.linkSeedRun.value;
+  } else {
+    if (!ui.linkSeedConfig || !ui.linkSeedConfig.value) {
+      setLinkStatus("Select a seed config.");
+      return null;
+    }
+    payload.seed_config_path = ui.linkSeedConfig.value;
+    payload.prepare_seed_run = true;
+  }
+  return payload;
+}
+
+async function submitLinkJob() {
+  const payload = buildLinkJobPayload();
+  if (!payload) return;
+  setLinkStatus("Submitting link-level job...");
+  try {
+    const res = await fetch("/api/link/jobs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) {
+      setLinkStatus(`Link job error: ${String(data.error || res.status)}`);
+    } else {
+      state.link.activeRunId = data.run_id;
+      state.link.activeJobId = data.job_id;
+      setLinkStatus(`Link job submitted: ${data.run_id}`);
+    }
+    await refreshLinkJobs();
+  } catch (_err) {
+    setLinkStatus("Link job error: network failure");
+  }
+}
+
+async function loadLinkResults(runId) {
+  if (!runId) {
+    setLinkResultStatus("Select a link-level run to load results.");
+    renderLinkMetrics(null);
+    if (ui.linkPlotImage) ui.linkPlotImage.src = "";
+    await updateLinkSeedViewer();
+    return;
+  }
+  setLinkResultStatus(`Loading ${runId}...`);
+  const [summary, progress] = await Promise.all([
+    fetchJsonMaybe(`/runs/${runId}/summary.json`),
+    fetchProgress(runId),
+  ]);
+  renderLinkMetrics(summary);
+  await updateLinkSeedViewer(summary);
+  const availablePlots = Array.isArray(summary && summary.plots) && summary.plots.length
+    ? summary.plots
+    : LINK_PLOT_FILES.map((plot) => plot.file);
+  const defaultPlot = availablePlots.includes(state.link.selectedPlot)
+    ? state.link.selectedPlot
+    : (availablePlots[0] || "ber_vs_ebno.png");
+  renderLinkPlotTabs(availablePlots, defaultPlot);
+  renderLinkPlotSingle(runId, defaultPlot);
+  state.link.selectedPlot = defaultPlot;
+  if (progress && progress.status === "failed") {
+    const error = progress.error ? ` · ERROR: ${progress.error}` : "";
+    setLinkResultStatus(`Run failed${error}`);
+  } else if (progress && progress.status) {
+    setLinkResultStatus(`Run status: ${progress.status}`);
+  } else {
+    setLinkResultStatus("Results loaded.");
   }
 }
 
@@ -3452,6 +6280,7 @@ async function waitForCampaign2JobCompletion(jobId, runId) {
 
 async function submitCampaign2Job(options = {}) {
   const { skipStatus = false, resumeRunId = null } = options;
+  syncCampaign2FixedRxPosition(getIndoorChamberConfig(), { force: true, rebuild: false });
   const built = buildSimJobPayload();
   if (!built) return null;
   const { payload } = built;
@@ -3503,6 +6332,7 @@ async function submitCampaign2Job(options = {}) {
     compact_output: ui.campaign2CompactOutput ? ui.campaign2CompactOutput.checked : true,
     disable_render: ui.campaign2DisableRender ? ui.campaign2DisableRender.checked : true,
     prune_angle_outputs: ui.campaign2PruneRuns ? ui.campaign2PruneRuns.checked : true,
+    show_specular_path: ui.campaign2ShowSpecularPath ? ui.campaign2ShowSpecularPath.checked : true,
   };
   const coarseCell = readNumber(ui.campaign2CoarseCell);
   if (coarseCell !== null) {
@@ -3628,13 +6458,16 @@ async function loadCampaign2Results(runId) {
   }
   state.campaign2.activeRunId = runId;
   setCampaign2ResultStatus(`Loading ${runId}...`);
-  const [summary, progress, plotManifest] = await Promise.all([
+  const [summary, progress, plotManifest, anglePlotManifest] = await Promise.all([
     fetchJsonMaybe(`/runs/${runId}/summary.json`),
     fetchProgress(runId),
     fetchJsonMaybe(`/runs/${runId}/data/campaign_plots.json`),
+    fetchJsonMaybe(`/runs/${runId}/data/campaign_angle_radio_maps.json`),
   ]);
   renderCampaign2Metrics(summary);
-  const availablePlots = plotManifest && Array.isArray(plotManifest.plots) ? plotManifest.plots : [];
+  const aggregatePlots = plotManifest && Array.isArray(plotManifest.plots) ? plotManifest.plots : [];
+  const anglePlots = anglePlotManifest && Array.isArray(anglePlotManifest.plots) ? anglePlotManifest.plots : [];
+  const availablePlots = [...aggregatePlots, ...anglePlots];
   state.campaign2.availablePlots = availablePlots;
   state.campaign2.plotLabels = Object.fromEntries(availablePlots.map((plot) => [plot.file, plot.label || plot.file]));
   const defaultPlot = availablePlots.some((plot) => plot.file === state.campaign2.selectedPlot)
@@ -3658,10 +6491,13 @@ async function loadCampaign2Results(runId) {
 }
 
 async function loadRun(runId, scope = getRunScopeForTab(), options = {}) {
-  const { force = false } = options;
+  const { force = false, preserveRisSynthesisOverlay = false } = options;
   if (!runId || state.loadingRun) return;
   if (!force && state.lastLoadedRunByScope[scope] === runId && state.runId === runId) {
     return;
+  }
+  if (!preserveRisSynthesisOverlay) {
+    clearRisSynthesisViewerOverlay();
   }
   state.loadingRun = true;
   state.runId = runId;
@@ -3704,11 +6540,16 @@ async function loadRun(runId, scope = getRunScopeForTab(), options = {}) {
         state.markers.ris = risObjects.map((obj) => obj.position || [0, 0, 0]);
       }
     }
+    const radioControlConfig = scope === "indoor" && isIndoorScopeTab(state.activeTab)
+      ? (getIndoorChamberConfig() || configWrapper)
+      : configWrapper;
     updateInputs();
     renderRunStats();
     updateHeatmapControls();
     updateRadioMapPreview();
-    applyRadioMapDefaults(configWrapper);
+    // Keep indoor/campaign submissions anchored to the chamber radio-map defaults
+    // even when the viewer loads older runs with oversized maps.
+    applyRadioMapDefaults(radioControlConfig);
     if (!state.simTuningDirty) {
       applySimTuningDefaults(configWrapper);
     }
@@ -3718,12 +6559,21 @@ async function loadRun(runId, scope = getRunScopeForTab(), options = {}) {
     renderPathTable();
     renderPathStats();
     renderMaterialList();
+    void updateRisSynthesisSeedStatus();
     setMeta(`${runId} · ${state.paths.length} paths`);
+    if (state.activeTab === "ris-synth") {
+      if (state.heatmap && state.heatmap.values) {
+        setRisSynthesisViewerStatus(`Viewer loaded ${runId}. Use Draw ROIs to sketch target boxes.`);
+      } else {
+        setRisSynthesisViewerStatus(`Loaded ${runId}, but it has no heatmap to draw on.`);
+      }
+    }
     if (ui.radioMapDiffToggle && ui.radioMapDiffToggle.checked) {
       await refreshHeatmapDiff();
     }
     state.lastLoadedRunId = runId;
     state.lastLoadedRunByScope[scope] = runId;
+    renderRunBrowserList();
   } catch (err) {
     console.error("Load run failed:", err);
     setMeta(`Failed to load ${runId}`);
@@ -4060,7 +6910,8 @@ function updateRadioMapPreview() {
   });
   const selected = plots.some((plot) => plot.file === previousSelection) ? previousSelection : plots[0].file;
   ui.radioMapPreviewSelect.value = selected;
-  ui.radioMapPreviewImage.src = `/runs/${state.runId}/viewer/${selected}`;
+  const assetRunId = state.risSynthesis.viewerOverlayRunId || state.runId;
+  ui.radioMapPreviewImage.src = assetRunId ? `/runs/${assetRunId}/viewer/${selected}` : "";
 }
 
 function getActiveHeatmap() {
@@ -4074,6 +6925,73 @@ async function loadHeatmapForRun(runId) {
   const res = await fetch(`/runs/${runId}/viewer/heatmap.json`);
   if (!res.ok) return null;
   return await res.json();
+}
+
+async function loadRisSynthesisViewerOverlay(runId) {
+  if (!runId) return false;
+  const requestToken = state.risSynthesis.viewerOverlayRequestToken + 1;
+  state.risSynthesis.viewerOverlayRequestToken = requestToken;
+  state.risSynthesis.autoLoadedViewerRunId = null;
+  state.risSynthesis.pendingViewerOverlayRunId = runId;
+  if (ui.risSynthViewerMode) {
+    ui.risSynthViewerMode.value = "optimal";
+  }
+  const [heatmap, heatmapRunDiff, radioPlots] = await Promise.all([
+    fetchJsonMaybe(`/runs/${runId}/viewer/heatmap.json`),
+    fetchJsonMaybe(`/runs/${runId}/viewer/heatmap_diff.json`),
+    fetchJsonMaybe(`/runs/${runId}/viewer/radio_map_plots.json`),
+  ]);
+  if (state.risSynthesis.viewerOverlayRequestToken !== requestToken) {
+    return false;
+  }
+  if (!heatmap || !heatmap.values) {
+    state.risSynthesis.pendingViewerOverlayRunId = null;
+    return false;
+  }
+  state.risSynthesis.pendingViewerOverlayRunId = null;
+  state.risSynthesis.viewerOverlayRunId = runId;
+  state.heatmap = heatmap;
+  state.heatmapRunDiff = heatmapRunDiff;
+  state.radioMapPlots = (radioPlots && radioPlots.plots) ? radioPlots.plots : [];
+  if (ui.radioMapDiffToggle && ui.radioMapDiffToggle.checked && heatmapRunDiff) {
+    state.heatmapDiff = heatmapRunDiff;
+  } else if (ui.radioMapDiffToggle && !ui.radioMapDiffToggle.checked) {
+    state.heatmapDiff = null;
+  }
+  updateHeatmapControls();
+  updateRadioMapPreview();
+  refreshHeatmap();
+  renderRisSynthesisRoiOverlay();
+  return true;
+}
+
+async function applyRisSynthesisViewerMode() {
+  const mode = ui.risSynthViewerMode ? ui.risSynthViewerMode.value : "active";
+  if (mode === "optimal") {
+    const runId = (ui.risSynthRunSelect && ui.risSynthRunSelect.value)
+      || state.risSynthesis.selectedRunId
+      || state.risSynthesis.activeRunId;
+    if (!runId) {
+      setRisSynthesisViewerStatus("Select a completed target region illumination run first.");
+      return;
+    }
+    const loaded = await loadRisSynthesisViewerOverlay(runId);
+    if (!loaded) {
+      setRisSynthesisViewerStatus(`Run ${runId} does not have an optimal viewer heatmap yet.`);
+      return;
+    }
+    setRisSynthesisViewerStatus(`Showing optimized heatmap from ${runId}.`);
+    return;
+  }
+  const scope = getRunScopeForTab();
+  const activeRunId = (ui.runSelect && ui.runSelect.value) || state.runId;
+  if (!activeRunId) {
+    clearRisSynthesisViewerOverlay();
+    setRisSynthesisViewerStatus("Load a sim run before switching back to the active heatmap.");
+    return;
+  }
+  await loadRun(activeRunId, scope, { force: true });
+  setRisSynthesisViewerStatus(`Showing active sim heatmap from ${activeRunId}.`);
 }
 
 function computeHeatmapDiff(current, base) {
@@ -4339,6 +7257,10 @@ function campaignPositionOnArcOriented(pivot, radiusM, angleDeg, referenceYawDeg
   return campaignPositionOnArc(pivot, radiusM, angleDeg + referenceYawDeg, arcHeightOffsetM);
 }
 
+function getCampaign2SpecularTurntableAngleDeg(targetAngleDeg, txIncidenceAngleDeg) {
+  return normalizeAngleDeg(Number(targetAngleDeg) + Number(txIncidenceAngleDeg));
+}
+
 function parseAngleList(text) {
   if (!text) return [];
   return text
@@ -4447,6 +7369,7 @@ function renderCampaign2Preview() {
   const txIncidence = readNumber(ui.campaign2TxIncidenceAngle);
   const targetDistance = readNumber(ui.campaign2TargetDistance);
   const targetAngles = parseAngleList(ui.campaign2TargetAngles ? ui.campaign2TargetAngles.value : "");
+  const showSpecularPath = !ui.campaign2ShowSpecularPath || ui.campaign2ShowSpecularPath.checked;
   if (
     startAngle === null ||
     stopAngle === null ||
@@ -4463,7 +7386,15 @@ function renderCampaign2Preview() {
 
   const turntableAngles = computeCampaignAngleSeries(startAngle, stopAngle, stepAngle);
   if (!turntableAngles.length) return;
-  const txPositions = turntableAngles.map((angle) => campaignPositionOnArcOriented(risPose.position, txRisDistance, txIncidence, risPose.yawDeg + angle, 0.0));
+  const txZOffset = Array.isArray(state.markers.tx) && state.markers.tx.length >= 3
+    ? Number(state.markers.tx[2]) - Number(risPose.position[2])
+    : 0.0;
+  const targetZOffset = Array.isArray(state.markers.rx) && state.markers.rx.length >= 3
+    ? Number(state.markers.rx[2]) - Number(risPose.position[2])
+    : Number(IEEE_TAP_CAMPAIGN2_DEFAULTS.rxHeightM) - Number(risPose.position[2]);
+  const txPositions = turntableAngles.map((angle) => (
+    campaignPositionOnArcOriented(risPose.position, txRisDistance, txIncidence, risPose.yawDeg + angle, txZOffset)
+  ));
   const txPoints = txPositions.map((pos) => new THREE.Vector3(pos[0], pos[1], pos[2]));
   campaignPreviewGroup.add(
     new THREE.Line(
@@ -4489,7 +7420,13 @@ function renderCampaign2Preview() {
 
   const uniqueTargets = targetAngles.length ? targetAngles : [0];
   uniqueTargets.forEach((targetAngle, idx) => {
-    const targetPos = campaignPositionOnArcOriented(risPose.position, targetDistance, targetAngle, risPose.yawDeg, 0.0);
+    const targetPos = campaignPositionOnArcOriented(
+      risPose.position,
+      targetDistance,
+      targetAngle,
+      risPose.yawDeg,
+      targetZOffset
+    );
     const line = new THREE.Line(
       new THREE.BufferGeometry().setFromPoints([
         new THREE.Vector3(risPose.position[0], risPose.position[1], risPose.position[2]),
@@ -4502,6 +7439,32 @@ function renderCampaign2Preview() {
       })
     );
     campaignPreviewGroup.add(line);
+    if (showSpecularPath) {
+      const specularTurntableAngle = getCampaign2SpecularTurntableAngleDeg(targetAngle, txIncidence);
+      const specularTxPos = campaignPositionOnArcOriented(
+        risPose.position,
+        txRisDistance,
+        txIncidence,
+        risPose.yawDeg + specularTurntableAngle,
+        txZOffset
+      );
+      const specularLine = new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints([
+          new THREE.Vector3(specularTxPos[0], specularTxPos[1], specularTxPos[2]),
+          new THREE.Vector3(risPose.position[0], risPose.position[1], risPose.position[2]),
+          new THREE.Vector3(targetPos[0], targetPos[1], targetPos[2]),
+        ]),
+        new THREE.LineDashedMaterial({
+          color: 0xf59e0b,
+          transparent: true,
+          opacity: 0.72,
+          dashSize: 0.08,
+          gapSize: 0.05,
+        })
+      );
+      specularLine.computeLineDistances();
+      campaignPreviewGroup.add(specularLine);
+    }
   });
 }
 
@@ -4509,6 +7472,7 @@ function rebuildDynamicScene({ refit = false } = {}) {
   markerGroup.clear();
   rayGroup.clear();
   heatmapGroup.clear();
+  if (risSynthRoiGroup) risSynthRoiGroup.clear();
   alignmentGroup.clear();
   if (campaignPreviewGroup) campaignPreviewGroup.clear();
   highlightLine = null;
@@ -4529,6 +7493,7 @@ function rebuildDynamicScene({ refit = false } = {}) {
   }
   addRays();
   addHeatmap();
+  renderRisSynthesisRoiOverlay();
   markerGroup.visible = ui.toggleMarkers.checked;
   rayGroup.visible = ui.toggleRays.checked;
   heatmapGroup.visible = ui.toggleHeatmap.checked;
@@ -4666,6 +7631,30 @@ function wrapMeshObject(child, manifestEntry, rotX, rotY, rotZ) {
   return root;
 }
 
+function buildPreviewMesh(geom) {
+  const mat = new THREE.MeshStandardMaterial({
+    color: 0x9aa8b1,
+    opacity: 0.6,
+    transparent: true,
+    side: THREE.DoubleSide,
+  });
+  return new THREE.Mesh(geom, mat);
+}
+
+function loadWithPromise(loader, url) {
+  return new Promise((resolve, reject) => {
+    loader.load(url, resolve, undefined, reject);
+  });
+}
+
+async function loadPlyGeometry(loader, url) {
+  const geom = await loadWithPromise(loader, url);
+  if (geom && !geom.hasAttribute("normal")) {
+    geom.computeVertexNormals();
+  }
+  return geom;
+}
+
 function refitCameraAfterMeshLoad() {
   refreshHeatmap();
   fitCamera();
@@ -4675,43 +7664,48 @@ async function loadMeshes(assetKey = state.geometryAssetKey) {
   if (!state.manifest || !assetKey || state.geometryAssetKey !== assetKey) {
     return;
   }
-  const [rotX, rotY, rotZ] = getMeshRotationRad();
-  if (state.manifest.mesh) {
-    const ext = state.manifest.mesh.split(".").pop().toLowerCase();
-    const manifestEntry = getMeshManifestEntry(state.manifest.mesh);
-    if (ext === "glb" || ext === "gltf") {
-      const loader = new GLTFLoader();
-      loader.load(`/runs/${state.runId}/viewer/${state.manifest.mesh}`, (gltf) => {
-        if (state.geometryAssetKey !== assetKey) return;
-        geometryGroup.add(wrapMeshObject(gltf.scene, manifestEntry, rotX, rotY, rotZ));
-        refitCameraAfterMeshLoad();
-      });
-    } else if (ext === "obj") {
-      const loader = new OBJLoader();
-      loader.load(`/runs/${state.runId}/viewer/${state.manifest.mesh}`, (obj) => {
-        if (state.geometryAssetKey !== assetKey) return;
-        geometryGroup.add(wrapMeshObject(obj, manifestEntry, rotX, rotY, rotZ));
-        refitCameraAfterMeshLoad();
-      });
-    }
-  }
-  if (state.manifest.mesh_files && state.manifest.mesh_files.length) {
-    const loader = new PLYLoader();
-    state.manifest.mesh_files.forEach((name) => {
-      loader.load(`/runs/${state.runId}/viewer/${name}`, (geom) => {
-        if (state.geometryAssetKey !== assetKey) return;
-        geom.computeVertexNormals();
-        const mat = new THREE.MeshStandardMaterial({
-          color: 0x9aa8b1,
-          opacity: 0.6,
-          transparent: true,
-          side: THREE.DoubleSide,
-        });
-        const mesh = new THREE.Mesh(geom, mat);
-        geometryGroup.add(wrapMeshObject(mesh, getMeshManifestEntry(name), rotX, rotY, rotZ));
-        refitCameraAfterMeshLoad();
-      });
+  const manifest = state.manifest;
+  const runId = state.runId;
+  const getManifestEntry = (name) => {
+    const items = Array.isArray(manifest.mesh_manifest) ? manifest.mesh_manifest : [];
+    return items.find((item) => item && item.file === name) || null;
+  };
+  try {
+    const template = await getOrBuildGeometryTemplate(assetKey, async () => {
+      const group = new THREE.Group();
+      const base = Array.isArray(manifest.mesh_rotation_deg) ? manifest.mesh_rotation_deg : [0, 0, 0];
+      const rotX = (parseFloat(base[0]) || 0) * Math.PI / 180;
+      const rotY = (parseFloat(base[1]) || 0) * Math.PI / 180;
+      const rotZ = (parseFloat(base[2]) || 0) * Math.PI / 180;
+      if (manifest.mesh) {
+        const ext = manifest.mesh.split(".").pop().toLowerCase();
+        const manifestEntry = getManifestEntry(manifest.mesh);
+        if (ext === "glb" || ext === "gltf") {
+          const loader = new GLTFLoader();
+          const gltf = await loadWithPromise(loader, `/runs/${runId}/viewer/${manifest.mesh}`);
+          group.add(wrapMeshObject(gltf.scene, manifestEntry, rotX, rotY, rotZ));
+        } else if (ext === "obj") {
+          const loader = new OBJLoader();
+          const obj = await loadWithPromise(loader, `/runs/${runId}/viewer/${manifest.mesh}`);
+          group.add(wrapMeshObject(obj, manifestEntry, rotX, rotY, rotZ));
+        }
+      }
+      if (manifest.mesh_files && manifest.mesh_files.length) {
+        const loader = new PLYLoader();
+        await Promise.all(manifest.mesh_files.map(async (name) => {
+          const geom = await loadPlyGeometry(loader, `/runs/${runId}/viewer/${name}`);
+          const mesh = buildPreviewMesh(geom);
+          group.add(wrapMeshObject(mesh, getManifestEntry(name), rotX, rotY, rotZ));
+        }));
+      }
+      return group;
     });
+    if (!template || state.geometryAssetKey !== assetKey) return;
+    geometryGroup.add(cloneGeometryTemplate(template));
+    refitCameraAfterMeshLoad();
+  } catch (err) {
+    console.error("Viewer mesh load failed:", err);
+    setMeta(`Viewer mesh failed to load for ${state.runId}`);
   }
 }
 
@@ -4725,33 +7719,29 @@ async function loadSceneFileMeshes(scenePath, assetKey = getSceneFileAssetKey(sc
     return;
   }
   setMeta(`Previewing scene ${manifest.label || scenePath}`);
-  const loader = new PLYLoader();
-  manifest.mesh_files.forEach((meshPath) => {
-    loader.load(
-      `/api/scene_file_asset?path=${encodeURIComponent(meshPath)}`,
-      (geom) => {
-        if (state.geometryAssetKey !== assetKey) return;
-        geom.computeVertexNormals();
-        const mat = new THREE.MeshStandardMaterial({
-          color: 0x9aa8b1,
-          opacity: 0.6,
-          transparent: true,
-          side: THREE.DoubleSide,
-        });
-        const mesh = new THREE.Mesh(geom, mat);
-        const item = Array.isArray(manifest.mesh_manifest)
-          ? manifest.mesh_manifest.find((entry) => entry && entry.file === meshPath)
-          : null;
-        geometryGroup.add(wrapMeshObject(mesh, item, 0, 0, 0));
-        refitCameraAfterMeshLoad();
-      },
-      undefined,
-      (err) => {
-        console.error("Scene preview mesh load failed:", meshPath, err);
-        setMeta(`Scene mesh failed to load: ${meshPath}`);
-      }
-    );
-  });
+  try {
+    const template = await getOrBuildGeometryTemplate(assetKey, async () => {
+      const group = new THREE.Group();
+      const loader = new PLYLoader();
+      const manifestByFile = new Map(
+        (Array.isArray(manifest.mesh_manifest) ? manifest.mesh_manifest : [])
+          .filter((entry) => entry && entry.file)
+          .map((entry) => [entry.file, entry])
+      );
+      await Promise.all(manifest.mesh_files.map(async (meshPath) => {
+        const geom = await loadPlyGeometry(loader, `/api/scene_file_asset?path=${encodeURIComponent(meshPath)}`);
+        const mesh = buildPreviewMesh(geom);
+        group.add(wrapMeshObject(mesh, manifestByFile.get(meshPath) || null, 0, 0, 0));
+      }));
+      return group;
+    });
+    if (!template || state.geometryAssetKey !== assetKey) return;
+    geometryGroup.add(cloneGeometryTemplate(template));
+    refitCameraAfterMeshLoad();
+  } catch (err) {
+    console.error("Scene preview mesh load failed:", scenePath, err);
+    setMeta(`Scene mesh failed to load: ${manifest.label || scenePath}`);
+  }
 }
 
 function addMarkers() {
@@ -4781,8 +7771,7 @@ function addMarkers() {
         txCfg.look_at[2] - origin.z
       );
     } else if (Array.isArray(txCfg.orientation) && txCfg.orientation.length >= 3) {
-      const yaw = txCfg.orientation[2];
-      direction = new THREE.Vector3(Math.cos(yaw), Math.sin(yaw), 0);
+      direction = backendForwardVectorFromOrientation(txCfg.orientation) || direction;
     }
     if (direction.lengthSq() < 1e-6) {
       direction = new THREE.Vector3(1, 0, 0);
@@ -5057,9 +8046,11 @@ function addRays() {
     return;
   }
   const positions = [];
-  const color = new THREE.Color(0xf97316);
+  const defaultColor = new THREE.Color(0xf97316);
+  const risColor = new THREE.Color(0xef4444);
   const colors = [];
   state.paths.forEach((p) => {
+    const color = p && p.has_ris ? risColor : defaultColor;
     const pts = p.points || [];
     for (let i = 0; i < pts.length - 1; i++) {
       const a = pts[i];
@@ -5076,7 +8067,102 @@ function addRays() {
   rayGroup.add(lines);
 }
 
+function cellCenterVector(cell) {
+  if (!Array.isArray(cell) || cell.length < 3) return null;
+  const x = Number(cell[0]);
+  const y = Number(cell[1]);
+  const z = Number(cell[2]);
+  if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) return null;
+  return new THREE.Vector3(x, y, z);
+}
+
+function buildHeatmapGeometryFromCenters(centers, cellSize = [0, 0]) {
+  if (!Array.isArray(centers) || !centers.length || !Array.isArray(centers[0]) || !centers[0].length) {
+    return null;
+  }
+  const height = centers.length;
+  const width = centers[0].length;
+  const origin = cellCenterVector(centers[0][0]);
+  if (!origin) return null;
+
+  let uVec = null;
+  let vVec = null;
+  if (width > 1) {
+    const next = cellCenterVector(centers[0][1]);
+    if (next) uVec = next.clone().sub(origin);
+  }
+  if (height > 1) {
+    const next = cellCenterVector(centers[1][0]);
+    if (next) vVec = next.clone().sub(origin);
+  }
+  if (!uVec || uVec.length() <= 0) {
+    const fallback = Number(cellSize[0]);
+    uVec = new THREE.Vector3(Number.isFinite(fallback) && fallback > 0 ? fallback : 1, 0, 0);
+  }
+  if (!vVec || vVec.length() <= 0) {
+    const fallback = Number(cellSize[1]);
+    vVec = new THREE.Vector3(0, Number.isFinite(fallback) && fallback > 0 ? fallback : 1, 0);
+  }
+
+  const uStep = uVec.length();
+  const vStep = vVec.length();
+  const uUnit = uVec.clone().normalize();
+  const vUnit = vVec.clone().normalize();
+  const centerSum = new THREE.Vector3();
+  let centerCount = 0;
+  centers.forEach((row) => {
+    row.forEach((cell) => {
+      const point = cellCenterVector(cell);
+      if (point) {
+        centerSum.add(point);
+        centerCount += 1;
+      }
+    });
+  });
+  if (!centerCount) return null;
+  const meshCenter = centerSum.multiplyScalar(1 / centerCount);
+
+  const positions = [];
+  const uvs = [];
+  const addVertex = (point, u, v) => {
+    const local = point.clone().sub(meshCenter);
+    positions.push(local.x, local.y, local.z);
+    uvs.push(u, v);
+  };
+
+  for (let y = 0; y < height; y++) {
+    if (!Array.isArray(centers[y]) || centers[y].length !== width) return null;
+    for (let x = 0; x < width; x++) {
+      const center = cellCenterVector(centers[y][x]);
+      if (!center) return null;
+      const left = center.clone().addScaledVector(uUnit, -0.5 * uStep);
+      const right = center.clone().addScaledVector(uUnit, 0.5 * uStep);
+      const bottomLeft = left.clone().addScaledVector(vUnit, -0.5 * vStep);
+      const bottomRight = right.clone().addScaledVector(vUnit, -0.5 * vStep);
+      const topLeft = left.clone().addScaledVector(vUnit, 0.5 * vStep);
+      const topRight = right.clone().addScaledVector(vUnit, 0.5 * vStep);
+      const u0 = x / width;
+      const u1 = (x + 1) / width;
+      const v0 = y / height;
+      const v1 = (y + 1) / height;
+      addVertex(bottomLeft, u0, v0);
+      addVertex(bottomRight, u1, v0);
+      addVertex(topRight, u1, v1);
+      addVertex(bottomLeft, u0, v0);
+      addVertex(topRight, u1, v1);
+      addVertex(topLeft, u0, v1);
+    }
+  }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geo.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+  geo.computeVertexNormals();
+  return { geometry: geo, center: meshCenter };
+}
+
 function addHeatmap() {
+  debugHeatmapMesh = null;
   const active = getActiveHeatmap();
   if (!active) {
     return;
@@ -5115,13 +8201,25 @@ function addHeatmap() {
   const texture = new THREE.CanvasTexture(canvas);
   texture.flipY = false;
   const mat = new THREE.MeshBasicMaterial({ map: texture, transparent: true, opacity: 0.7, side: THREE.DoubleSide });
+  const uiRotationDeg = parseFloat(ui.heatmapRotation?.value || 0);
+  const uiRotationRad = (uiRotationDeg * Math.PI) / 180;
+  const centers = active.cell_centers || [];
+  const grid = buildHeatmapGeometryFromCenters(centers, active.cell_size || [0, 0]);
+  if (grid) {
+    const mesh = new THREE.Mesh(grid.geometry, mat);
+    mesh.position.copy(grid.center);
+    mesh.rotation.set(0, 0, uiRotationRad);
+    heatmapGroup.add(mesh);
+    debugHeatmapMesh = mesh;
+    heatmapGroup.visible = ui.toggleHeatmap.checked;
+    return;
+  }
 
   let widthM = null;
   let heightM = null;
   let center = null;
   let z = 0;
 
-  const centers = active.cell_centers || [];
   if (centers.length) {
     let xMin = Infinity;
     let xMax = -Infinity;
@@ -5183,10 +8281,6 @@ function addHeatmap() {
   const plane = new THREE.PlaneGeometry(widthM, heightM);
   const mesh = new THREE.Mesh(plane, mat);
   mesh.position.set(center[0], center[1], z);
-
-  // Apply rotation from UI slider (degrees to radians, around Z-axis)
-  const uiRotationDeg = parseFloat(ui.heatmapRotation?.value || 0);
-  const uiRotationRad = (uiRotationDeg * Math.PI) / 180;
 
   if (active.orientation && active.orientation.length >= 3) {
     mesh.rotation.set(
@@ -5446,6 +8540,23 @@ function highlightPath(path) {
 }
 
 function onMouseDown(event) {
+  if (state.activeTab === "ris-synth" && state.risSynthesis.drawMode) {
+    const hit = getRisSynthesisHeatmapHit(event);
+    if (!hit) {
+      setRisSynthesisViewerStatus("ROI drawing needs a loaded heatmap. Click Top-Down + Heatmap first.");
+      return;
+    }
+    state.risSynthesis.draftBox = {
+      name: getNextRisSynthesisRoiName(),
+      u_min_m: hit.x,
+      u_max_m: hit.x,
+      v_min_m: hit.y,
+      v_max_m: hit.y,
+    };
+    controls.enabled = false;
+    renderRisSynthesisRoiOverlay();
+    return;
+  }
   if (!ui.dragMarkers.checked) return;
   const mouse = getMouse(event);
   const raycaster = new THREE.Raycaster();
@@ -5470,6 +8581,19 @@ function onMouseDown(event) {
 }
 
 function onMouseMove(event) {
+  if (state.activeTab === "ris-synth" && state.risSynthesis.drawMode && state.risSynthesis.draftBox) {
+    const hit = getRisSynthesisHeatmapHit(event);
+    if (!hit) return;
+    state.risSynthesis.draftBox = normalizeRisSynthesisBox({
+      name: state.risSynthesis.draftBox.name || getNextRisSynthesisRoiName(),
+      u_min_m: state.risSynthesis.draftBox.u_min_m,
+      u_max_m: hit.x,
+      v_min_m: state.risSynthesis.draftBox.v_min_m,
+      v_max_m: hit.y,
+    }, state.risSynthesis.drawnBoxes.length);
+    renderRisSynthesisRoiOverlay();
+    return;
+  }
   if (!dragging) return;
   if (dragMode === "rotate" && dragging.name.startsWith("ris_")) {
     const dx = event.clientX - (dragStartMouse?.x || event.clientX);
@@ -5497,6 +8621,36 @@ function onMouseMove(event) {
 }
 
 function endDrag() {
+  if (state.activeTab === "ris-synth" && state.risSynthesis.drawMode && state.risSynthesis.draftBox) {
+    const nextIndex = state.risSynthesis.replaceOnNextDraw ? 0 : state.risSynthesis.drawnBoxes.length;
+    const box = normalizeRisSynthesisBox(state.risSynthesis.draftBox, nextIndex);
+    state.risSynthesis.draftBox = null;
+    controls.enabled = true;
+    if (!box) {
+      renderRisSynthesisRoiOverlay();
+      return;
+    }
+    const width = Math.abs(box.u_max_m - box.u_min_m);
+    const height = Math.abs(box.v_max_m - box.v_min_m);
+    if (width < 1.0e-3 || height < 1.0e-3) {
+      renderRisSynthesisRoiOverlay();
+      setRisSynthesisViewerStatus("ROI ignored because it was too small.");
+      return;
+    }
+    if (state.risSynthesis.replaceOnNextDraw) {
+      state.risSynthesis.drawnBoxes = [box];
+      state.risSynthesis.replaceOnNextDraw = false;
+      syncRisSynthesisBoxesTextareaFromState();
+      renderRisSynthesisRoiOverlay();
+      setRisSynthesisViewerStatus(`Replaced the target ROI set with ${box.name}. Draw again to add more regions.`);
+      return;
+    }
+    state.risSynthesis.drawnBoxes = [...(state.risSynthesis.drawnBoxes || []), box];
+    syncRisSynthesisBoxesTextareaFromState();
+    renderRisSynthesisRoiOverlay();
+    setRisSynthesisViewerStatus(`Added ${box.name}.`);
+    return;
+  }
   if (dragging) {
     dragging = null;
     dragMode = null;
@@ -5520,9 +8674,17 @@ async function refreshJobs(scope = getRunScopeForTab()) {
   ui.jobList.innerHTML = "";
   let needsRunRefresh = false;
   let newestCompleted = null;
+  const preserveTargetRegionViewer = (
+    usesSharedViewerTab(state.activeTab)
+      && getRunScopeForTab() === scope
+      && hasActiveRisSynthesisViewerOverlay(scope)
+  );
   const sorted = [...data.jobs].sort((a, b) => (a.created_at || "").localeCompare(b.created_at || ""));
   const recentJobs = sorted.slice(-3).reverse();
-  newestCompleted = sorted.slice().reverse().find((job) => job.status === "completed")?.run_id || null;
+  const selectableRunIds = new Set(Array.from(ui.runSelect.options).map((opt) => opt.value));
+  newestCompleted = sorted.slice().reverse().find((job) => (
+    job.status === "completed" && selectableRunIds.has(job.run_id)
+  ))?.run_id || null;
   const jobItems = [];
   recentJobs.forEach((job) => {
     const item = document.createElement("div");
@@ -5555,11 +8717,12 @@ async function refreshJobs(scope = getRunScopeForTab()) {
     await fetchRuns(scope);
   }
   if (
+    !preserveTargetRegionViewer &&
     !state.loadingRun &&
     state.followLatestRunByScope[scope] &&
     newestCompleted &&
     state.scopedRunIds[scope] !== newestCompleted &&
-    isSimScopeTab(state.activeTab) &&
+    usesSharedViewerTab(state.activeTab) &&
     getRunScopeForTab() === scope
   ) {
     if (ui.runSelect) {
@@ -5571,12 +8734,14 @@ async function refreshJobs(scope = getRunScopeForTab()) {
 
 function buildSimJobPayload() {
   syncMarkersFromInputs();
+  const profileKey = getActiveProfileKey();
   const profile = getProfileDefinition();
   const scope = getRequestedRunScope();
+  const allowManualOverrides = profileKey === "custom" || profileKey === "indoor_box_high";
   const payload = {
     kind: "run",
     scope,
-    profile: ui.runProfile.value,
+    profile: profileKey,
     base_config: resolveConfigPath(profile.configName),
   };
   if (profile.qualityPreset) {
@@ -5585,7 +8750,7 @@ function buildSimJobPayload() {
   if (profile.runtime) {
     payload.runtime = profile.runtime;
   }
-  if (ui.runProfile.value === "custom" || ui.runProfile.value === "indoor_box_high") {
+  if (allowManualOverrides) {
     const backend = ui.customBackend.value;
     payload.runtime = {
       force_cpu: backend === "cpu",
@@ -5656,6 +8821,17 @@ function buildSimJobPayload() {
   if (planeZ !== null) {
     payload.radio_map = Object.assign(payload.radio_map || {}, { center_z_only: planeZ });
   }
+  const zStackEnabled = Boolean(ui.radioMapZStackEnabled && ui.radioMapZStackEnabled.checked);
+  const zStack = { enabled: zStackEnabled };
+  if (zStackEnabled) {
+    const numBelow = readNumber(ui.radioMapZStackBelow);
+    const numAbove = readNumber(ui.radioMapZStackAbove);
+    const spacingM = readNumber(ui.radioMapZStackSpacing);
+    if (numBelow !== null) zStack.num_below = Math.max(0, Math.round(numBelow));
+    if (numAbove !== null) zStack.num_above = Math.max(0, Math.round(numAbove));
+    if (spacingM !== null) zStack.spacing_m = Math.max(0.01, spacingM);
+  }
+  payload.radio_map = Object.assign(payload.radio_map || {}, { z_stack: zStack });
 
   const scaleEnabled = ui.simScaleEnabled ? ui.simScaleEnabled.checked : false;
   const scaleFactor = readNumber(ui.simScaleFactor);
@@ -5702,7 +8878,7 @@ function buildSimJobPayload() {
       diff_ris: false,
     });
   }
-  if (state.activeTab === "indoor" || state.activeTab === "campaign" || state.activeTab === "campaign2" || ui.runProfile.value === "indoor_box_high") {
+  if (isIndoorScopeTab(state.activeTab) || profileKey === "indoor_box_high") {
     payload.simulation = Object.assign(payload.simulation || {}, {
       scale_similarity: { enabled: false, factor: 1.0 },
     });
@@ -5856,6 +9032,33 @@ function bindUI() {
     await refreshJobs(scope);
   });
 
+  if (ui.runBrowserToggle) {
+    ui.runBrowserToggle.addEventListener("click", () => {
+      void openRunBrowser();
+    });
+  }
+  if (ui.runBrowserClose) {
+    ui.runBrowserClose.addEventListener("click", closeRunBrowser);
+  }
+  if (ui.runBrowserOpenRun) {
+    ui.runBrowserOpenRun.addEventListener("click", () => {
+      if (!state.runBrowser.selectedRunId) return;
+      void activateRunFromBrowser(state.runBrowser.selectedRunId);
+    });
+  }
+  if (ui.runBrowserSearch) {
+    ui.runBrowserSearch.addEventListener("input", () => {
+      renderRunBrowserList();
+    });
+  }
+  if (ui.runBrowserModal) {
+    ui.runBrowserModal.addEventListener("click", (event) => {
+      if (event.target === ui.runBrowserModal) {
+        closeRunBrowser();
+      }
+    });
+  }
+
   document.addEventListener("input", schedulePersistUiSnapshot, true);
   document.addEventListener("change", schedulePersistUiSnapshot, true);
   
@@ -5865,6 +9068,9 @@ function bindUI() {
     state.followLatestRun = false;
     state.followLatestRunByScope[scope] = false;
     state.sceneOverrideDirty = false;
+    if (state.activeTab === "ris-synth") {
+      clearRisSynthesisViewerOverlay();
+    }
     state.scopedRunIds[scope] = ui.runSelect.value || null;
     if (!state.loadingRun) {
       loadRun(ui.runSelect.value, scope);
@@ -5885,7 +9091,11 @@ function bindUI() {
 
   if (!ui.runProfile) console.error("ui.runProfile is missing");
   ui.runProfile.addEventListener("change", () => {
-    if (ui.runProfile.value === "cpu_only" || ui.runProfile.value === "indoor_box_high") {
+    if (isIndoorScopeTab(state.activeTab) && ui.runProfile.value !== "indoor_box_high") {
+      ui.runProfile.value = "indoor_box_high";
+    }
+    const activeProfileKey = getActiveProfileKey();
+    if (activeProfileKey === "cpu_only" || activeProfileKey === "indoor_box_high") {
       const config = getProfileConfig();
       applyRadioMapDefaults(config);
       applyCustomDefaults(config);
@@ -5893,7 +9103,7 @@ function bindUI() {
       applyRisSimDefaults(config);
       updateRisGeometryVisibility();
       resetMarkersFromConfig(config);
-      if (ui.runProfile.value === "indoor_box_high") {
+      if (activeProfileKey === "indoor_box_high") {
         applyIeeeTapCampaignDefaults();
       }
     }
@@ -6072,11 +9282,17 @@ function bindUI() {
     ui.risList.addEventListener("input", () => {
       syncCampaignPivotUiFromRis();
       autoPlaceTxFromRis({ updateScene: true });
+      if (state.activeTab === "campaign2") {
+        syncCampaign2FixedRxPosition(getIndoorChamberConfig(), { force: true, rebuild: false });
+      }
       rebuildScene({ refit: false });
     });
     ui.risList.addEventListener("change", () => {
       syncCampaignPivotUiFromRis();
       autoPlaceTxFromRis({ updateScene: true });
+      if (state.activeTab === "campaign2") {
+        syncCampaign2FixedRxPosition(getIndoorChamberConfig(), { force: true, rebuild: false });
+      }
       rebuildScene({ refit: false });
     });
   }
@@ -6152,12 +9368,21 @@ function bindUI() {
     ui.campaign2TxRisDistance,
     ui.campaign2TargetDistance,
     ui.campaign2TxIncidenceAngle,
+    ui.campaign2ShowSpecularPath,
     ui.campaign2CoarseCell,
   ]
     .filter(Boolean)
     .forEach((el) => {
-      el.addEventListener("input", () => rebuildScene({ refit: false }));
+      el.addEventListener("input", () => {
+        if (state.activeTab === "campaign2") {
+          syncCampaign2FixedRxPosition(getIndoorChamberConfig(), { force: true, rebuild: false });
+        }
+        rebuildScene({ refit: false });
+      });
       el.addEventListener("change", () => {
+        if (state.activeTab === "campaign2") {
+          syncCampaign2FixedRxPosition(getIndoorChamberConfig(), { force: true, rebuild: false });
+        }
         rebuildScene({ refit: false });
         schedulePersistUiSnapshot();
       });
@@ -6203,6 +9428,19 @@ function bindUI() {
   if (ui.radioMapPlaneZ) ui.radioMapPlaneZ.addEventListener("change", () => {
     schedulePersistUiSnapshot();
   });
+  if (ui.radioMapZStackEnabled) {
+    ui.radioMapZStackEnabled.addEventListener("change", () => {
+      syncRadioMapZStackControls({ primeDefaults: ui.radioMapZStackEnabled.checked });
+      schedulePersistUiSnapshot();
+    });
+  }
+  [ui.radioMapZStackBelow, ui.radioMapZStackAbove, ui.radioMapZStackSpacing]
+    .filter(Boolean)
+    .forEach((el) => {
+      el.addEventListener("change", () => {
+        schedulePersistUiSnapshot();
+      });
+    });
   if (ui.floorElevation) {
     ui.floorElevation.addEventListener("input", () => {
       updateSceneOverrideFloorFromUi();
@@ -6251,23 +9489,212 @@ function bindUI() {
   ui.risRefresh.addEventListener("click", refreshRisJobs);
   
   if (!ui.risLoadResults) console.error("ui.risLoadResults is missing");
-  ui.risLoadResults.addEventListener("click", () => loadRisResults(ui.risRunSelect.value));
+  ui.risLoadResults.addEventListener("click", () => {
+    syncRisSelectedRun(ui.risRunSelect.value, { followActive: false });
+    void loadRisResults(ui.risRunSelect.value);
+  });
   
   if (!ui.risRunSelect) console.error("ui.risRunSelect is missing");
-  ui.risRunSelect.addEventListener("change", () => loadRisResults(ui.risRunSelect.value));
+  ui.risRunSelect.addEventListener("change", () => {
+    syncRisSelectedRun(ui.risRunSelect.value, { followActive: false });
+    void loadRisResults(ui.risRunSelect.value);
+  });
 
   if (!ui.risPlotTabs) console.error("ui.risPlotTabs is missing");
   ui.risPlotTabs.addEventListener("click", (event) => {
     const target = event.target;
     if (!(target instanceof HTMLButtonElement)) return;
     const file = target.dataset.plot;
-    if (!file || !state.ris.activeRunId) return;
+    const runId = state.ris.selectedRunId || state.ris.activeRunId;
+    if (!file || !runId) return;
     state.ris.selectedPlot = file;
     ui.risPlotTabs.querySelectorAll(".plot-tab-button").forEach((btn) => {
       btn.classList.toggle("is-active", btn === target);
     });
-    renderRisPlotSingle(state.ris.activeRunId, file);
+    renderRisPlotSingle(runId, file);
   });
+
+  if (ui.risSynthConfigSource) {
+    ui.risSynthConfigSource.addEventListener("change", () => {
+      updateRisSynthesisConfigSourceVisibility();
+      updateRisSynthesisConfigPreview();
+    });
+  }
+  if (ui.risSynthSeedSource) {
+    ui.risSynthSeedSource.addEventListener("change", () => {
+      updateRisSynthesisSeedSourceVisibility();
+      updateRisSynthesisConfigPreview();
+    });
+  }
+  if (ui.risSynthSeedRun) {
+    ui.risSynthSeedRun.addEventListener("change", async () => {
+      await updateRisSynthesisSeedStatus();
+      updateRisSynthesisConfigPreview();
+    });
+  }
+  if (ui.risSynthBinarizationEnabled) {
+    ui.risSynthBinarizationEnabled.addEventListener("change", () => {
+      updateRisSynthesisBinarizationVisibility();
+      updateRisSynthesisConfigPreview();
+    });
+  }
+  if (ui.risSynthLoadViewer) {
+    ui.risSynthLoadViewer.addEventListener("click", () => {
+      void loadRisSynthesisViewerRun(true);
+    });
+  }
+  if (ui.risSynthTopDownView) {
+    ui.risSynthTopDownView.addEventListener("click", async () => {
+      const synced = await ensureRisSynthesisViewerMatchesSeedRun();
+      if (!synced) {
+        setRisSynthesisViewerStatus("Load a seed run with a heatmap before switching to top-down view.");
+        return;
+      }
+      if (!state.heatmap || !state.heatmap.values) {
+        setRisSynthesisViewerStatus("Load a sim run with a heatmap before switching to top-down view.");
+        return;
+      }
+      prepareRisSynthesisViewer();
+      setRisSynthesisViewerStatus("Top-down heatmap view ready. Drag on the map to draw ROI boxes.");
+    });
+  }
+  if (ui.risSynthDrawBoxes) {
+    ui.risSynthDrawBoxes.addEventListener("click", async () => {
+      const enabling = !state.risSynthesis.drawMode;
+      if (enabling) {
+        const synced = await ensureRisSynthesisViewerMatchesSeedRun();
+        if (!synced) {
+          setRisSynthesisViewerStatus("Load the seed run into the viewer before drawing ROIs.");
+          return;
+        }
+      }
+      if (!state.heatmap || !state.heatmap.values) {
+        setRisSynthesisViewerStatus("Load a sim run with a heatmap before drawing ROIs.");
+        return;
+      }
+      if (ui.heatmapRotation && Number(ui.heatmapRotation.value) !== 0) {
+        prepareRisSynthesisViewer();
+      } else {
+        renderRisSynthesisRoiOverlay();
+      }
+      setRisSynthesisDrawMode(!state.risSynthesis.drawMode);
+      setRisSynthesisViewerStatus(
+        state.risSynthesis.drawMode
+          ? (
+            state.risSynthesis.replaceOnNextDraw
+              ? "ROI drawing is active. The next box will replace the current target set; keep drawing to add more regions."
+              : "ROI drawing is active. Drag on the heatmap to create a box."
+          )
+          : "ROI drawing stopped."
+      );
+    });
+  }
+  if (ui.risSynthUndoBox) {
+    ui.risSynthUndoBox.addEventListener("click", () => {
+      if (!state.risSynthesis.drawnBoxes.length) {
+        setRisSynthesisViewerStatus("There are no ROI boxes to undo.");
+        return;
+      }
+      const removed = state.risSynthesis.drawnBoxes[state.risSynthesis.drawnBoxes.length - 1];
+      state.risSynthesis.drawnBoxes = state.risSynthesis.drawnBoxes.slice(0, -1);
+      syncRisSynthesisBoxesTextareaFromState();
+      renderRisSynthesisRoiOverlay();
+      setRisSynthesisViewerStatus(`Removed ${removed?.name || "last ROI"}.`);
+    });
+  }
+  if (ui.risSynthClearBoxes) {
+    ui.risSynthClearBoxes.addEventListener("click", () => {
+      state.risSynthesis.drawnBoxes = [];
+      state.risSynthesis.draftBox = null;
+      setRisSynthesisDrawMode(false);
+      syncRisSynthesisBoxesTextareaFromState();
+      renderRisSynthesisRoiOverlay();
+      setRisSynthesisViewerStatus("Cleared all ROI boxes.");
+    });
+  }
+  if (ui.risSynthStart) {
+    ui.risSynthStart.addEventListener("click", submitRisSynthesisJob);
+  }
+  if (ui.risSynthRefresh) {
+    ui.risSynthRefresh.addEventListener("click", refreshRisSynthesisJobs);
+  }
+  if (ui.risSynthLoadResults) {
+    ui.risSynthLoadResults.addEventListener("click", () => {
+      syncRisSynthesisSelectedRun(ui.risSynthRunSelect.value, { followActive: false });
+      void loadRisSynthesisResults(ui.risSynthRunSelect.value);
+    });
+  }
+  if (ui.risSynthApplyViewerMode) {
+    ui.risSynthApplyViewerMode.addEventListener("click", () => {
+      void applyRisSynthesisViewerMode();
+    });
+  }
+  if (ui.risSynthViewerMode) {
+    ui.risSynthViewerMode.addEventListener("change", () => {
+      void applyRisSynthesisViewerMode();
+    });
+  }
+  if (ui.risSynthQuantizeRun) {
+    ui.risSynthQuantizeRun.addEventListener("click", submitRisSynthesisQuantizationJob);
+  }
+  if (ui.risSynthRunSelect) {
+    ui.risSynthRunSelect.addEventListener("change", () => {
+      syncRisSynthesisSelectedRun(ui.risSynthRunSelect.value, { followActive: false });
+      void loadRisSynthesisResults(ui.risSynthRunSelect.value);
+    });
+  }
+  if (ui.risSynthPlotTabs) {
+    ui.risSynthPlotTabs.addEventListener("click", (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLButtonElement)) return;
+      const file = target.dataset.plot;
+      if (!file || !state.risSynthesis.activeRunId) return;
+      state.risSynthesis.selectedPlot = file;
+      ui.risSynthPlotTabs.querySelectorAll(".plot-tab-button").forEach((btn) => {
+        btn.classList.toggle("is-active", btn === target);
+      });
+      renderRisSynthesisPlotSingle(state.risSynthesis.activeRunId, file);
+    });
+  }
+
+  if (ui.linkSeedSourceType) {
+    ui.linkSeedSourceType.addEventListener("change", updateLinkSeedSourceVisibility);
+  }
+  if (ui.linkSeedRun) {
+    ui.linkSeedRun.addEventListener("change", () => {
+      void updateLinkSeedViewer();
+    });
+  }
+  if (ui.linkSeedConfig) {
+    ui.linkSeedConfig.addEventListener("change", () => {
+      void updateLinkSeedViewer();
+    });
+  }
+  if (ui.linkStart) {
+    ui.linkStart.addEventListener("click", submitLinkJob);
+  }
+  if (ui.linkRefresh) {
+    ui.linkRefresh.addEventListener("click", refreshLinkJobs);
+  }
+  if (ui.linkLoadResults) {
+    ui.linkLoadResults.addEventListener("click", () => loadLinkResults(ui.linkRunSelect.value));
+  }
+  if (ui.linkRunSelect) {
+    ui.linkRunSelect.addEventListener("change", () => loadLinkResults(ui.linkRunSelect.value));
+  }
+  if (ui.linkPlotTabs) {
+    ui.linkPlotTabs.addEventListener("click", (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLButtonElement)) return;
+      const file = target.dataset.plot;
+      if (!file || !state.link.activeRunId) return;
+      state.link.selectedPlot = file;
+      ui.linkPlotTabs.querySelectorAll(".plot-tab-button").forEach((btn) => {
+        btn.classList.toggle("is-active", btn === target);
+      });
+      renderLinkPlotSingle(state.link.activeRunId, file);
+    });
+  }
   
   if (!ui.risConfigSource) console.error("ui.risConfigSource is missing");
   ui.risConfigSource.addEventListener("change", () => {
@@ -6297,7 +9724,10 @@ function bindUI() {
     ui.plotLightbox.addEventListener("click", closeLightbox);
     if (ui.plotLightboxClose) ui.plotLightboxClose.addEventListener("click", closeLightbox);
     document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && ui.plotLightbox.style.display !== "none") closeLightbox();
+      if (e.key !== "Escape") return;
+      if (ui.plotLightbox.style.display !== "none") closeLightbox();
+      if (state.snapshotStudio.open) closeSnapshotStudio();
+      if (state.runBrowser.open) closeRunBrowser();
     });
   }
 
@@ -6343,13 +9773,32 @@ function bindUI() {
     ui.risCompareAngles,
     ui.risCompareNormalization,
   ];
+  const risSynthesisPreviewInputs = [
+    ui.risSynthConfigPath,
+    ui.risSynthSeedSource,
+    ui.risSynthSeedRun,
+    ui.risSynthSeedConfig,
+    ui.risSynthRisName,
+    ui.risSynthBoxes,
+    ui.risSynthIterations,
+    ui.risSynthLearningRate,
+    ui.risSynthLogEvery,
+    ui.risSynthThresholdDbm,
+    ui.risSynthObjectiveEps,
+    ui.risSynthBinarizationEnabled,
+    ui.risSynthOffsetSamples,
+    ui.risSynthRefineEnabled,
+    ui.risSynthCandidateBudget,
+    ui.risSynthMaxPasses,
+  ];
 
   if (ui.radioMapPreviewSelect) {
     ui.radioMapPreviewSelect.addEventListener("change", () => {
       if (!ui.radioMapPreviewImage) return;
       const file = ui.radioMapPreviewSelect.value;
       if (!file) return;
-      ui.radioMapPreviewImage.src = `/runs/${state.runId}/viewer/${file}`;
+      const assetRunId = state.risSynthesis.viewerOverlayRunId || state.runId;
+      ui.radioMapPreviewImage.src = assetRunId ? `/runs/${assetRunId}/viewer/${file}` : "";
     });
   }
 
@@ -6374,20 +9823,78 @@ function bindUI() {
     }
     input.addEventListener("input", updateRisPreview);
   });
+  risSynthesisPreviewInputs.forEach((input) => {
+    if (!input) return;
+    const eventName = input.tagName && input.tagName.toLowerCase() === "select" ? "change" : "input";
+    input.addEventListener(eventName, updateRisSynthesisConfigPreview);
+    if (eventName !== "change") {
+      input.addEventListener("change", updateRisSynthesisConfigPreview);
+    }
+  });
+  if (ui.risSynthBoxes) {
+    ui.risSynthBoxes.addEventListener("input", () => {
+      syncRisSynthesisBoxesStateFromTextarea({ quiet: true });
+    });
+    ui.risSynthBoxes.addEventListener("change", () => {
+      syncRisSynthesisBoxesStateFromTextarea({ quiet: false });
+    });
+  }
   
   if (!ui.topDown) console.error("ui.topDown is missing");
   ui.topDown.addEventListener("click", () => {
-    camera.position.set(0, 0, 200);
-    controls.target.set(0, 0, 0);
+    setTopDownView({ preferHeatmap: state.activeTab === "ris-synth" });
   });
   
   if (!ui.snapshot) console.error("ui.snapshot is missing");
   ui.snapshot.addEventListener("click", () => {
-    const link = document.createElement("a");
-    link.download = `snapshot-${state.runId || "run"}.png`;
-    link.href = renderer.domElement.toDataURL("image/png");
-    link.click();
+    openSnapshotStudio();
   });
+
+  [
+    ui.snapshotWidth,
+    ui.snapshotHeight,
+    ui.snapshotScale,
+    ui.snapshotTheme,
+    ui.snapshotView,
+    ui.snapshotProjection,
+    ui.snapshotFov,
+    ui.snapshotMargin,
+    ui.snapshotTitle,
+    ui.snapshotIncludeTitle,
+    ui.snapshotIncludeMeta,
+    ui.snapshotIncludeScaleBar,
+    ui.snapshotIncludeFrame,
+  ].forEach((input) => {
+    if (!input) return;
+    const eventName = input.tagName && input.tagName.toLowerCase() === "select" ? "change" : "input";
+    input.addEventListener(eventName, () => {
+      if (input === ui.snapshotWidth || input === ui.snapshotHeight) {
+        syncSnapshotPresetFromDimensions();
+      }
+      scheduleSnapshotPreview();
+    });
+    if (eventName !== "change") {
+      input.addEventListener("change", () => scheduleSnapshotPreview());
+    }
+  });
+  if (ui.snapshotPreset) {
+    ui.snapshotPreset.addEventListener("change", () => {
+      if (ui.snapshotPreset.value !== "custom") applySnapshotPreset(ui.snapshotPreset.value);
+      scheduleSnapshotPreview();
+    });
+  }
+  if (ui.snapshotStudioClose) ui.snapshotStudioClose.addEventListener("click", closeSnapshotStudio);
+  if (ui.snapshotRefreshPreview) ui.snapshotRefreshPreview.addEventListener("click", () => updateSnapshotPreview());
+  if (ui.snapshotDownload) ui.snapshotDownload.addEventListener("click", downloadSnapshotExport);
+  if (ui.snapshotCopy) ui.snapshotCopy.addEventListener("click", copySnapshotExport);
+  if (ui.snapshotStudio) {
+    ui.snapshotStudio.addEventListener("click", (event) => {
+      const target = event.target;
+      if (target instanceof HTMLElement && target.dataset.closeSnapshot === "true") {
+        closeSnapshotStudio();
+      }
+    });
+  }
   
   if (!ui.toggleGeometry) console.error("ui.toggleGeometry is missing");
   ui.toggleGeometry.addEventListener("change", () => {
@@ -6497,6 +10004,7 @@ try {
 bindKeyboardNavigation();
 bindUI();
 applyUiSnapshot();
+syncRadioMapZStackControls({ primeDefaults: Boolean(ui.radioMapZStackEnabled && ui.radioMapZStackEnabled.checked) });
 autoPlaceTxFromRis({ updateScene: false });
 updateSceneOverrideTxFromUi();
 schedulePersistUiSnapshot();
@@ -6505,12 +10013,21 @@ updateRisConfigSourceVisibility();
 updateRisControlVisibility();
 updateRisConfigPreview();
 updateRisPreview();
+updateRisSynthesisConfigSourceVisibility();
+updateRisSynthesisSeedSourceVisibility();
+updateRisSynthesisBinarizationVisibility();
+updateRisSynthesisConfigPreview();
+syncRisSynthesisBoxesStateFromTextarea({ quiet: true });
+syncRisSynthesisDrawModeUi();
+renderRisSynthesisRoiOverlay();
+setRisSynthesisViewerStatus("Load a sim run with a heatmap, then switch to Top-Down + Heatmap.");
+updateLinkSeedSourceVisibility();
 setCampaignRunControlsState();
 setCampaign2RunControlsState();
 setMainTab("sim");
-fetchConfigs().then(fetchRuns).then(fetchBuiltinScenes).then(() => Promise.all([refreshCampaignJobs(), refreshCampaign2Jobs(), refreshRisJobs()]));
+fetchConfigs().then(fetchRuns).then(fetchBuiltinScenes).then(() => Promise.all([refreshCampaignJobs(), refreshCampaign2Jobs(), refreshRisJobs(), refreshRisSynthesisJobs(), refreshLinkJobs()]));
 setInterval(() => {
-  if (isSimScopeTab(state.activeTab)) {
+  if (usesSharedViewerTab(state.activeTab)) {
     refreshJobs(getRunScopeForTab());
   }
   if (state.activeTab === "campaign") {
@@ -6521,5 +10038,11 @@ setInterval(() => {
   }
   if (state.activeTab === "ris") {
     refreshRisJobs();
+  }
+  if (state.activeTab === "ris-synth") {
+    refreshRisSynthesisJobs();
+  }
+  if (state.activeTab === "link") {
+    refreshLinkJobs();
   }
 }, 3000);

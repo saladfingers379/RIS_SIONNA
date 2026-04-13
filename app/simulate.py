@@ -25,7 +25,13 @@ from .io import create_output_dir, save_json, save_yaml
 from .metrics import build_paths_table, compute_path_metrics, extract_path_data
 from .plots import plot_radio_map, plot_radio_map_sionna, plot_histogram, plot_rays_3d
 from .viewer import generate_viewer
-from .scene import build_scene, export_scene_meshes, scene_sanity_report, _apply_default_radio_materials
+from .scene import (
+    build_scene,
+    export_scene_meshes,
+    scene_sanity_report,
+    _apply_default_radio_materials,
+    _resolve_horn_pattern,
+)
 from .utils.progress import progress_steps
 from .utils.system import (
     GpuMonitor,
@@ -45,6 +51,162 @@ def _to_numpy(x):
         return x.numpy()
     except AttributeError:
         return np.asarray(x)
+
+
+def _to_vec3(value: Any) -> Optional[np.ndarray]:
+    try:
+        vec = np.asarray(value, dtype=float).reshape(-1)
+    except Exception:
+        return None
+    if vec.size < 3:
+        return None
+    return vec[:3].astype(float)
+
+
+def _unit_vec(value: Any) -> Optional[np.ndarray]:
+    vec = _to_vec3(value)
+    if vec is None:
+        return None
+    norm = float(np.linalg.norm(vec))
+    if norm <= 0.0:
+        return None
+    return vec / norm
+
+
+def _rotation_matrix(angles: Any) -> Optional[np.ndarray]:
+    vec = _to_vec3(angles)
+    if vec is None:
+        return None
+    a, b, c = vec
+    cos_a = math.cos(a)
+    cos_b = math.cos(b)
+    cos_c = math.cos(c)
+    sin_a = math.sin(a)
+    sin_b = math.sin(b)
+    sin_c = math.sin(c)
+    return np.array(
+        [
+            [cos_a * cos_b, cos_a * sin_b * sin_c - sin_a * cos_c, cos_a * sin_b * cos_c + sin_a * sin_c],
+            [sin_a * cos_b, sin_a * sin_b * sin_c + cos_a * cos_c, sin_a * sin_b * cos_c - cos_a * sin_c],
+            [-sin_b, cos_b * sin_c, cos_b * cos_c],
+        ],
+        dtype=float,
+    )
+
+
+def _tx_forward_vector(scene_cfg: Dict[str, Any]) -> Optional[np.ndarray]:
+    tx_cfg = scene_cfg.get("tx", {}) if isinstance(scene_cfg, dict) else {}
+    tx_pos = _to_vec3(tx_cfg.get("position"))
+    look_at = _to_vec3(tx_cfg.get("look_at"))
+    if tx_pos is not None and look_at is not None:
+        forward = _unit_vec(look_at - tx_pos)
+        if forward is not None:
+            return forward
+    rot = _rotation_matrix(tx_cfg.get("orientation"))
+    if rot is None:
+        return None
+    return _unit_vec(rot @ np.array([1.0, 0.0, 0.0], dtype=float))
+
+
+def _ray_path_front_filter_enabled(cfg: Dict[str, Any], vis_cfg: Dict[str, Any]) -> bool:
+    mode = vis_cfg.get("filter_tx_rear_paths", "auto")
+    if isinstance(mode, str):
+        mode_norm = mode.strip().lower()
+        if mode_norm in {"false", "off", "disabled", "none", "0", "no"}:
+            return False
+        if mode_norm in {"true", "on", "enabled", "1", "yes"}:
+            return True
+    elif mode is not None:
+        return bool(mode)
+
+    scene_cfg = cfg.get("scene", {}) if isinstance(cfg, dict) else {}
+    arrays_cfg = scene_cfg.get("arrays", {}) if isinstance(scene_cfg, dict) else {}
+    tx_arr_cfg = arrays_cfg.get("tx", {}) if isinstance(arrays_cfg, dict) else {}
+    horn_spec = _resolve_horn_pattern(tx_arr_cfg.get("pattern"))
+    return bool(horn_spec and horn_spec.get("front_only"))
+
+
+def _path_is_valid(valid_mask: np.ndarray, path_index: int) -> bool:
+    valid = np.asarray(valid_mask, dtype=bool)
+    if valid.size == 0:
+        return True
+    if valid.ndim == 0:
+        return bool(valid.item())
+    if valid.shape[-1] <= path_index:
+        return False
+    return bool(valid.reshape(-1, valid.shape[-1])[:, path_index].any())
+
+
+def _extract_ray_path_segments(paths: Any, cfg: Dict[str, Any], vis_cfg: Dict[str, Any]) -> Dict[str, Any]:
+    verts = _to_numpy(paths.vertices)
+    interactions = _to_numpy(getattr(paths, "interactions", np.array([])))
+    objects = _to_numpy(getattr(paths, "objects", np.array([])))
+    valid = _to_numpy(getattr(paths, "targets_sources_mask", getattr(paths, "mask", np.array([])))).astype(bool)
+    sources = _to_numpy(paths.sources)
+    targets = _to_numpy(paths.targets)
+    src = sources[0].reshape(3)
+    tgt = targets[0].reshape(3)
+    max_paths = int(vis_cfg.get("max_paths", 200))
+
+    tx_forward = None
+    if _ray_path_front_filter_enabled(cfg, vis_cfg):
+        tx_forward = _tx_forward_vector(cfg.get("scene", {}))
+        if tx_forward is None:
+            logger.warning(
+                "Ray-path Tx front filter requested but Tx forward direction is unavailable; exporting unfiltered paths."
+            )
+
+    segments = []
+    num_vertices = verts.shape[0]
+    num_paths = verts.shape[3]
+    exported_paths = 0
+    filtered_rear_paths = 0
+    for p in range(num_paths):
+        if not _path_is_valid(valid, p):
+            continue
+        pts = [src]
+        if interactions.size:
+            inter = interactions[:, 0, 0, p]
+            valid_inter = inter != 0
+        elif objects.size:
+            inter = objects[:, 0, 0, p]
+            valid_inter = inter != -1
+        else:
+            valid_inter = None
+        v = verts[:, 0, 0, p, :]
+        for i in range(num_vertices):
+            if valid_inter is not None and valid_inter[i]:
+                pts.append(v[i])
+        pts.append(tgt)
+        if len(pts) < 2:
+            continue
+        if tx_forward is not None:
+            launch_dir = _unit_vec(np.asarray(pts[1], dtype=float) - np.asarray(pts[0], dtype=float))
+            if launch_dir is None or float(np.dot(launch_dir, tx_forward)) <= 0.0:
+                filtered_rear_paths += 1
+                continue
+        for i in range(len(pts) - 1):
+            segments.append([p, *pts[i], *pts[i + 1]])
+        exported_paths += 1
+        if exported_paths >= max_paths:
+            break
+
+    return {
+        "segments": np.asarray(segments, dtype=float) if segments else np.zeros((0, 7), dtype=float),
+        "exported_paths": exported_paths,
+        "filtered_rear_paths": filtered_rear_paths,
+        "tx_position": src,
+        "rx_position": tgt,
+    }
+
+
+def _radio_map_guide_paths(radio_map_cfg: Dict[str, Any]) -> list[Dict[str, Any]]:
+    guide_paths = radio_map_cfg.get("guide_paths")
+    if guide_paths is None:
+        guide_paths = radio_map_cfg.get("specular_paths")
+    if not isinstance(guide_paths, list):
+        return []
+    return [item for item in guide_paths if isinstance(item, dict)]
 
 
 def _save_ris_profiles(scene, plots_dir: Path) -> None:
@@ -130,6 +292,78 @@ def _restore_ris_amplitudes(scene: Any, snapshots: Dict[str, Any]) -> None:
         _assign_profile_values(ris.amplitude_profile, tf.cast(saved, ris.amplitude_profile.values.dtype))
 
 
+def _snapshot_ris_profiles(scene: Any) -> Dict[str, Dict[str, Any]]:
+    snapshots: Dict[str, Dict[str, Any]] = {}
+    try:
+        ris_objects = getattr(scene, "ris", {}) or {}
+    except Exception:
+        ris_objects = {}
+    for name, ris in ris_objects.items():
+        phase_values = None
+        amplitude_values = None
+        mode_powers = None
+        try:
+            phase_values = ris.phase_profile.values.numpy()
+        except Exception:
+            phase_values = None
+        try:
+            amplitude_values = ris.amplitude_profile.values.numpy()
+        except Exception:
+            amplitude_values = None
+        try:
+            mode_powers = list(getattr(ris.amplitude_profile, "mode_powers", []) or [])
+        except Exception:
+            mode_powers = None
+        snapshots[name] = {
+            "phase": phase_values,
+            "amplitude": amplitude_values,
+            "mode_powers": mode_powers,
+        }
+    return snapshots
+
+
+def _apply_ris_metal_baseline(scene: Any, *, amplitude: float = 1.0) -> None:
+    import tensorflow as tf
+
+    try:
+        ris_objects = getattr(scene, "ris", {}) or {}
+    except Exception:
+        ris_objects = {}
+    for _, ris in ris_objects.items():
+        zero_phase = tf.zeros_like(ris.phase_profile.values)
+        unit_amplitude = tf.ones_like(ris.amplitude_profile.values) * tf.cast(
+            float(amplitude), ris.amplitude_profile.values.dtype
+        )
+        _assign_profile_values(ris.phase_profile, zero_phase)
+        _assign_profile_values(ris.amplitude_profile, unit_amplitude)
+        try:
+            ris.amplitude_profile.mode_powers = [1.0] * int(getattr(ris, "num_modes", 1))
+        except Exception:
+            pass
+
+
+def _restore_ris_profiles(scene: Any, snapshots: Dict[str, Dict[str, Any]]) -> None:
+    import tensorflow as tf
+
+    try:
+        ris_objects = getattr(scene, "ris", {}) or {}
+    except Exception:
+        ris_objects = {}
+    for name, ris in ris_objects.items():
+        saved = snapshots.get(name) or {}
+        phase_values = saved.get("phase")
+        amplitude_values = saved.get("amplitude")
+        if phase_values is not None:
+            _assign_profile_values(ris.phase_profile, tf.cast(phase_values, ris.phase_profile.values.dtype))
+        if amplitude_values is not None:
+            _assign_profile_values(ris.amplitude_profile, tf.cast(amplitude_values, ris.amplitude_profile.values.dtype))
+        if "mode_powers" in saved:
+            try:
+                ris.amplitude_profile.mode_powers = saved.get("mode_powers")
+            except Exception:
+                pass
+
+
 def _rt_backend_from_variant(variant: str | None) -> str:
     if not variant:
         return "unknown"
@@ -174,6 +408,11 @@ def _radio_map_plot_filename_prefix(
 ) -> str:
     center = kwargs.get("cm_center")
     has_plane_z = isinstance(center, (list, tuple)) and len(center) >= 3
+    if suffix and suffix.startswith("ris_off_z") and has_plane_z:
+        try:
+            return f"radio_map_ris_off_{metric_name}_{_format_radio_map_plane_z_token(float(center[2]))}"
+        except Exception:
+            pass
     if (write_default or (suffix and suffix.startswith("z") and suffix.endswith("m"))) and has_plane_z:
         try:
             return f"radio_map_{metric_name}_{_format_radio_map_plane_z_token(float(center[2]))}"
@@ -258,12 +497,23 @@ def _compute_ris_link_probe(
 ) -> Optional[Dict[str, Any]]:
     if not has_ris or not use_ris_paths:
         return None
+    probe_mode = "metal_plate"
+    snapshots = None
     try:
-        paths_off = _compute_paths_with_current_flags(scene, sim_cfg, use_ris=False)
+        snapshots = _snapshot_ris_profiles(scene)
+        if snapshots:
+            _apply_ris_metal_baseline(scene, amplitude=float(sim_cfg.get("ris_off_amplitude", 1.0)))
+            paths_off = _compute_paths_with_current_flags(scene, sim_cfg, use_ris=True)
+        else:
+            probe_mode = "disabled_fallback"
+            paths_off = _compute_paths_with_current_flags(scene, sim_cfg, use_ris=False)
         metrics_off = compute_path_metrics(paths_off, tx_power_dbm=tx_device.power_dbm, scene=scene)
     except Exception as exc:
         logger.warning("RIS link probe failed: %s", exc)
         return {"error": str(exc)}
+    finally:
+        if snapshots:
+            _restore_ris_profiles(scene, snapshots)
 
     on_gain = metrics_on.get("total_path_gain_db")
     off_gain = metrics_off.get("total_path_gain_db")
@@ -274,6 +524,7 @@ def _compute_ris_link_probe(
         "off_total_path_gain_db": float(off_gain) if off_gain is not None else None,
         "on_rx_power_dbm_estimate": float(on_rx) if on_rx is not None else None,
         "off_rx_power_dbm_estimate": float(off_rx) if off_rx is not None else None,
+        "off_mode": probe_mode,
     }
     if on_gain is not None and off_gain is not None:
         probe["delta_total_path_gain_db"] = float(on_gain - off_gain)
@@ -745,6 +996,7 @@ def run_simulation(config_path: str, overrides: Optional[Dict[str, Any]] = None)
                         suffix: Optional[str],
                         write_default: bool,
                         enabled_ris: Optional[set[str]] = None,
+                        baseline_mode: Optional[str] = None,
                         cfg_source: Optional[Dict[str, Any]] = None,
                         axis_labels: tuple[str, str] = ("x [m]", "y [m]"),
                     ) -> tuple[Dict[str, Any], Dict[str, Any], Optional[Dict[str, Any]]]:
@@ -769,15 +1021,27 @@ def run_simulation(config_path: str, overrides: Optional[Dict[str, Any]] = None)
                             cfg_base = dict(cfg_base)
                             cfg_base["center_z_only"] = z_override
                         kwargs, alignment_info, visibility_info = _radio_map_kwargs(cfg_base, overrides)
-                        snapshots = None
-                        if enabled_ris is not None:
-                            snapshots = _snapshot_ris_amplitudes(scene)
+                        amplitude_snapshots = None
+                        profile_snapshots = None
+                        if baseline_mode == "metal_plate":
+                            profile_snapshots = _snapshot_ris_profiles(scene)
+                            if profile_snapshots:
+                                _apply_ris_metal_baseline(
+                                    scene,
+                                    amplitude=float(cfg_source.get("ris_off_amplitude", radio_map_cfg.get("ris_off_amplitude", 1.0)))
+                                    if isinstance(cfg_source, dict)
+                                    else float(radio_map_cfg.get("ris_off_amplitude", 1.0)),
+                                )
+                        elif enabled_ris is not None:
+                            amplitude_snapshots = _snapshot_ris_amplitudes(scene)
                             _apply_ris_amplitude_mask(scene, enabled_ris)
                         try:
                             result = scene.coverage_map(**kwargs)
                         finally:
-                            if snapshots is not None:
-                                _restore_ris_amplitudes(scene, snapshots)
+                            if amplitude_snapshots is not None:
+                                _restore_ris_amplitudes(scene, amplitude_snapshots)
+                            if profile_snapshots is not None:
+                                _restore_ris_profiles(scene, profile_snapshots)
                         timings_key = f"radio_map_{label}_s" if label else "radio_map_s"
                         timings[timings_key] = time.time() - t0
                         radio_map = result
@@ -849,6 +1113,7 @@ def run_simulation(config_path: str, overrides: Optional[Dict[str, Any]] = None)
                                 ris_positions = [np.asarray(r.position).reshape(-1) for r in scene.ris.values()]
                             except Exception:
                                 ris_positions = []
+                            guide_paths = _radio_map_guide_paths(cfg_base)
                             plot_radio_map(
                                 path_gain_db,
                                 cell_centers,
@@ -863,6 +1128,7 @@ def run_simulation(config_path: str, overrides: Optional[Dict[str, Any]] = None)
                                 tx_pos=tx_pos,
                                 rx_pos=rx_pos,
                                 ris_positions=ris_positions,
+                                guide_paths=guide_paths,
                                 axis_labels=axis_labels,
                                 title_suffix=title_suffix,
                             )
@@ -880,6 +1146,7 @@ def run_simulation(config_path: str, overrides: Optional[Dict[str, Any]] = None)
                                 tx_pos=tx_pos,
                                 rx_pos=rx_pos,
                                 ris_positions=ris_positions,
+                                guide_paths=guide_paths,
                                 axis_labels=axis_labels,
                                 title_suffix=title_suffix,
                             )
@@ -897,6 +1164,7 @@ def run_simulation(config_path: str, overrides: Optional[Dict[str, Any]] = None)
                                 tx_pos=tx_pos,
                                 rx_pos=rx_pos,
                                 ris_positions=ris_positions,
+                                guide_paths=guide_paths,
                                 axis_labels=axis_labels,
                                 title_suffix=title_suffix,
                             )
@@ -919,6 +1187,8 @@ def run_simulation(config_path: str, overrides: Optional[Dict[str, Any]] = None)
                             "stats": stats,
                             "parameters": kwargs,
                         }
+                        if baseline_mode:
+                            summary["baseline_mode"] = baseline_mode
                         center_cfg = kwargs.get("cm_center")
                         if isinstance(center_cfg, (list, tuple)) and len(center_cfg) >= 3:
                             try:
@@ -967,7 +1237,8 @@ def run_simulation(config_path: str, overrides: Optional[Dict[str, Any]] = None)
                                     base_plane_z_m = float(center_cfg[2])
                         except Exception:
                             base_plane_z_m = 0.0
-                        for slice_spec in _radio_map_z_slice_specs(radio_map_cfg):
+                        z_slice_specs = _radio_map_z_slice_specs(radio_map_cfg)
+                        for slice_spec in z_slice_specs:
                             offset_m = float(slice_spec["offset_m"])
                             summary_slice, _, _ = _compute_radio_map(
                                 label=str(slice_spec["suffix"]),
@@ -1023,6 +1294,31 @@ def run_simulation(config_path: str, overrides: Optional[Dict[str, Any]] = None)
                                     )
                                     radio_map_summaries.append(summary_incidence)
 
+                        if has_ris and bool(radio_map_cfg.get("ris_off_map", False)):
+                            summary_ris_off, _, _ = _compute_radio_map(
+                                label="ris_off",
+                                overrides={"ris": True},
+                                suffix="ris_off",
+                                write_default=False,
+                                baseline_mode="metal_plate",
+                            )
+                            radio_map_summaries.append(summary_ris_off)
+                            for slice_spec in z_slice_specs:
+                                offset_m = float(slice_spec["offset_m"])
+                                summary_ris_off_slice, _, _ = _compute_radio_map(
+                                    label=f"ris_off_{slice_spec['suffix']}",
+                                    overrides={
+                                        "ris": True,
+                                        "center_z_only": float(base_plane_z_m + offset_m),
+                                    },
+                                    suffix=f"ris_off_{slice_spec['suffix']}",
+                                    write_default=False,
+                                    baseline_mode="metal_plate",
+                                )
+                                summary_ris_off_slice["z_offset_m"] = offset_m
+                                summary_ris_off_slice["display_label"] = f"RIS off {slice_spec['display_label']}"
+                                radio_map_summaries.append(summary_ris_off_slice)
+
                     else:
                         progress.update(task_id, description="Radio map (skipped)")
                         progress.advance(task_id)
@@ -1075,6 +1371,7 @@ def run_simulation(config_path: str, overrides: Optional[Dict[str, Any]] = None)
                                     tx_pos=tx_pos,
                                     rx_pos=rx_pos,
                                     ris_positions=[np.asarray(r.position).reshape(-1) for r in scene.ris.values()] if hasattr(scene, "ris") else [],
+                                    guide_paths=_radio_map_guide_paths(radio_map_cfg),
                                 )
                                 metrics["radio_map_diff"] = {
                                     "path_gain_db_min": float(np.min(diff_db)),
@@ -1128,48 +1425,9 @@ def run_simulation(config_path: str, overrides: Optional[Dict[str, Any]] = None)
                 vis_cfg = cfg.data.get("visualization", {}).get("ray_paths", {})
                 if vis_cfg.get("enabled", True) and paths is not None:
                     try:
-                        verts = _to_numpy(paths.vertices)
-                        interactions = _to_numpy(getattr(paths, "interactions", np.array([])))
-                        objects = _to_numpy(getattr(paths, "objects", np.array([])))
-                        valid = _to_numpy(getattr(paths, "targets_sources_mask", getattr(paths, "mask", np.array([])))).astype(bool)
-                        sources = _to_numpy(paths.sources)
-                        targets = _to_numpy(paths.targets)
-                        src = sources[0].reshape(3)
-                        tgt = targets[0].reshape(3)
-                        max_paths = int(vis_cfg.get("max_paths", 200))
-
-                        segments = []
-                        path_id = 0
-                        num_vertices = verts.shape[0]
-                        num_paths = verts.shape[3]
-                        for p in range(num_paths):
-                            if valid.size and not valid[0, 0, p]:
-                                continue
-                            pts = [src]
-                            if interactions.size:
-                                inter = interactions[:, 0, 0, p]
-                                valid_inter = inter != 0
-                            elif objects.size:
-                                inter = objects[:, 0, 0, p]
-                                valid_inter = inter != -1
-                            else:
-                                inter = None
-                                valid_inter = None
-                            v = verts[:, 0, 0, p, :]
-                            for i in range(num_vertices):
-                                if valid_inter is not None and valid_inter[i]:
-                                    pts.append(v[i])
-                            pts.append(tgt)
-                            if len(pts) < 2:
-                                continue
-                            for i in range(len(pts) - 1):
-                                segments.append([path_id, *pts[i], *pts[i + 1]])
-                            path_id += 1
-                            if path_id >= max_paths:
-                                break
-
-                        if segments:
-                            segments_arr = np.array(segments)
+                        export = _extract_ray_path_segments(paths, cfg.data, vis_cfg)
+                        segments_arr = export["segments"]
+                        if segments_arr.size:
                             np.savetxt(
                                 data_dir / "ray_paths.csv",
                                 segments_arr,
@@ -1180,12 +1438,14 @@ def run_simulation(config_path: str, overrides: Optional[Dict[str, Any]] = None)
                             np.savez_compressed(data_dir / "ray_paths.npz", segments=segments_arr)
                             plot_rays_3d(
                                 segments_arr,
-                                tx_pos=src,
-                                rx_pos=tgt,
+                                tx_pos=export["tx_position"],
+                                rx_pos=export["rx_position"],
                                 output_dir=output_dir / "plots",
                             )
-                            metrics["ray_paths_exported"] = int(path_id)
-                            metrics["ray_segments_exported"] = int(len(segments))
+                            metrics["ray_paths_exported"] = int(export["exported_paths"])
+                            metrics["ray_segments_exported"] = int(len(segments_arr))
+                            if export["filtered_rear_paths"] > 0:
+                                metrics["ray_paths_filtered_tx_rear"] = int(export["filtered_rear_paths"])
                     except Exception as exc:  # pragma: no cover
                         logger.warning("Ray path export failed: %s", exc)
 

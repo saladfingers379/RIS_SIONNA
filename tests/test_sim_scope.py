@@ -41,7 +41,7 @@ def test_indoor_box_high_defaults_to_anechoic_chamber_scene() -> None:
     cfg = load_config("configs/indoor_box_high.yaml").data
 
     assert cfg["scene"]["type"] == "file"
-    assert cfg["scene"]["file"] == "scenes/anechoic_chamber_nofoam/scene.xml"
+    assert cfg["scene"]["file"] == "scenes/anechoic_chamber_foam_ideal/scene.xml"
     assert "floor_elevation" not in cfg["scene"]
 
 

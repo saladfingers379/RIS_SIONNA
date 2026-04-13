@@ -43,6 +43,17 @@ def _path_types(paths) -> Optional[np.ndarray]:
     return types.reshape(-1)
 
 
+def _mask_any_per_path(mask: Optional[np.ndarray]) -> Optional[np.ndarray]:
+    if mask is None:
+        return None
+    mask = np.asarray(mask)
+    if mask.ndim == 0:
+        return np.array([bool(mask)])
+    if mask.size == 0 or mask.shape[-1] == 0:
+        return np.zeros((0,), dtype=bool)
+    return mask.reshape(-1, mask.shape[-1]).any(axis=0)
+
+
 def _per_path_power_and_valid(paths) -> tuple[Optional[np.ndarray], Optional[np.ndarray]]:
     try:
         a = _paths_coefficients(paths)
@@ -70,14 +81,7 @@ def _per_path_power_and_valid(paths) -> tuple[Optional[np.ndarray], Optional[np.
     per_path = np.atleast_1d(per_path)
 
     mask = _paths_mask(paths)
-    valid = None
-    if mask is not None:
-        mask = np.asarray(mask)
-        if mask.ndim == 0:
-            valid = np.array([bool(mask)])
-        else:
-            mask = mask.reshape(-1, mask.shape[-1])
-            valid = mask.any(axis=0)
+    valid = _mask_any_per_path(mask)
     if valid is None or valid.shape[-1] != per_path.shape[-1]:
         valid = np.ones_like(per_path, dtype=bool)
     return per_path, valid
@@ -153,6 +157,9 @@ def _path_power_by_type(paths, scene: Optional[Any] = None) -> Optional[Dict[str
 
 
 def _count_ris_paths(paths, scene: Optional[Any] = None) -> Optional[int]:
+    valid = _mask_any_per_path(_paths_mask(paths))
+    if valid is not None and valid.size == 0:
+        return 0
     try:
         objects = _to_numpy(getattr(paths, "objects", None))
     except Exception:
@@ -167,7 +174,6 @@ def _count_ris_paths(paths, scene: Optional[Any] = None) -> Optional[int]:
         if types.size == 0:
             types = None
     if types is not None and ris_type is not None:
-        mask = _paths_mask(paths)
         if types.ndim >= 2:
             if types.shape[-1] == 0:
                 return 0
@@ -176,8 +182,8 @@ def _count_ris_paths(paths, scene: Optional[Any] = None) -> Optional[int]:
         else:
             types_per_path = types.reshape(-1)
         ris_hit = types_per_path == int(ris_type)
-        if mask is not None and mask.ndim >= 1 and mask.shape[-1] == ris_hit.shape[-1]:
-            per_path = mask.reshape(-1, mask.shape[-1]).any(axis=0) & ris_hit
+        if valid is not None and valid.shape[-1] == ris_hit.shape[-1]:
+            per_path = valid & ris_hit
         else:
             per_path = ris_hit
         count = int(np.sum(per_path))
@@ -199,9 +205,9 @@ def _count_ris_paths(paths, scene: Optional[Any] = None) -> Optional[int]:
             if inter is not None:
                 ris_hit = np.isin(inter, ris_ids)
                 per_path = np.any(ris_hit, axis=0)
-                mask = _paths_mask(paths)
-                if mask is not None and mask.shape[-1] == per_path.shape[-1]:
-                    per_path = per_path & mask.reshape(-1, per_path.shape[-1]).any(axis=0)
+                valid = _mask_any_per_path(_paths_mask(paths))
+                if valid is not None and valid.shape[-1] == per_path.shape[-1]:
+                    per_path = per_path & valid
                 return int(np.sum(per_path))
     try:
         interactions = _to_numpy(paths.interactions)
@@ -213,8 +219,7 @@ def _count_ris_paths(paths, scene: Optional[Any] = None) -> Optional[int]:
     ris_ids = [k for k, v in type_map.items() if v == "ris"]
     if not ris_ids:
         return None
-    mask = _paths_mask(paths)
-    if mask is None:
+    if valid is None:
         return None
     # interactions shape: [num_vertices, num_rx, num_tx, num_paths]
     if interactions.ndim >= 4:
@@ -225,8 +230,8 @@ def _count_ris_paths(paths, scene: Optional[Any] = None) -> Optional[int]:
         return None
     ris_hit = np.isin(inter, ris_ids)
     per_path = np.any(ris_hit, axis=0)
-    if mask.ndim >= 1 and mask.shape[-1] == per_path.shape[-1]:
-        per_path = per_path & mask.reshape(-1, per_path.shape[-1]).any(axis=0)
+    if valid is not None and valid.shape[-1] == per_path.shape[-1]:
+        per_path = per_path & valid
     return int(np.sum(per_path))
 
 
@@ -380,7 +385,9 @@ def build_paths_table(paths, tx_power_dbm: float) -> Dict[str, Any]:
     num_paths = mask.shape[-1]
     if num_paths == 0 or mask.size == 0:
         return {"rows": rows, "tx_power_dbm": float(_to_numpy(tx_power_dbm).item())}
-    per_path = np.any(mask.reshape(-1, num_paths), axis=0)
+    per_path = _mask_any_per_path(mask)
+    if per_path is None:
+        return {"rows": rows, "tx_power_dbm": float(_to_numpy(tx_power_dbm).item())}
     num_vertices = verts.shape[0] if verts.size else 0
     for p in range(num_paths):
         if not per_path[p]:

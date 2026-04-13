@@ -85,7 +85,7 @@ def test_file_scene_custom_absorber_material_is_preserved():
     assert absorber_mat.name == "itu_absorber"
     assert absorber_mat.is_placeholder is False
     assert float(absorber_mat.relative_permittivity.numpy()) == pytest.approx(1.0)
-    assert float(absorber_mat.conductivity.numpy()) == pytest.approx(0.2)
+    assert float(absorber_mat.conductivity.numpy()) == pytest.approx(0.0)
 
     floor = scene.get("metal_floor")
     floor_mat = floor.radio_material

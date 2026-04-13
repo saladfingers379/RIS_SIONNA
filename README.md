@@ -5,8 +5,9 @@ Starter kit for Sionna RT ray tracing at 28 GHz with a lightweight simulator UI 
 ## Highlights
 - CLI runs: `python -m app run --config configs/default.yaml`
 - Sionna RT LOS + reflections + optional radio map
-- Omniverse-lite simulator UI (stdlib HTTP server)
+- SIONNA Viewer UI (stdlib HTTP server)
 - RIS Lab (CPU-only): near-field reflectarray model + validation
+- RIS Synthesis (RT-side): continuous-to-1-bit RIS optimization on a frozen coverage-map ROI
 - Optional Streamlit dashboard (visualization only)
 
 ## Quick Start (macOS CPU)
@@ -55,7 +56,7 @@ Notes:
 - Visualization only; run simulations from CLI/UI.
 - If 3D view is blank, click “Regenerate viewer now”.
 
-## Omniverse-lite Simulator UI
+## SIONNA Viewer
 ```bash
 python -m app sim
 ```
@@ -67,6 +68,90 @@ Features:
 - Job status, logs, and snapshots
 - Radio map plot style switch (heatmap vs Sionna standard)
 - Diff view for radio maps (current - baseline)
+
+Password gate for remote demos:
+```bash
+export SIM_PASSWORD='choose-a-strong-password'
+python -m app sim --host 127.0.0.1 --port 8765 --no-browser
+```
+Or load the password from a local file:
+```bash
+python -m app sim --host 127.0.0.1 --port 8765 --no-browser --auth-password-file ~/.config/ris_sionna_sim_password
+```
+When a password is configured, the simulator shows a login page before the UI and API become accessible.
+
+Remote showcase via Cloudflare Quick Tunnel:
+Use this when the simulator must stay on your machine but you need to open it from another device or network.
+
+1. Install `cloudflared`
+
+With `sudo` on Ubuntu:
+```bash
+curl -L --output /tmp/cloudflared.deb \
+  "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-$(dpkg --print-architecture).deb"
+sudo dpkg -i /tmp/cloudflared.deb
+cloudflared --version
+```
+
+Without `sudo`, install a user-local binary:
+```bash
+mkdir -p ~/.local/bin
+ARCH="$(uname -m)"
+if [ "$ARCH" = "x86_64" ]; then
+  CF_ARCH="amd64"
+elif [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then
+  CF_ARCH="arm64"
+else
+  echo "Unsupported arch: $ARCH"
+  return 1 2>/dev/null || exit 1
+fi
+curl -L --output ~/.local/bin/cloudflared \
+  "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${CF_ARCH}"
+chmod +x ~/.local/bin/cloudflared
+export PATH="$HOME/.local/bin:$PATH"
+cloudflared --version
+```
+
+2. Start the simulator with auth enabled
+```bash
+export SIM_PASSWORD='choose-a-strong-password'
+python -m app sim --host 127.0.0.1 --port 8765 --no-browser
+```
+
+Expected startup lines:
+```text
+RIS_SIONNA simulator running at http://127.0.0.1:8765
+Simulator access password is enabled.
+```
+
+3. Start the Quick Tunnel in a second terminal
+```bash
+cloudflared tunnel --url http://localhost:8765
+```
+
+Cloudflare prints a temporary public URL like:
+```text
+https://example-name.trycloudflare.com
+```
+
+4. Open that URL on the remote device
+- First page should be the simulator password page.
+- After entering the local password, the simulator UI loads.
+- All compute still runs on the host machine.
+
+Operational notes:
+- Keep the simulator and `cloudflared` running in separate terminals for the entire demo.
+- Keep the simulator bound to `127.0.0.1` when using Cloudflare Tunnel.
+- Quick Tunnels are convenient for demos but are not meant as a production deployment.
+- Anyone with the URL and password can access the simulator, so treat both as sensitive.
+- The simulator frontend assumes it is served from the web root on its own hostname; use a full hostname/URL, not a reverse-proxy path prefix.
+
+Pre-show checklist:
+- `python -m app diagnose` reports `RT backend is CUDA/OptiX`
+- Local `http://127.0.0.1:8765` shows the password page in a fresh private/incognito window
+- `cloudflared tunnel --url http://localhost:8765` prints a `trycloudflare.com` URL
+- Opening the public URL from another device shows the password page first
+- Start one local test run before the showcase so Mitsuba/TensorFlow/CUDA are warm
 
 ## RIS Lab (CPU-only)
 RIS Lab is a math-first validation tool for RIS patterns and link metrics. It uses a near-field reflectarray model (Machado/Tang-style sweep).
@@ -89,6 +174,29 @@ Artifacts (written under `outputs/<run_id>/`):
 - Pattern: `plots/phase_map.png`, `plots/pattern_cartesian.png`, `plots/pattern_polar.png`,
   `data/phase_map.npy`, `data/theta_deg.npy`, `data/pattern_linear.npy`, `data/pattern_db.npy`
 - Validation: `plots/phase_map.png`, `plots/validation_overlay.png`
+
+## RIS Synthesis (RT-side)
+RIS Synthesis is a separate RT workflow for optimizing a continuous RIS phase profile on a frozen coverage-map ROI, then projecting it to a realizable 1-bit phase map with a global phase-offset sweep.
+
+CLI example:
+```bash
+python -m app ris-synth run --config configs/ris_synthesis_street_canyon.yaml
+```
+
+UI workflow:
+1) Run `python -m app sim`
+2) Switch to the “RIS Synthesis” tab
+3) Use the builder or point at `configs/ris_synthesis_street_canyon.yaml`
+4) Start the job and inspect ROI, continuous, 1-bit, diff, and trace plots as they appear
+
+Artifacts (written under `outputs/<run_id>/`):
+- Core: `config.yaml`, `summary.json`, `metrics.json`, `progress.json`, `job.json`
+- ROI: `data/target_boxes.json`, `data/target_mask.npy`, `plots/target_region_overlay.png`
+- Phase: `data/phase_continuous.npy`, `data/phase_1bit.npy`, `data/bits_1bit.npy`, `data/manual_profile_phase.npy`
+- Traces: `data/objective_trace.csv`, `data/offset_sweep.csv`, `plots/objective_trace.png`
+- Evaluations: `data/eval_ris_off.npz`, `data/eval_continuous.npz`, `data/eval_1bit.npz`
+- Maps: `plots/radio_map_ris_off.png`, `plots/radio_map_continuous.png`, `plots/radio_map_1bit.png`
+- Diffs/CDF: `plots/radio_map_diff_continuous_vs_off.png`, `plots/radio_map_diff_1bit_vs_off.png`, `plots/radio_map_diff_1bit_vs_continuous.png`, `plots/cdf_roi_rx_power.png`
 
 ## RIS in Sionna RT (v0.19.2)
 Enable RIS with the simulator UI:

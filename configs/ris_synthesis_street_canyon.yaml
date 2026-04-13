@@ -1,0 +1,46 @@
+schema_version: 1
+
+seed:
+  type: config
+  config_path: configs/ris_doc_street_canyon.yaml
+  ris_name: ris
+
+target_region:
+  plane: coverage_map
+  boxes:
+    - name: roi_1
+      u_min_m: 6.0
+      u_max_m: 16.0
+      v_min_m: -3.0
+      v_max_m: 3.0
+  freeze_mask: true
+
+objective:
+  kind: mean_log_path_gain
+  eps: 1.0e-12
+  threshold_dbm: -90.0
+  temperature_db: 2.0
+
+optimizer:
+  iterations: 60
+  learning_rate: 0.03
+  algorithm: adam
+  log_every: 5
+
+binarization:
+  enabled: true
+  method: global_offset_sweep
+  num_offset_samples: 181
+
+refinement:
+  enabled: false
+  method: greedy_flip
+  candidate_budget: 64
+  max_passes: 1
+
+evaluation:
+  dense_map:
+    enabled: true
+
+output:
+  base_dir: outputs

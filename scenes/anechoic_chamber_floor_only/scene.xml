@@ -1,0 +1,21 @@
+<scene version="3.0.0">
+  <integrator type="path">
+    <integer name="max_depth" value="8"/>
+  </integrator>
+
+  <emitter type="constant">
+    <rgb name="radiance" value="1.0"/>
+  </emitter>
+
+  <!-- Blank chamber-scale scene: only the anechoic chamber floor footprint. -->
+  <bsdf type="twosided" id="mat-itu_metal">
+    <bsdf type="diffuse">
+      <rgb name="reflectance" value="0.65"/>
+    </bsdf>
+  </bsdf>
+
+  <shape type="ply" id="metal_floor">
+    <string name="filename" value="../anechoic_chamber_foam/meshes/metal_floor.ply"/>
+    <ref id="mat-itu_metal" name="bsdf"/>
+  </shape>
+</scene>

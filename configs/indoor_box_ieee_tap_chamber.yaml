@@ -24,6 +24,7 @@ simulation:
   refraction: false
   diffraction: false
   ris: true
+  ris_off_amplitude: 0.9
   scale_similarity:
     enabled: false
     factor: 1.0
@@ -36,8 +37,14 @@ simulation:
 scene:
   type: file
   builtin: null
-  file: scenes/anechoic_chamber_nofoam/scene.xml
+  file: scenes/anechoic_chamber_foam_ideal/scene.xml
   mesh: null
+  custom_radio_materials:
+    itu_absorber:
+      relative_permittivity: 1.0
+      conductivity: 0.0
+      scattering_coefficient: 0.0
+      xpd_coefficient: 0.0
   proxy_enabled: false
   export_mesh: true
   procedural:
@@ -59,7 +66,7 @@ scene:
     power_dbm: 28.0
   rx:
     name: rx
-    position: [0.0, -0.7, 1.6]
+    position: [0.0, 0.20455488498966785, 1.6]
   camera:
     position: [4.0, 4.0, 3.4]
     orientation: [0.0, 1.5708, -1.5708]
@@ -76,7 +83,7 @@ scene:
       num_cols: 1
       vertical_spacing: 0.5
       horizontal_spacing: 0.5
-      pattern: horn_22dbi
+      pattern: horn_22dbi_front
       polarization: V
   objects: []
 
@@ -102,6 +109,8 @@ radio_map:
   refraction: true
   diffraction: false
   ris: true
+  ris_off_map: true
+  ris_off_amplitude: 0.9
   plot_show_ris: true
   tx_ris_incidence:
     enabled: true
@@ -156,14 +165,14 @@ campaign:
 experiment:
   reference: "IEEE TAP RIS near-field chamber setup"
   tx_ris_distance_m: 0.4
-  rx_ris_distance_m: 2.0
+  rx_ris_distance_m: 1.1
   tx_incidence_azimuth_deg: -30.0
   tx_gain_dbi: 15.0
   rx_gain_dbi: 22.0
   tx_power_dbm: 28.0
   notes:
     - "Tx power uses Table I (28 dBm); the near-field chamber section states geometry and horn gains but not a separate transmit level."
-    - "Indoor chamber preset uses an approximate 15 dBi Tx horn and 22 dBi Rx horn to mirror the near-field measurement section."
+    - "Indoor chamber preset uses front-only approximate 15 dBi Tx and 22 dBi Rx horns so rays do not launch behind the horn aperture in the showcase viewer."
     - "Sionna chamber preset keeps continuous phase control; hardware 1-bit quantization is treated as part of the real-device comparison, not baked into the RT baseline."
     - "For visualization, the default horizontal radio-map slice is lifted to z=1.55 m and the fixed Rx is lifted to z=1.6 m so the slice intersects the reflected energy more reliably."
 

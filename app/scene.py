@@ -47,14 +47,12 @@ ITU_NAME_MAP = {
     "wet_ground": "itu_concrete",
 }
 
-# Placeholder chamber absorber proxy.
-# The conductivity is tuned so the simplified normal-incidence reflected-bounce
-# loss at 28 GHz is about 30 dB, which is a more useful chamber baseline than
-# the previous highly reflective placeholder.
+# Placeholder chamber absorber proxy. For the chamber test scene we model the
+# absorber as an ideal matched boundary in Sionna's material parameters.
 CUSTOM_RADIO_MATERIAL_LIBRARY = {
     "itu_absorber": {
         "relative_permittivity": 1.0,
-        "conductivity": 0.2,
+        "conductivity": 0.0,
         "scattering_coefficient": 0.0,
         "xpd_coefficient": 0.0,
     },
@@ -69,12 +67,28 @@ _HORN_PATTERN_LIBRARY = {
         "theta_3db_deg": 36.0,
         "phi_3db_deg": 36.0,
         "sidelobe_attenuation_db": 30.0,
+        "front_only": False,
     },
     "horn_22dbi": {
         "gain_dbi": 22.0,
         "theta_3db_deg": 16.0,
         "phi_3db_deg": 16.0,
         "sidelobe_attenuation_db": 30.0,
+        "front_only": False,
+    },
+    "horn_15dbi_front": {
+        "gain_dbi": 15.0,
+        "theta_3db_deg": 36.0,
+        "phi_3db_deg": 36.0,
+        "sidelobe_attenuation_db": 30.0,
+        "front_only": True,
+    },
+    "horn_22dbi_front": {
+        "gain_dbi": 22.0,
+        "theta_3db_deg": 16.0,
+        "phi_3db_deg": 16.0,
+        "sidelobe_attenuation_db": 30.0,
+        "front_only": True,
     },
 }
 
@@ -107,7 +121,6 @@ def _make_horn_pattern(
     phi_3db_deg: float,
     sidelobe_attenuation_db: float,
     front_only: bool = False,
-    backlobe_floor_db: float = -120.0,
 ):
     import tensorflow as tf
     from sionna.rt.antenna import PI, polarization_model_1, polarization_model_2
@@ -137,14 +150,13 @@ def _make_horn_pattern(
         a_v = -tf.minimum(12.0 * ((theta - PI / 2.0) / theta_3db) ** 2, a_max)
         a_h = -tf.minimum(12.0 * (phi_wrapped / phi_3db) ** 2, a_max)
         a_db = -tf.minimum(-(a_v + a_h), a_max) + g_max
-        if front_only:
-            # In Sionna's local antenna frame, boresight is along +x, i.e.
-            # r_hat(theta=pi/2, phi=0). Suppress the rear hemisphere so the
-            # Tx cannot illuminate the chamber behind the horn.
-            forward_x = tf.sin(theta) * tf.cos(phi_wrapped)
-            floor_db = tf.cast(float(backlobe_floor_db), rdtype)
-            a_db = tf.where(forward_x > 0.0, a_db, floor_db)
         linear_gain = tf.pow(tf.cast(10.0, rdtype), a_db / 10.0)
+        if front_only:
+            linear_gain = tf.where(
+                tf.abs(phi_wrapped) <= (PI / 2.0),
+                linear_gain,
+                tf.zeros_like(linear_gain),
+            )
         c = tf.complex(tf.sqrt(linear_gain), tf.zeros_like(linear_gain))
 
         if polarization_model == 1:
@@ -154,25 +166,21 @@ def _make_horn_pattern(
     return pattern
 
 
-def _resolve_horn_pattern(pattern: Any) -> tuple[Optional[Dict[str, Any]], bool]:
+def _resolve_horn_pattern(pattern: Any) -> Optional[Dict[str, Any]]:
     pattern_name = str(pattern or "iso").strip().lower()
-    front_only = False
-    if pattern_name.endswith("_front"):
-        front_only = True
-        pattern_name = pattern_name[: -len("_front")]
     horn_spec = _HORN_PATTERN_LIBRARY.get(pattern_name)
-    return (dict(horn_spec) if horn_spec is not None else None), front_only
+    return dict(horn_spec) if horn_spec is not None else None
 
 
 def _resolve_array_pattern(pattern: Any, polarization: Any) -> tuple[Any, Any]:
     pattern_name = str(pattern or "iso").strip().lower()
-    horn_spec, front_only = _resolve_horn_pattern(pattern_name)
+    horn_spec = _resolve_horn_pattern(pattern_name)
     if horn_spec is None:
         return pattern, polarization
 
     from sionna.rt.antenna import PI
 
-    base_pattern = _make_horn_pattern(**horn_spec, front_only=front_only)
+    base_pattern = _make_horn_pattern(**horn_spec)
     polarization_name = str(polarization or "V").strip()
     slant_angles = {
         "V": [0.0],
