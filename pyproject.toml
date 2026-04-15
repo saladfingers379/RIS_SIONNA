@@ -1,7 +1,7 @@
 [project]
 name = "ris_sionna"
 version = "0.1.0"
-description = "Beginner-friendly Sionna RT baseline (28 GHz) with CLI, outputs, and optional dashboard"
+description = "GPU-first Sionna RT simulator for 28 GHz propagation and RIS experiments"
 readme = "README.md"
 requires-python = ">=3.10,<3.12"
 license = "MIT"

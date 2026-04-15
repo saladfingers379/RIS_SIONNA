@@ -1,16 +1,28 @@
-# RIS_SIONNA — 28 GHz Sionna RT Baseline
+# RIS_SIONNA
 
-Starter kit for Sionna RT ray tracing at 28 GHz with a lightweight simulator UI and a math-first RIS Lab. This branch targets Sionna RT v0.19.2 and supports RIS integration.
+GPU-first Sionna RT simulator for 28 GHz propagation and RIS experiments. The repository combines reproducible CLI workflows, a lightweight browser UI, a CPU-based RIS Lab for validation work, and RT-side RIS synthesis tooling.
 
 ## Highlights
-- CLI runs: `python -m app run --config configs/default.yaml`
-- Sionna RT LOS + reflections + optional radio map
-- SIONNA Viewer UI (stdlib HTTP server)
-- RIS Lab (CPU-only): near-field reflectarray model + validation
-- RIS Synthesis (RT-side): continuous-to-1-bit RIS optimization on a frozen coverage-map ROI
-- Optional Streamlit dashboard (visualization only)
 
-## Quick Start (macOS CPU)
+- Sionna RT simulation runs with saved plots, metrics, and viewer assets
+- `python -m app diagnose` for explicit backend/runtime checks
+- browser simulator UI via `python -m app sim`
+- RIS Lab for pattern and link studies with reference validation
+- RT-side RIS synthesis on a frozen coverage-map ROI
+- test suite covering CLI, plotting, simulation, RIS, and UI job flows
+
+## Platform Support
+
+- Primary target: native Ubuntu 24.04 with NVIDIA GPU and CUDA/OptiX
+- CPU-friendly preview runs: Linux and macOS
+- WSL2: treat as CPU-only for this repo; GPU OptiX is not a supported target
+
+The project is designed to make backend choice explicit. Use `python -m app diagnose` before claiming GPU RT is active.
+
+## Installation
+
+### CPU Preview
+
 ```bash
 python3.11 -m venv .venv
 source .venv/bin/activate
@@ -18,312 +30,65 @@ pip install -U pip
 pip install -e .
 python -m app run --config configs/preview.yaml
 ```
-Note: Sionna 0.19.2 requires TensorFlow 2.13–2.15 and NumPy <2.0, so use Python 3.10–3.11.
 
-## Quick Start (Ubuntu 24.04 + NVIDIA GPU)
+### Ubuntu 24.04 + NVIDIA GPU
+
 ```bash
 python3.11 -m venv .venv
 source .venv/bin/activate
 pip install -U pip
+pip install -r requirements-0.19.2.txt
 pip install -e .
 python -m app diagnose
 python -m app run --config configs/high.yaml
 ```
-If you want a clean install that matches Sionna v0.19.2, use:
+
+Supported Python range is `>=3.10,<3.12`. The current runtime stack is pinned around `sionna==0.19.2` and `numpy==1.26.4`.
+
+## Common Commands
+
 ```bash
-pip install -r requirements-0.19.2.txt
-pip install -e .
+python -m app diagnose
+python -m app run --config configs/default.yaml
+python -m app plot --latest
+python -m app sim
+python -m app ris run --config configs/ris/steer_1bit.yaml --mode pattern
+python -m app ris validate --config configs/ris/validate_vs_csv.yaml --ref tests/fixtures/ris_validation_fixture.csv
+python -m app ris-synth run --config configs/ris_synthesis_street_canyon.yaml
+python -m pytest
 ```
 
-## Commands
-- `python -m app diagnose`
-- `python -m app run --config configs/default.yaml`
-- `python -m app plot --latest`
-- `python -m app dashboard`
-- `python -m app sim`
-- `python -m app ris run --config configs/ris/steer_1bit.yaml --mode pattern`
-- `python -m app ris validate --config configs/ris/validate_vs_csv.yaml --ref refs/pattern.csv`
+Optional dashboard:
 
-## Docs housekeeping
-Legacy/internal docs are archived under `docs/_archive/`.
-
-## Dashboard (Streamlit)
 ```bash
 pip install -e ".[dashboard]"
 python -m app dashboard
 ```
-Notes:
-- Visualization only; run simulations from CLI/UI.
-- If 3D view is blank, click “Regenerate viewer now”.
 
-## SIONNA Viewer
-```bash
-python -m app sim
-```
-Features:
-- Load saved outputs from `outputs/<run_id>/viewer/`
-- Interactive Tx/Rx placement
-- RIS objects (place panels, auto-aim, drag + rotate)
-- Profiles: CPU, GPU low/medium/high, custom
-- Job status, logs, and snapshots
-- Radio map plot style switch (heatmap vs Sionna standard)
-- Diff view for radio maps (current - baseline)
+## Outputs
 
-Password gate for remote demos:
-```bash
-export SIM_PASSWORD='choose-a-strong-password'
-python -m app sim --host 127.0.0.1 --port 8765 --no-browser
-```
-Or load the password from a local file:
-```bash
-python -m app sim --host 127.0.0.1 --port 8765 --no-browser --auth-password-file ~/.config/ris_sionna_sim_password
-```
-When a password is configured, the simulator shows a login page before the UI and API become accessible.
+Simulation runs write to `outputs/<run_id>/` and typically include:
 
-Remote showcase via Cloudflare Quick Tunnel:
-Use this when the simulator must stay on your machine but you need to open it from another device or network.
-
-1. Install `cloudflared`
-
-With `sudo` on Ubuntu:
-```bash
-curl -L --output /tmp/cloudflared.deb \
-  "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-$(dpkg --print-architecture).deb"
-sudo dpkg -i /tmp/cloudflared.deb
-cloudflared --version
-```
-
-Without `sudo`, install a user-local binary:
-```bash
-mkdir -p ~/.local/bin
-ARCH="$(uname -m)"
-if [ "$ARCH" = "x86_64" ]; then
-  CF_ARCH="amd64"
-elif [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then
-  CF_ARCH="arm64"
-else
-  echo "Unsupported arch: $ARCH"
-  return 1 2>/dev/null || exit 1
-fi
-curl -L --output ~/.local/bin/cloudflared \
-  "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${CF_ARCH}"
-chmod +x ~/.local/bin/cloudflared
-export PATH="$HOME/.local/bin:$PATH"
-cloudflared --version
-```
-
-2. Start the simulator with auth enabled
-```bash
-export SIM_PASSWORD='choose-a-strong-password'
-python -m app sim --host 127.0.0.1 --port 8765 --no-browser
-```
-
-Expected startup lines:
-```text
-RIS_SIONNA simulator running at http://127.0.0.1:8765
-Simulator access password is enabled.
-```
-
-3. Start the Quick Tunnel in a second terminal
-```bash
-cloudflared tunnel --url http://localhost:8765
-```
-
-Cloudflare prints a temporary public URL like:
-```text
-https://example-name.trycloudflare.com
-```
-
-4. Open that URL on the remote device
-- First page should be the simulator password page.
-- After entering the local password, the simulator UI loads.
-- All compute still runs on the host machine.
-
-Operational notes:
-- Keep the simulator and `cloudflared` running in separate terminals for the entire demo.
-- Keep the simulator bound to `127.0.0.1` when using Cloudflare Tunnel.
-- Quick Tunnels are convenient for demos but are not meant as a production deployment.
-- Anyone with the URL and password can access the simulator, so treat both as sensitive.
-- The simulator frontend assumes it is served from the web root on its own hostname; use a full hostname/URL, not a reverse-proxy path prefix.
-
-Pre-show checklist:
-- `python -m app diagnose` reports `RT backend is CUDA/OptiX`
-- Local `http://127.0.0.1:8765` shows the password page in a fresh private/incognito window
-- `cloudflared tunnel --url http://localhost:8765` prints a `trycloudflare.com` URL
-- Opening the public URL from another device shows the password page first
-- Start one local test run before the showcase so Mitsuba/TensorFlow/CUDA are warm
-
-## RIS Lab (CPU-only)
-RIS Lab is a math-first validation tool for RIS patterns and link metrics. It uses a near-field reflectarray model (Machado/Tang-style sweep).
-
-CLI examples:
-```bash
-python -m app ris run --config configs/ris/steer_1bit.yaml --mode pattern
-python -m app ris run --config configs/ris/focus_point.yaml --mode pattern
-python -m app ris validate --config configs/ris/validate_vs_csv.yaml --ref refs/pattern.csv
-```
-
-UI workflow:
-1) Run `python -m app sim`
-2) Switch to the “RIS Lab” tab
-3) Use the builder (or a config file) and run
-4) Results auto-load; plots are tabbed (Phase/Pattern/Polar/Validation)
-
-Artifacts (written under `outputs/<run_id>/`):
-- Common: `config.yaml`, `config.json`, `summary.json`, `progress.json`, `metrics.json`
-- Pattern: `plots/phase_map.png`, `plots/pattern_cartesian.png`, `plots/pattern_polar.png`,
-  `data/phase_map.npy`, `data/theta_deg.npy`, `data/pattern_linear.npy`, `data/pattern_db.npy`
-- Validation: `plots/phase_map.png`, `plots/validation_overlay.png`
-
-## RIS Synthesis (RT-side)
-RIS Synthesis is a separate RT workflow for optimizing a continuous RIS phase profile on a frozen coverage-map ROI, then projecting it to a realizable 1-bit phase map with a global phase-offset sweep.
-
-CLI example:
-```bash
-python -m app ris-synth run --config configs/ris_synthesis_street_canyon.yaml
-```
-
-UI workflow:
-1) Run `python -m app sim`
-2) Switch to the “RIS Synthesis” tab
-3) Use the builder or point at `configs/ris_synthesis_street_canyon.yaml`
-4) Start the job and inspect ROI, continuous, 1-bit, diff, and trace plots as they appear
-
-Artifacts (written under `outputs/<run_id>/`):
-- Core: `config.yaml`, `summary.json`, `metrics.json`, `progress.json`, `job.json`
-- ROI: `data/target_boxes.json`, `data/target_mask.npy`, `plots/target_region_overlay.png`
-- Phase: `data/phase_continuous.npy`, `data/phase_1bit.npy`, `data/bits_1bit.npy`, `data/manual_profile_phase.npy`
-- Traces: `data/objective_trace.csv`, `data/offset_sweep.csv`, `plots/objective_trace.png`
-- Evaluations: `data/eval_ris_off.npz`, `data/eval_continuous.npz`, `data/eval_1bit.npz`
-- Maps: `plots/radio_map_ris_off.png`, `plots/radio_map_continuous.png`, `plots/radio_map_1bit.png`
-- Diffs/CDF: `plots/radio_map_diff_continuous_vs_off.png`, `plots/radio_map_diff_1bit_vs_off.png`, `plots/radio_map_diff_1bit_vs_continuous.png`, `plots/cdf_roi_rx_power.png`
-
-## RIS in Sionna RT (v0.19.2)
-Enable RIS with the simulator UI:
-1) Run `python -m app sim`
-2) Simulation tab → **RIS Objects**
-3) Enable RIS, add a panel, and use “Boost toward Rx”
-4) Run a sim and compare against a baseline (RIS off)
-
-Notes:
-- RIS effects are easiest to see if the radio map plane is near the Rx height.
-- Radio-map grid alignment now defaults to `radio_map.align_grid_to_anchor: true`, anchoring cells to RIS (when active) or Tx to avoid skipping the first meters near the source due to coarse cell spacing.
-- The diff view highlights changes between a baseline and RIS run.
-
-### RIS Geometry Modes (Size vs Spacing)
-You can now control RIS physical size and element density with explicit dx/dy spacing.
-Set `ris.geometry_mode` to one of:
-- `legacy` (default): keep existing behavior
-- `size_driven`: fixed size, derive element counts and effective dx/dy
-- `spacing_driven`: fixed dx/dy, derive size or element counts
-
-Size-driven example (fixed size, auto density):
-```yaml
-ris:
-  geometry_mode: size_driven
-  size:
-    width_m: 0.20
-    height_m: 0.20
-    target_dx_m: 0.011
-    target_dy_m: 0.011
-```
-
-Spacing-driven example (fixed spacing, auto size):
-```yaml
-ris:
-  geometry_mode: spacing_driven
-  spacing:
-    dx_m: 0.01
-    dy_m: 0.01
-    num_cells_x: 32
-    num_cells_y: 32
-```
-
-CLI override example:
-```bash
-python -m app run --config configs/ris_rt_demo.yaml --ris-geometry-mode size --ris-width-m 0.2 --ris-height-m 0.2 --ris-target-dx-m 0.01 --ris-target-dy-m 0.01
-```
-
-Example log line:
-```
-RIS geometry: mode=size_driven | width=0.2000m height=0.2000m | Nx=19 Ny=19 | dx=0.0111m dy=0.0111m
-```
-
-Notes:
-- dx/dy are center-to-center spacings.
-- In size-driven mode, element counts are rounded to the nearest integer and dx/dy are adjusted accordingly.
-
-## Similarity Scaling (Anti-Aliasing for mmWave)
-At 28 GHz, the wavelength is ~10.7 mm, so channel variations can occur over ~5 mm. If your
-radio-map grid is coarser than this, you will see aliasing/smearing. For small RIS panels,
-you can enable similarity scaling (aka scale-similarity mode) to improve numeric stability:
-
-- All geometry in meters is scaled by factor `s`
-- Frequency is scaled down by the same factor: `f_scaled = f_original / s`
-- Electrical size (dimensions in wavelengths) remains comparable
-
-Caveat: this assumes materials are not strongly frequency-dispersive for your experiment.
-Limitation: imported scene meshes are not rescaled; similarity scaling currently adjusts device/RIS placements and radio-map grids.
-
-YAML example:
-```yaml
-simulation:
-  frequency_hz: 28.0e9
-  scale_similarity:
-    enabled: true
-    factor: 100.0
-  sampling_boost:
-    enabled: false
-```
-
-CLI example:
-```bash
-python -m app run --config configs/ris_rt_similarity_100.yaml --scale-similarity --scale-factor 100
-```
-
-Sampling boost (when scaling is disabled) can increase grid resolution and ray counts:
-```bash
-python -m app run --config configs/default.yaml --sampling-boost --map-res-mult 2 --ray-samples-mult 4 --max-depth-add 1
-```
-
-## GPU Diagnostics
-Run:
-```bash
-python -m app diagnose
-```
-Look for:
-- `diagnose.runtime.selected_variant` includes `cuda`
-- `diagnose.verdict` shows `RT backend is CUDA/OptiX`
-- `diagnose.runtime.optix` finds `libnvoptix.so.1` + `optixQueryFunctionTable`
-
-Each diagnose run writes `outputs/<run_id>/summary.json`.
-Tip: `python -m app diagnose --json` prints JSON only.
-
-## CUDA + TensorFlow GPU Requirement
-Sionna RT v0.19.2 transfers CUDA tensors to TensorFlow via DLPack. If
-Mitsuba selects a CUDA variant but TensorFlow cannot see a GPU, runs will
-fail with `GPU:0 unknown device`.
-
-Fix:
-- Install TF GPU runtime libraries matching your TensorFlow build.
-  TF 2.15 expects CUDA 12.2 + cuDNN 8.
-
-## Outputs (Simulation)
-Each run saves to `outputs/<run_id>/`:
 - `config.yaml`, `run.log`, `progress.json`, `summary.json`
-- `data/` (radio map + paths)
-- `plots/` (radio map + path stats)
-- `viewer/` (3D viewer artifacts)
+- `data/` for numeric artifacts
+- `plots/` for generated figures
+- `viewer/` for simulator/browser assets
 
-## Platform Support
-Supported & tested:
-- Native Ubuntu 24.04 + NVIDIA GPU (CUDA/OptiX)
-- CPU-only runs: Linux/macOS/WSL
+RIS Lab, RIS synthesis, and campaign workflows follow the same per-run output pattern with workflow-specific artifacts under the same run directory.
 
-WSL2 note:
-- OptiX is not officially supported on WSL2; GPU RT is considered unsupported/experimental there.
+## Repository Layout
 
-## Docs
-- `docs/TROUBLESHOOTING.md` GPU backend checks
-- `docs/perf.md` simulator performance trace notes
-- `PROJECT_CONTEXT.md` handoff/notes
+- `app/`: CLI, simulation pipeline, simulator server, plotting, RIS modules
+- `configs/`: YAML presets for simulation, RIS Lab, RIS synthesis, and chamber runs
+- `tests/`: regression and workflow coverage
+- `scenes/`: Mitsuba/Sionna-compatible scene assets
+- `docs/`: focused supporting documentation
+
+## Documentation
+
+- [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) for backend, CUDA, OptiX, and simulator troubleshooting
+- [docs/RIS_SYNTHESIS_OPTIMIZATION.md](docs/RIS_SYNTHESIS_OPTIMIZATION.md) for the RT-side synthesis workflow and optimization method
+
+## License
+
+MIT
